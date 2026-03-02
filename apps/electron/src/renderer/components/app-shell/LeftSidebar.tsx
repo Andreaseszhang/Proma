@@ -541,9 +541,9 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
             <TooltipTrigger asChild>
               <button
                 onClick={() => setSidebarCollapsed(true)}
-                className="mt-2.5 p-1.5 rounded-lg text-foreground/40 hover:bg-foreground/[0.04] hover:text-foreground/60 transition-colors titlebar-no-drag"
+                className="mt-2 size-10 flex items-center justify-center rounded-[10px] text-foreground/40 hover:bg-foreground/[0.04] hover:text-foreground/60 transition-colors titlebar-no-drag"
               >
-                <PanelLeftClose size={16} />
+                <PanelLeftClose size={18} />
               </button>
             </TooltipTrigger>
             <TooltipContent side="right">收起侧边栏</TooltipContent>

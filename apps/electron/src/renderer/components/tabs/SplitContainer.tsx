@@ -34,7 +34,7 @@ export function SplitContainer(): React.ReactElement {
 
   return (
     <div
-      className={isSplit ? 'flex-1 min-h-0 p-1.5' : 'flex-1 min-h-0'}
+      className={isSplit ? 'flex-1 min-h-0 p-1.5 titlebar-no-drag' : 'flex-1 min-h-0 titlebar-no-drag'}
       style={{
         display: 'grid',
         gap: isSplit ? 6 : 0,

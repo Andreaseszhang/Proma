@@ -26,8 +26,8 @@ export function AppShell({ contextValue }: AppShellProps): React.ReactElement {
         {/* 左侧边栏：可折叠 */}
         <LeftSidebar />
 
-        {/* 右侧容器：relative z-[60] 使其在 z-50 拖动区域之上；titlebar-no-drag 标记非拖动区域 */}
-        <div className="flex-1 min-w-0 p-2 relative z-[60] titlebar-no-drag">
+        {/* 右侧容器：relative z-[60] 使其在 z-50 拖动区域之上 */}
+        <div className="flex-1 min-w-0 p-2 relative z-[60]">
           {/* 主内容区域（TabBar + SplitContainer） */}
           <MainArea />
         </div>

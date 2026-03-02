@@ -87,14 +87,14 @@ export function TabBar(): React.ReactElement {
     }
   }, [])
 
-  if (tabs.length === 0) return <div className="h-[34px]" />
+  if (tabs.length === 0) return <div className="h-[34px] titlebar-drag-region" />
 
   return (
     <div className="flex items-end h-[34px] bg-muted/30">
       {/* 标签区域（可滚动） */}
       <div
         ref={scrollRef}
-        className="flex items-end flex-1 min-w-0 overflow-x-auto scrollbar-none"
+        className="flex items-end shrink min-w-0 max-w-full overflow-x-auto scrollbar-none titlebar-no-drag"
         onWheel={handleWheel}
       >
         {tabs.map((tab, _index) => (
@@ -112,6 +112,9 @@ export function TabBar(): React.ReactElement {
           />
         ))}
       </div>
+
+      {/* 空白拖拽区域：支持拖动窗口 */}
+      <div className="flex-1 h-full titlebar-drag-region" />
 
       {/* 分屏模式切换 */}
       <SplitModeToggle />

@@ -24,7 +24,7 @@ export function MainArea(): React.ReactElement {
     return (
       <Panel
         variant="grow"
-        className="bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl rounded-2xl shadow-xl border border-border/50"
+        className="bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl rounded-2xl shadow-xl border border-border/50 titlebar-no-drag"
       >
         <SettingsPanel />
       </Panel>
@@ -39,7 +39,7 @@ export function MainArea(): React.ReactElement {
     >
       <TabBar />
       {tabs.length === 0 ? (
-        <div className="flex flex-col items-center justify-center flex-1 gap-4 text-muted-foreground" style={{ zoom: 1.1 }}>
+        <div className="flex flex-col items-center justify-center flex-1 gap-4 text-muted-foreground titlebar-no-drag" style={{ zoom: 1.1 }}>
           <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center">
             <MessageSquare size={32} className="text-muted-foreground/60" />
           </div>

@@ -9,6 +9,7 @@ import * as React from 'react'
 import { toast } from 'sonner'
 import { Upload, File, FolderPlus, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { fileToBase64 } from '@/lib/file-utils'
 
@@ -159,27 +160,41 @@ export function FileDropZone({ workspaceSlug, sessionId, onFilesUploaded, onAtta
               <span className="text-[10px] text-muted-foreground/60">供 Agent 读取和处理</span>
             </p>
             <div className="flex items-center gap-1.5">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-6 text-[11px] px-2 gap-1"
-                onClick={handleSelectFiles}
-              >
-                <File className="size-3" />
-                选择文件
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-6 text-[11px] px-2 gap-1"
+                    onClick={handleSelectFiles}
+                  >
+                    <File className="size-3" />
+                    选择文件
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <p>将文件放入 Agent 工作文件夹</p>
+                </TooltipContent>
+              </Tooltip>
               {onAttachFolder && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="h-6 text-[11px] px-2 gap-1"
-                  onClick={onAttachFolder}
-                >
-                  <FolderPlus className="size-3" />
-                  附加文件夹
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-6 text-[11px] px-2 gap-1"
+                      onClick={onAttachFolder}
+                    >
+                      <FolderPlus className="size-3" />
+                      附加文件夹
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">
+                    <p>告知 Agent 你想处理的文件夹</p>
+                  </TooltipContent>
+                </Tooltip>
               )}
             </div>
           </>

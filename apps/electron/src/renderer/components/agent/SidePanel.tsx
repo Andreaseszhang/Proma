@@ -268,26 +268,38 @@ export function SidePanel({ sessionId, sessionPath }: SidePanelProps): React.Rea
                     <span className="text-[11px] text-muted-foreground/60 truncate flex-1" title={sessionPath}>
                       {breadcrumb}
                     </span>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 flex-shrink-0"
-                      onClick={() => window.electronAPI.openFile(sessionPath).catch(console.error)}
-                      title="在 Finder 中打开"
-                    >
-                      <ExternalLink className="size-3" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 flex-shrink-0"
-                      onClick={handleRefresh}
-                      title="刷新"
-                    >
-                      <RefreshCw className="size-3" />
-                    </Button>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 flex-shrink-0"
+                          onClick={() => window.electronAPI.openFile(sessionPath).catch(console.error)}
+                        >
+                          <ExternalLink className="size-3" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom">
+                        <p>在 Finder 中打开工作区文件夹</p>
+                      </TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 flex-shrink-0"
+                          onClick={handleRefresh}
+                        >
+                          <RefreshCw className="size-3" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom">
+                        <p>刷新文件列表</p>
+                      </TooltipContent>
+                    </Tooltip>
                   </div>
                   {/* 附加目录列表 */}
                   {attachedDirs.length > 0 && (

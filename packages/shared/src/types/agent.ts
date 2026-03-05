@@ -328,6 +328,8 @@ export interface AgentSessionMeta {
   workspaceId?: string
   /** 是否置顶 */
   pinned?: boolean
+  /** 附加的外部目录路径列表（绝对路径，作为 SDK additionalDirectories 传递） */
+  attachedDirectories?: string[]
   /** 创建时间戳 */
   createdAt: number
   /** 更新时间戳 */
@@ -448,6 +450,20 @@ export interface AgentSendInput {
   modelId?: string
   /** 工作区 ID（用于确定 cwd） */
   workspaceId?: string
+  /** 附加的外部目录（绝对路径，传递给 SDK additionalDirectories） */
+  additionalDirectories?: string[]
+}
+
+// ===== 会话迁移输入 =====
+
+/**
+ * 迁移会话到另一个工作区的输入参数
+ */
+export interface MoveSessionToWorkspaceInput {
+  /** 要迁移的会话 ID */
+  sessionId: string
+  /** 目标工作区 ID */
+  targetWorkspaceId: string
 }
 
 // ===== 后台任务管理 =====
@@ -545,11 +561,12 @@ export interface AgentSavedFile {
   targetPath: string
 }
 
-/** Agent 复制文件夹到 session 的输入 */
-export interface AgentCopyFolderInput {
-  sourcePath: string
-  workspaceSlug: string
+/** 附加/分离目录的输入参数 */
+export interface AgentAttachDirectoryInput {
+  /** 会话 ID */
   sessionId: string
+  /** 目录的绝对路径 */
+  directoryPath: string
 }
 
 // ===== AskUserQuestion 交互式问答类型 =====
@@ -734,6 +751,8 @@ export const AGENT_IPC_CHANNELS = {
   MIGRATE_CHAT_TO_AGENT: 'agent:migrate-chat-to-agent',
   /** 切换会话置顶状态 */
   TOGGLE_PIN: 'agent:toggle-pin',
+  /** 迁移会话到另一个工作区 */
+  MOVE_SESSION_TO_WORKSPACE: 'agent:move-session-to-workspace',
 
   // 工作区管理
   /** 获取工作区列表 */
@@ -792,8 +811,10 @@ export const AGENT_IPC_CHANNELS = {
   SAVE_FILES_TO_SESSION: 'agent:save-files-to-session',
   /** 打开文件夹选择对话框 */
   OPEN_FOLDER_DIALOG: 'agent:open-folder-dialog',
-  /** 复制文件夹到 session 工作目录 */
-  COPY_FOLDER_TO_SESSION: 'agent:copy-folder-to-session',
+  /** 附加外部目录到 Agent 会话 */
+  ATTACH_DIRECTORY: 'agent:attach-directory',
+  /** 移除会话的附加目录 */
+  DETACH_DIRECTORY: 'agent:detach-directory',
 
   // 文件系统操作
   /** 获取 session 工作路径 */

@@ -39,7 +39,7 @@ import type {
   AgentGenerateTitleInput,
   AgentSaveFilesInput,
   AgentSavedFile,
-  AgentCopyFolderInput,
+  AgentAttachDirectoryInput,
   GetTaskOutputInput,
   GetTaskOutputResult,
   StopTaskInput,
@@ -66,6 +66,7 @@ import type {
   ChatToolState,
   ChatToolMeta,
   AgentTeamData,
+  MoveSessionToWorkspaceInput,
 } from '@proma/shared'
 import type { UserProfile, AppSettings } from '../types'
 
@@ -264,6 +265,9 @@ export interface ElectronAPI {
   /** 切换 Agent 会话置顶状态 */
   togglePinAgentSession: (id: string) => Promise<AgentSessionMeta>
 
+  /** 迁移 Agent 会话到另一个工作区 */
+  moveAgentSessionToWorkspace: (input: MoveSessionToWorkspaceInput) => Promise<AgentSessionMeta>
+
   /** 生成 Agent 会话标题 */
   generateAgentTitle: (input: AgentGenerateTitleInput) => Promise<string | null>
 
@@ -400,8 +404,11 @@ export interface ElectronAPI {
   /** 打开文件夹选择对话框 */
   openFolderDialog: () => Promise<{ path: string; name: string } | null>
 
-  /** 复制文件夹到 Agent session 工作目录 */
-  copyFolderToSession: (input: AgentCopyFolderInput) => Promise<AgentSavedFile[]>
+  /** 附加外部目录到 Agent 会话 */
+  attachDirectory: (input: AgentAttachDirectoryInput) => Promise<string[]>
+
+  /** 移除会话的附加目录 */
+  detachDirectory: (input: AgentAttachDirectoryInput) => Promise<string[]>
 
   // ===== Agent 文件系统操作 =====
 
@@ -440,25 +447,21 @@ export interface ElectronAPI {
   /** 设置默认提示词 */
   setDefaultPrompt: (id: string | null) => Promise<void>
 
-  // ===== 自动更新相关（可选，仅在 updater 模块存在时可用） =====
+  // ===== 版本检测相关（仅检测，不自动下载/安装） =====
 
   /** 更新 API */
   updater?: {
     checkForUpdates: () => Promise<void>
-    downloadUpdate: () => Promise<void>
-    installUpdate: () => Promise<void>
     getStatus: () => Promise<{
-      status: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'installing' | 'error'
+      status: 'idle' | 'checking' | 'available' | 'not-available' | 'error'
       version?: string
       releaseNotes?: string
-      progress?: { percent: number; transferred: number; total: number }
       error?: string
     }>
     onStatusChanged: (callback: (status: {
-      status: 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'installing' | 'error'
+      status: 'idle' | 'checking' | 'available' | 'not-available' | 'error'
       version?: string
       releaseNotes?: string
-      progress?: { percent: number; transferred: number; total: number }
       error?: string
     }) => void) => () => void
   }
@@ -718,6 +721,10 @@ const electronAPI: ElectronAPI = {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.TOGGLE_PIN, id)
   },
 
+  moveAgentSessionToWorkspace: (input: MoveSessionToWorkspaceInput) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.MOVE_SESSION_TO_WORKSPACE, input)
+  },
+
   generateAgentTitle: (input: AgentGenerateTitleInput) => {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.GENERATE_TITLE, input)
   },
@@ -910,8 +917,12 @@ const electronAPI: ElectronAPI = {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.OPEN_FOLDER_DIALOG)
   },
 
-  copyFolderToSession: (input: AgentCopyFolderInput) => {
-    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.COPY_FOLDER_TO_SESSION, input)
+  attachDirectory: (input: AgentAttachDirectoryInput) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.ATTACH_DIRECTORY, input)
+  },
+
+  detachDirectory: (input: AgentAttachDirectoryInput) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.DETACH_DIRECTORY, input)
   },
 
   // Agent 文件系统操作
@@ -960,11 +971,9 @@ const electronAPI: ElectronAPI = {
     return ipcRenderer.invoke(SYSTEM_PROMPT_IPC_CHANNELS.SET_DEFAULT, id)
   },
 
-  // 自动更新（updater 模块为可选，bridge 始终暴露，IPC 调用失败时由渲染进程处理）
+  // 自动更新（仅版本检测，不自动下载/安装）
   updater: {
     checkForUpdates: () => ipcRenderer.invoke('updater:check'),
-    downloadUpdate: () => ipcRenderer.invoke('updater:download'),
-    installUpdate: () => ipcRenderer.invoke('updater:install'),
     getStatus: () => ipcRenderer.invoke('updater:get-status'),
     onStatusChanged: (callback) => {
       const listener = (_event: Electron.IpcRendererEvent, status: Parameters<typeof callback>[0]): void => callback(status)

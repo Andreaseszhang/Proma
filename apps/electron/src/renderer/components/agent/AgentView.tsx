@@ -581,6 +581,15 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
       modelId: agentModelId || undefined,
       workspaceId: currentWorkspaceId || undefined,
       ...(attachedDirs.length > 0 && { additionalDirectories: attachedDirs }),
+      // 解析用户消息中的 Skill/MCP 引用，传递结构化元数据给后端
+      ...(() => {
+        const skills = [...effectiveText.matchAll(/\/skill:(\S+)/g)].map(m => m[1]).filter(Boolean) as string[]
+        const mcps = [...effectiveText.matchAll(/#mcp:(\S+)/g)].map(m => m[1]).filter(Boolean) as string[]
+        return {
+          ...(skills.length > 0 && { mentionedSkills: skills }),
+          ...(mcps.length > 0 && { mentionedMcpServers: mcps }),
+        }
+      })(),
     }
 
     setInputContent('')

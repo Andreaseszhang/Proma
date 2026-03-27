@@ -66,7 +66,7 @@ export interface SessionCallbacks {
   /** 发送流式错误 */
   onError: (error: string) => void
   /** 发送流式完成（携带已持久化的消息列表） */
-  onComplete: (messages?: AgentMessage[]) => void
+  onComplete: (messages?: AgentMessage[], opts?: { stoppedByUser?: boolean }) => void
   /** 发送标题更新 */
   onTitleUpdated: (title: string) => void
 }
@@ -389,7 +389,11 @@ export class AgentOrchestrator {
     text: string
     priority: 'now' | 'next' | 'later'
     cancelled: boolean
+    persisted: boolean
   }>>()
+
+  /** 被用户手动中止的会话集合（在 stop 中标记，catch block 中消费） */
+  private stoppedBySessions = new Set<string>()
 
   constructor(adapter: AgentProviderAdapter, eventBus: AgentEventBus) {
     this.adapter = adapter
@@ -1257,6 +1261,13 @@ export class AgentOrchestrator {
               }
             }
 
+            // Turn 结束时：先持久化累积消息，再 flush 排队用户消息（保证 JSONL 顺序正确）
+            if (msg.type === 'result') {
+              this.persistSDKMessages(sessionId, accumulatedMessages)
+              accumulatedMessages.length = 0
+              this.flushPendingQueuedMessages(sessionId)
+            }
+
             // Agent Teams: 当有 teammate 活跃时，延迟 result 消息
             if (msg.type === 'result' && startedTaskIds.size > 0) {
               console.log(`[Agent 编排] 延迟 result 消息（${startedTaskIds.size} 个 teammate 活跃）`)
@@ -1304,8 +1315,9 @@ export class AgentOrchestrator {
           }
           retrySucceeded = true
 
-          // 15. 持久化 assistant 消息
+          // 15. 持久化 assistant 消息（先 flush 未持久化的排队消息，保证顺序）
           this.persistSDKMessages(sessionId, accumulatedMessages)
+          this.flushPendingQueuedMessages(sessionId)
 
           // 16. Agent Teams Auto-Resume：teammates 完成后自动收集结果并汇总
           console.log(`[Agent 编排] Auto-resume 条件检查: startedTasks=${startedTaskIds.size}, sdkSession=${!!capturedSdkSessionId}, active=${this.activeSessions.has(sessionId)}`)
@@ -1417,9 +1429,12 @@ export class AgentOrchestrator {
 
           // 用户主动中止
           if (!this.activeSessions.has(sessionId)) {
+            const wasStoppedByUser = this.stoppedBySessions.delete(sessionId)
             console.log(`[Agent 编排] 会话 ${sessionId} 已被用户中止`)
+            // flush 未持久化的排队消息
+            this.flushPendingQueuedMessages(sessionId)
             this.persistSDKMessages(sessionId, accumulatedMessages)
-            callbacks.onComplete(getAgentSessionMessages(sessionId))
+            callbacks.onComplete(getAgentSessionMessages(sessionId), { stoppedByUser: wasStoppedByUser })
             return
           }
 
@@ -1558,6 +1573,7 @@ export class AgentOrchestrator {
    */
   stop(sessionId: string): void {
     this.activeSessions.delete(sessionId)
+    this.stoppedBySessions.add(sessionId)
     this.queuedMessages.delete(sessionId)
     this.adapter.abort(sessionId)
     console.log(`[Agent 编排] 已中止会话: ${sessionId}`)
@@ -1606,7 +1622,7 @@ export class AgentOrchestrator {
 
     // 记录到本地队列
     const queue = this.queuedMessages.get(sessionId) ?? []
-    queue.push({ uuid, text, priority, cancelled: false })
+    queue.push({ uuid, text, priority, cancelled: false, persisted: false })
     this.queuedMessages.set(sessionId, queue)
 
     // 构造 SDKUserMessage 并注入
@@ -1622,21 +1638,8 @@ export class AgentOrchestrator {
     try {
       await this.adapter.sendQueuedMessage(sessionId, sdkMessage)
       console.log(`[Agent 编排] 队列消息已注入: sessionId=${sessionId}, uuid=${uuid}, priority=${priority}`)
-
-      // 持久化队列用户消息到 JSONL（与 sendMessage 中的用户消息持久化一致）
-      // SDK 消费 'next' 优先级消息时不会发出独立的 SDKUserMessage 事件，
-      // 因此需要在此处主动持久化，确保 reload 时用户消息不丢失。
-      const persistMsg: SDKMessage = {
-        type: 'user',
-        uuid,
-        message: {
-          content: [{ type: 'text', text }],
-        },
-        parent_tool_use_id: null,
-        _createdAt: Date.now(),
-        _queuedMessage: true,
-      } as unknown as SDKMessage
-      appendSDKMessages(sessionId, [persistMsg])
+      // 注意：不再立即持久化到 JSONL。持久化延迟到 turn 结束时（result 消息），
+      // 保证 JSONL 顺序正确：turn1 output → queued_user → turn2 output。
     } catch (error) {
       // 注入失败时从本地队列移除
       const q = this.queuedMessages.get(sessionId)
@@ -1648,6 +1651,42 @@ export class AgentOrchestrator {
     }
 
     return uuid
+  }
+
+  /**
+   * flush 未持久化的排队用户消息到 JSONL 并通知前端
+   *
+   * 在 turn 结束时（result 消息）调用，保证 JSONL 顺序正确：
+   * turn1 output → queued_user → turn2 output
+   */
+  private flushPendingQueuedMessages(sessionId: string): void {
+    const queue = this.queuedMessages.get(sessionId)
+    if (!queue) return
+
+    const pending = queue.filter((m) => !m.cancelled && !m.persisted)
+    if (pending.length === 0) return
+
+    for (const qm of pending) {
+      const persistMsg: SDKMessage = {
+        type: 'user',
+        uuid: qm.uuid,
+        message: {
+          content: [{ type: 'text', text: qm.text }],
+        },
+        parent_tool_use_id: null,
+        _createdAt: Date.now(),
+        _queuedMessage: true,
+      } as unknown as SDKMessage
+      appendSDKMessages(sessionId, [persistMsg])
+      qm.persisted = true
+
+      // 通知前端：排队消息已被消费，可安全显示在对话历史中
+      this.eventBus.emit(sessionId, {
+        kind: 'proma_event',
+        event: { type: 'queued_message_consumed', messageUuid: qm.uuid, text: qm.text },
+      })
+      console.log(`[Agent 编排] 排队消息已持久化并通知前端: uuid=${qm.uuid}`)
+    }
   }
 
   /**

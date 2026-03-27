@@ -83,11 +83,12 @@ export async function runAgent(
           })
         }
       },
-      onComplete: (messages) => {
+      onComplete: (messages, opts) => {
         if (!webContents.isDestroyed()) {
           webContents.send(AGENT_IPC_CHANNELS.STREAM_COMPLETE, {
             sessionId: input.sessionId,
             messages,
+            stoppedByUser: opts?.stoppedByUser ?? false,
           })
         }
       },

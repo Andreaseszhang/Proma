@@ -1292,3 +1292,8 @@ export const currentQueuedMessagesAtom = atom(
     })
   }
 )
+
+// ===== 用户打断状态 =====
+
+/** 被用户手动打断的会话集合（仅当前 streaming 周期有效，reload 后清除） */
+export const stoppedByUserSessionsAtom = atom<Set<string>>(new Set<string>())

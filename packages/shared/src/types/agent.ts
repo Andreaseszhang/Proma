@@ -488,6 +488,7 @@ export type PromaEvent =
   | { type: 'waiting_resume'; message: string }
   | { type: 'resume_start'; messageId: string }
   | { type: 'permission_mode_changed'; mode: PromaPermissionMode }
+  | { type: 'queued_message_consumed'; messageUuid: string; text: string }
 
 /** IPC 传输的统一 payload（替代 AgentEvent） */
 export type AgentStreamPayload =
@@ -781,6 +782,8 @@ export interface AgentStreamCompletePayload {
   sessionId: string
   /** 已持久化的完整消息列表 */
   messages?: AgentMessage[]
+  /** 是否由用户手动中止 */
+  stoppedByUser?: boolean
 }
 
 // ===== 文件浏览器 =====

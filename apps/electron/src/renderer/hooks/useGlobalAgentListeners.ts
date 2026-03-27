@@ -29,6 +29,7 @@ import {
   liveMessagesMapAtom,
   agentPermissionModeAtom,
   agentQueuedMessagesMapAtom,
+  stoppedByUserSessionsAtom,
 } from '@/atoms/agent-atoms'
 import {
   notificationsEnabledAtom,
@@ -59,6 +60,9 @@ function payloadToLegacyEvents(payload: AgentStreamPayload): AgentEvent[] {
         return [{ type: 'model_resolved', model: evt.model }]
       case 'permission_mode_changed':
         return [{ type: 'permission_mode_changed', mode: evt.mode }]
+      case 'queued_message_consumed':
+        // 不转为 legacy event，由 useGlobalAgentListeners 直接处理
+        return []
       case 'waiting_resume':
         return [{ type: 'waiting_resume', message: evt.message }]
       case 'resume_start':
@@ -254,6 +258,36 @@ export function useGlobalAgentListeners(): void {
           }
         }
 
+        // 直接处理 queued_message_consumed 事件（不经过 legacy 转换）
+        if (payload.kind === 'proma_event' && payload.event.type === 'queued_message_consumed') {
+          const consumed = payload.event
+          console.log(`[GlobalAgentListeners] 排队消息已消费: uuid=${consumed.messageUuid}`)
+          const syntheticMsg = {
+            type: 'user' as const,
+            uuid: consumed.messageUuid,
+            message: {
+              content: [{ type: 'text' as const, text: consumed.text }],
+            },
+            parent_tool_use_id: null,
+            _createdAt: Date.now(),
+            _queuedMessage: true,
+          }
+          store.set(liveMessagesMapAtom, (prev) => {
+            const map = new Map(prev)
+            const current = map.get(sessionId) ?? []
+            map.set(sessionId, [...current, syntheticMsg as unknown as import('@proma/shared').SDKMessage])
+            return map
+          })
+          // 从排队 atom 中移除（气泡消失）
+          store.set(agentQueuedMessagesMapAtom, (prev) => {
+            const map = new Map(prev)
+            const queue = (map.get(sessionId) ?? []).filter((m) => m.uuid !== consumed.messageUuid)
+            if (queue.length === 0) map.delete(sessionId)
+            else map.set(sessionId, queue)
+            return map
+          })
+        }
+
         // Phase 1 兼容：将新 AgentStreamPayload 转换为旧 AgentEvent[]
         const legacyEvents = payloadToLegacyEvents(payload)
 
@@ -407,9 +441,22 @@ export function useGlobalAgentListeners(): void {
           return map
         })
 
-        // 注意：不清除队列消息 — STREAM_COMPLETE 表示整个查询结束，
-        // 此时所有 'next' 队列消息应已被 SDK 消费。
-        // 队列 atom 由 IPC QUEUED_MESSAGE_STATUS 事件管理生命周期。
+        // 标记用户主动打断状态
+        if (data.stoppedByUser) {
+          store.set(stoppedByUserSessionsAtom, (prev: Set<string>) => {
+            const next = new Set(prev)
+            next.add(data.sessionId)
+            return next
+          })
+        }
+
+        // 清除残留队列消息（兜底：stop 中止时 consumed 事件可能未发出）
+        store.set(agentQueuedMessagesMapAtom, (prev) => {
+          if (!prev.has(data.sessionId)) return prev
+          const map = new Map(prev)
+          map.delete(data.sessionId)
+          return map
+        })
 
         // 缓存 Team 活动数据（在流式状态被清除前保存，防止面板数据丢失）
         const streamState = store.get(agentStreamingStatesAtom).get(data.sessionId)

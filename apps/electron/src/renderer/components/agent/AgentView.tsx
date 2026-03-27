@@ -24,7 +24,6 @@ import { PermissionBanner } from './PermissionBanner'
 import { PermissionModeSelector } from './PermissionModeSelector'
 import { AskUserBanner } from './AskUserBanner'
 import { SidePanel } from './SidePanel'
-import { QueuedMessagesBanner } from './QueuedMessagesBanner'
 import { ModelSelector } from '@/components/chat/ModelSelector'
 import { AttachmentPreviewItem } from '@/components/chat/AttachmentPreviewItem'
 import { RichTextInput } from '@/components/ai-elements/rich-text-input'
@@ -57,6 +56,7 @@ import {
   liveMessagesMapAtom,
   agentThinkingAtom,
   agentQueuedMessagesMapAtom,
+  stoppedByUserSessionsAtom,
 } from '@/atoms/agent-atoms'
 import type { AgentContextStatus } from '@/atoms/agent-atoms'
 import type { QueuedMessage } from '@/atoms/agent-atoms'
@@ -549,7 +549,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
       // 生成本地 UUID，先做乐观更新再发送 IPC
       const localUuid = crypto.randomUUID()
 
-      // 1. 立即更新队列 atom（浮动卡片可见）
+      // 1. 立即更新队列 atom（对话底部显示"排队中"气泡）
       store.set(agentQueuedMessagesMapAtom, (prev: Map<string, QueuedMessage[]>) => {
         const map = new Map(prev)
         const queue = [...(map.get(sessionId) ?? [])]
@@ -564,27 +564,10 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
         return map
       })
 
-      // 2. 注入合成 SDKUserMessage 到 liveMessages，让用户消息立即可见于对话历史
-      //    SDK 不会为 'next' 优先级的队列消息发出独立的 SDKUserMessage 事件，
-      //    因此需要前端主动注入。UUID 标记可防止 SDK 后续推送时重复。
-      const syntheticUserMsg: SDKMessage = {
-        type: 'user',
-        uuid: localUuid,
-        message: {
-          content: [{ type: 'text', text: effectiveText }],
-        },
-        parent_tool_use_id: null,
-        _createdAt: Date.now(),
-        _queuedMessage: true,
-      } as unknown as SDKMessage
-      store.set(liveMessagesMapAtom, (prev: Map<string, SDKMessage[]>) => {
-        const map = new Map(prev)
-        const current = map.get(sessionId) ?? []
-        map.set(sessionId, [...current, syntheticUserMsg])
-        return map
-      })
-
       // 2. 清空输入框
+      // 注意：不再注入合成 SDKUserMessage 到 liveMessages。
+      // 排队消息通过 QueuedMessageBubble 在对话底部显示"排队中"状态。
+      // 当 turn 结束后端发送 consumed 事件时，useGlobalAgentListeners 才注入到 liveMessages。
       setInputContent('')
       setPromptSuggestions((prev) => {
         if (!prev.has(sessionId)) return prev
@@ -683,6 +666,14 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
 
     // 新一轮对话开始时，解除 Team 面板关闭状态（允许新 Team 数据显示）
     store.set(dismissedTeamSessionIdsAtom, (prev: Set<string>) => {
+      if (!prev.has(sessionId)) return prev
+      const next = new Set(prev)
+      next.delete(sessionId)
+      return next
+    })
+
+    // 清除打断状态（上一轮的打断标记不再显示）
+    store.set(stoppedByUserSessionsAtom, (prev: Set<string>) => {
       if (!prev.has(sessionId)) return prev
       const next = new Set(prev)
       next.delete(sessionId)
@@ -963,9 +954,6 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
 
         {/* AskUserQuestion 交互式问答横幅 */}
         <AskUserBanner sessionId={sessionId} />
-
-        {/* 队列消息浮动卡片（输入框外上方） */}
-        <QueuedMessagesBanner sessionId={sessionId} />
 
         {/* 输入区域 — 复用 Chat 的卡片式输入风格 */}
         <div className="px-2.5 pb-2.5 md:px-[18px] md:pb-[18px] pt-2">

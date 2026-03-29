@@ -152,6 +152,16 @@ export function appendAgentMessage(id: string, message: AgentMessage): void {
   try {
     const line = JSON.stringify(message) + '\n'
     appendFileSync(filePath, line, 'utf-8')
+
+    // 追加消息时更新 updatedAt，若已归档则自动恢复活跃
+    const index = readIndex()
+    const idx = index.sessions.findIndex((s) => s.id === id)
+    if (idx !== -1) {
+      const session = index.sessions[idx]!
+      session.updatedAt = Date.now()
+      if (session.archived) session.archived = false
+      writeIndex(index)
+    }
   } catch (error) {
     console.error(`[Agent 会话] 追加消息失败 (${id}):`, error)
     throw new Error('追加 Agent 消息失败')
@@ -282,9 +292,12 @@ export function updateAgentSessionMeta(
   }
 
   const existing = index.sessions[idx]!
+  // 非手动归档操作时，若会话已归档则自动恢复为活跃
+  const autoUnarchive = existing.archived && !('archived' in updates)
   const updated: AgentSessionMeta = {
     ...existing,
     ...updates,
+    ...(autoUnarchive ? { archived: false } : {}),
     updatedAt: Date.now(),
   }
 

@@ -183,6 +183,16 @@ export function appendMessage(id: string, message: ChatMessage): void {
   try {
     const line = JSON.stringify(message) + '\n'
     appendFileSync(filePath, line, 'utf-8')
+
+    // 追加消息时更新 updatedAt，若已归档则自动恢复活跃
+    const index = readIndex()
+    const idx = index.conversations.findIndex((c) => c.id === id)
+    if (idx !== -1) {
+      const conv = index.conversations[idx]!
+      conv.updatedAt = Date.now()
+      if (conv.archived) conv.archived = false
+      writeIndex(index)
+    }
   } catch (error) {
     console.error(`[对话管理] 追加消息失败 (${id}):`, error)
     throw new Error('追加消息失败')
@@ -228,9 +238,12 @@ export function updateConversationMeta(
   }
 
   const existing = index.conversations[idx]!
+  // 非手动归档操作时，若对话已归档则自动恢复为活跃
+  const autoUnarchive = existing.archived && !('archived' in updates)
   const updated: ConversationMeta = {
     ...existing,
     ...updates,
+    ...(autoUnarchive ? { archived: false } : {}),
     updatedAt: Date.now(),
   }
 

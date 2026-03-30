@@ -56,7 +56,31 @@ const SPECIAL_STYLES: SpecialStyle[] = [
     id: 'ocean-dark',
     name: '苍穹暮色',
     variant: 'dark',
-    preview: { left: '#1a2535', right: '#0d1520' },
+    preview: { left: '#1a2535', right: '#3a6a9b' },
+  },
+  {
+    id: 'earth-light',
+    name: '暖阳沃土',
+    variant: 'light',
+    preview: { left: '#e0d2b8', right: '#f0e8d8' },
+  },
+  {
+    id: 'earth-dark',
+    name: '焦糖暮野',
+    variant: 'dark',
+    preview: { left: '#2a1e14', right: '#c8892a' },
+  },
+  {
+    id: 'cyber-light',
+    name: '霓虹初晓',
+    variant: 'light',
+    preview: { left: '#ddd0e8', right: '#e84da0' },
+  },
+  {
+    id: 'cyber-dark',
+    name: '霓虹暗涌',
+    variant: 'dark',
+    preview: { left: '#3d2856', right: '#e040a0' },
   },
 ]
 
@@ -112,7 +136,7 @@ export function AppearanceSettings(): React.ReactElement {
         {/* 特殊风格 - 标签在上，卡片在下 */}
         <div className="px-4 py-3 space-y-2">
           <div className="text-sm font-medium text-foreground">特殊风格</div>
-          <div className="flex gap-3">
+          <div className="flex justify-between">
             {SPECIAL_STYLES.map((style) => (
               <StyleCard
                 key={style.id}

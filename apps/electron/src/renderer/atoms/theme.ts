@@ -38,7 +38,7 @@ function getCachedThemeMode(): ThemeMode {
 function getCachedThemeStyle(): ThemeStyle {
   try {
     const cached = localStorage.getItem(THEME_STYLE_CACHE_KEY)
-    if (cached === 'default' || cached === 'ocean-light' || cached === 'ocean-dark') {
+    if (cached === 'default' || cached === 'ocean-light' || cached === 'ocean-dark' || cached === 'earth-light' || cached === 'earth-dark' || cached === 'cyber-light' || cached === 'cyber-dark') {
       return cached
     }
   } catch {
@@ -101,7 +101,7 @@ export function applyThemeToDOM(themeMode: ThemeMode, themeStyle: ThemeStyle = '
   const html = document.documentElement
 
   // 移除所有特殊风格类
-  html.classList.remove('theme-ocean-light', 'theme-ocean-dark')
+  html.classList.remove('theme-ocean-light', 'theme-ocean-dark', 'theme-earth-light', 'theme-earth-dark', 'theme-cyber-light', 'theme-cyber-dark')
 
   if (themeMode === 'special' && themeStyle !== 'default') {
     // 特殊风格模式：根据风格决定 dark 类

@@ -40,6 +40,10 @@ export default {
           DEFAULT: 'hsl(var(--popover))',
           foreground: 'hsl(var(--popover-foreground))',
         },
+        dialog: {
+          DEFAULT: 'hsl(var(--dialog))',
+          foreground: 'hsl(var(--dialog-foreground))',
+        },
       },
       keyframes: {
         'slide-in-from-top': {

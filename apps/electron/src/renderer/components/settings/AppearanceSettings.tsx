@@ -54,7 +54,7 @@ const SPECIAL_STYLES: SpecialStyle[] = [
   },
   {
     id: 'ocean-dark',
-    name: '深海青绿',
+    name: '苍穹暮色',
     variant: 'dark',
     preview: { left: '#1a2535', right: '#0d1520' },
   },

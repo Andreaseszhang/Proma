@@ -57,31 +57,31 @@
 
   /* 晴空碧海（浅色） - 浅蓝背景 + 青绿强调色 */
   .theme-ocean-light {
-    --background: 205 45% 88%;            /* #d4e5f0 浅蓝背景 */
+    --background: 205 45% 91%;            /* 浅蓝侧边栏背景 */
     --foreground: 210 30% 15%;            /* 深蓝灰前景 */
-    --muted: 205 40% 80%;                 /* #b8d4e5 次要背景 */
+    --muted: 205 40% 85%;                 /* 次要背景 */
     --muted-foreground: 210 15% 40%;      /* 灰蓝次要文字 */
-    --border: 205 35% 72%;                /* #a0c5d8 边框 */
-    --input: 205 40% 82%;                 /* 输入框背景 */
-    --ring: 175 70% 40%;                  /* 青绿聚焦环 */
-    --primary: 175 70% 38%;               /* #1d9085 青绿主色 */
+    --border: 205 35% 78%;                /* 边框 */
+    --input: 205 40% 88%;                 /* 输入框背景 */
+    --ring: 205 50% 50%;                  /* 蓝色聚焦环 */
+    --primary: 205 50% 50%;               /* 蓝色主色（统一） */
     --primary-foreground: 0 0% 100%;      /* 白色 */
-    --secondary: 205 40% 84%;             /* #c4dae9 二级背景 */
+    --secondary: 205 40% 88%;             /* 二级背景 */
     --secondary-foreground: 210 30% 20%;
-    --accent: 175 30% 78%;                /* 浅青绿强调背景 */
-    --accent-foreground: 175 60% 28%;     /* 深青绿文字 */
+    --accent: 205 45% 78%;                /* 浅蓝强调背景 */
+    --accent-foreground: 205 50% 30%;     /* 深蓝文字 */
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --card: 205 40% 92%;                  /* #e2eff6 卡片 */
+    --card: 205 40% 97%;                  /* 卡片 */
     --card-foreground: 210 30% 15%;
-    --popover: 205 40% 92%;               /* 弹出层 */
+    --popover: 205 40% 97%;               /* 弹出层 */
     --popover-foreground: 210 30% 15%;
     --dialog: 0 0% 100%;                  /* 设置弹窗：白色 */
     --dialog-foreground: 210 30% 15%;
-    --content-area: 205 40% 92%;          /* 主内容区域 = card */
+    --content-area: 205 40% 97%;          /* 主内容区域 = card */
   }
 
-  /* 深海青绿（深色） - 深蓝背景 + 青绿强调色 */
+  /* 苍穹暮色（深色） - 深蓝背景 + 蓝色强调色 */
   .theme-ocean-dark {
     --background: 210 40% 8%;             /* #0d1520 深蓝背景 */
     --foreground: 210 20% 92%;            /* 浅蓝白前景 */
@@ -89,13 +89,13 @@
     --muted-foreground: 210 15% 55%;      /* 灰蓝次要文字 */
     --border: 210 30% 18%;                /* #1f3045 边框 */
     --input: 210 30% 14%;                 /* 输入框背景 */
-    --ring: 175 70% 45%;                  /* 青绿聚焦环 */
-    --primary: 175 70% 45%;               /* #22a695 青绿主色 */
+    --ring: 205 60% 50%;                  /* 蓝色聚焦环 */
+    --primary: 205 60% 50%;               /* 蓝色主色（统一） */
     --primary-foreground: 0 0% 100%;      /* 白色 */
     --secondary: 210 30% 16%;             /* #1d2d40 二级背景 */
     --secondary-foreground: 210 20% 90%;
-    --accent: 175 40% 20%;                /* 暗青绿强调背景 */
-    --accent-foreground: 175 60% 70%;     /* 亮青绿文字 */
+    --accent: 210 40% 22%;                /* 深蓝强调背景 */
+    --accent-foreground: 205 60% 70%;     /* 亮蓝文字 */
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
     --card: 210 35% 11%;                  /* #141f2d 卡片背景 */

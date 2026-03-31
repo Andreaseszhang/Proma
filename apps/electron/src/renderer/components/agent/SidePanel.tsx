@@ -214,7 +214,7 @@ export function SidePanel({ sessionId, sessionPath }: SidePanelProps): React.Rea
   return (
     <div
       className={cn(
-        'relative flex-shrink-0 overflow-hidden titlebar-drag-region',
+        'relative flex-shrink-0 overflow-hidden titlebar-drag-region bg-[hsl(var(--content-area))]',
         animateRef.current && 'transition-[width] duration-300 ease-in-out',
         isOpen ? 'w-[320px] border-l' : hasContent ? 'w-10' : 'w-0',
       )}

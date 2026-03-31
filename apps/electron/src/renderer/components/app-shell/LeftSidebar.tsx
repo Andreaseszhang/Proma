@@ -1059,7 +1059,7 @@ function ConversationItem({
       className={cn(
         'w-full flex items-center gap-2 px-3 py-[7px] rounded-[10px] transition-colors duration-100 titlebar-no-drag text-left',
         active
-          ? 'bg-primary/10 shadow-[0_1px_2px_0_rgba(0,0,0,0.05)]'
+          ? 'session-item-selected bg-primary/10 shadow-[0_1px_2px_0_rgba(0,0,0,0.05)]'
           : 'hover:bg-primary/5'
       )}
     >
@@ -1245,7 +1245,7 @@ function AgentSessionItem({
       className={cn(
         'w-full flex items-center gap-2 px-3 py-[7px] rounded-[10px] transition-colors duration-100 titlebar-no-drag text-left',
         active
-          ? 'bg-primary/10 shadow-[0_1px_2px_0_rgba(0,0,0,0.05)]'
+          ? 'session-item-selected bg-primary/10 shadow-[0_1px_2px_0_rgba(0,0,0,0.05)]'
           : 'hover:bg-primary/5'
       )}
     >

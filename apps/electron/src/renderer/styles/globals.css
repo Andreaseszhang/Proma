@@ -446,12 +446,9 @@
   box-shadow: inset 0 -1px 0 0 hsl(260 10% 18% / 0.6);
 }
 
-/* ===== 深色主题：代码块标题栏 + 用户消息气泡 ===== */
+/* ===== 深色主题：代码块标题栏 ===== */
 /* 苍穹暮色: RGB 26 34 43 */
 .theme-ocean-dark .code-block-wrapper > div:first-child {
-  background: rgb(26, 34, 43) !important;
-}
-.theme-ocean-dark .bg-primary\/10 {
   background: rgb(26, 34, 43) !important;
 }
 
@@ -459,15 +456,9 @@
 .theme-forest-dark .code-block-wrapper > div:first-child {
   background: rgb(34, 42, 37) !important;
 }
-.theme-forest-dark .bg-primary\/10 {
-  background: rgb(34, 42, 37) !important;
-}
 
 /* 莫兰迪夜: RGB 36 35 39 */
 .theme-slate-dark .code-block-wrapper > div:first-child {
-  background: rgb(36, 35, 39) !important;
-}
-.theme-slate-dark .bg-primary\/10 {
   background: rgb(36, 35, 39) !important;
 }
 

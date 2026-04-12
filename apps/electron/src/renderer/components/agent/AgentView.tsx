@@ -190,7 +190,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
   const [defaultModelId, setDefaultModelId] = useAtom(agentModelIdAtom)
   const agentChannelId = sessionChannelMap.get(sessionId) ?? defaultChannelId
   const agentModelId = sessionModelMap.get(sessionId) ?? defaultModelId
-  const agentChannelIds = useAtomValue(agentChannelIdsAtom)
+  const [agentChannelIds, setAgentChannelIds] = useAtom(agentChannelIdsAtom)
   const [agentThinking, setAgentThinking] = useAtom(agentThinkingAtom)
   const setSettingsOpen = useSetAtom(settingsOpenAtom)
   const setDraftSessionIds = useSetAtom(draftSessionIdsAtom)
@@ -312,6 +312,48 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
       (c) => c.enabled && agentChannelIds.includes(c.id) && c.models.some((m) => m.enabled),
     )
   }, [globalChannels, agentChannelIds])
+
+  // Proma 官方渠道自动激活：用户在模型配置中开启 proma-official 后，
+  // Agent 模式自动将其设为默认渠道并选中第一个可用模型，无需手动去 Agent 供应商区再开一次
+  React.useEffect(() => {
+    if (agentChannelId) return // 已有选中渠道，不干预
+    const promaOfficial = globalChannels.find((c) => c.id === 'proma-official' && c.enabled)
+    if (!promaOfficial) return
+    const firstModel = promaOfficial.models.find((m) => m.enabled)
+    if (!firstModel) return
+
+    // 构建一次性 settings 更新，避免多次 updateSettings IPC 竞争写入
+    const settingsUpdate: Record<string, unknown> = {
+      agentChannelId: promaOfficial.id,
+      agentModelId: firstModel.id,
+    }
+
+    // 将 proma-official 加入 Agent 渠道白名单（ModelSelector 依赖此列表过滤可显示的渠道）
+    if (!agentChannelIds.includes(promaOfficial.id)) {
+      const newIds = [...agentChannelIds, promaOfficial.id]
+      setAgentChannelIds(newIds)
+      settingsUpdate.agentChannelIds = newIds
+    }
+
+    // 设置 per-session 和全局默认值
+    setSessionChannelMap((prev) => {
+      const map = new Map(prev)
+      map.set(sessionId, promaOfficial.id)
+      return map
+    })
+    setSessionModelMap((prev) => {
+      const map = new Map(prev)
+      map.set(sessionId, firstModel.id)
+      return map
+    })
+    setDefaultChannelId(promaOfficial.id)
+    setDefaultModelId(firstModel.id)
+
+    // 单次 IPC 调用持久化所有设置
+    window.electronAPI.updateSettings(settingsUpdate).catch(console.error)
+    // eslint-disable-next-line react-hooks/exhaustive-deps — agentChannelIds 在 effect 内被写入，放入依赖会导致自触发
+  }, [agentChannelId, globalChannels, sessionId, setAgentChannelIds, setSessionChannelMap, setSessionModelMap, setDefaultChannelId, setDefaultModelId])
+
   React.useEffect(() => {
     if (!agentChannelId || agentModelId) return
 

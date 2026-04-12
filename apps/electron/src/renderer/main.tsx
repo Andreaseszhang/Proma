@@ -217,6 +217,7 @@ function AgentSettingsInitializer(): null {
       })
     }).catch((err) => {
       console.error(err)
+      setChannelsLoaded(true) // 即使出错也标记已加载，避免 ModelSelector 卡在未加载状态
       setAgentSettingsReady(true) // 即使出错也标记就绪，避免永远阻塞
     })
   }, [setAgentChannelId, setAgentModelId, setAgentChannelIds, setAgentWorkspaces, setCurrentWorkspaceId, setPermissionMode, setThinking, setEffort, setMaxBudget, setMaxTurns, setChannels, setChannelsLoaded, setAgentSettingsReady])

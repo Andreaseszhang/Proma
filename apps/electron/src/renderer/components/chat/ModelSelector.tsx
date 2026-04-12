@@ -36,7 +36,8 @@ function buildModelOptions(channels: Channel[], filterChannelId?: string, filter
   for (const channel of channels) {
     if (!channel.enabled) continue
     if (filterChannelId && channel.id !== filterChannelId) continue
-    if (filterChannelIds && filterChannelIds.length > 0 && !filterChannelIds.includes(channel.id)) continue
+    // proma-official 始终可见（与 AgentView.hasAvailableModel 的特殊处理保持一致）
+    if (filterChannelIds && filterChannelIds.length > 0 && !filterChannelIds.includes(channel.id) && channel.id !== 'proma-official') continue
 
     for (const model of channel.models) {
       if (!model.enabled) continue
@@ -99,7 +100,12 @@ export function ModelSelector({
   // 外部模型优先 → per-conversation 模型
   const selectedModel = externalSelectedModel !== undefined ? externalSelectedModel : conversationModel
 
-  // 每次打开 Dialog 时刷新渠道列表，确保最新
+  // 组件挂载时刷新渠道列表，确保从设置页返回后立即反映最新状态
+  React.useEffect(() => {
+    window.electronAPI.listChannels().then(setChannels).catch(console.error)
+  }, [setChannels])
+
+  // 每次打开 Dialog 时再次刷新渠道列表
   React.useEffect(() => {
     if (open) {
       window.electronAPI.listChannels().then(setChannels).catch(console.error)

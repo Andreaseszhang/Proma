@@ -74,6 +74,9 @@ const DEFAULT_SPLIT_LAYOUT: SplitLayoutState = {
 /** 所有打开的标签页列表（有序，控制 TabBar 显示顺序） */
 export const tabsAtom = atom<TabItem[]>([])
 
+/** 标签页 MRU（最近使用）顺序，最近使用的 ID 排在前面 */
+export const tabMruAtom = atom<string[]>([])
+
 /** 分屏布局状态 */
 export const splitLayoutAtom = atom<SplitLayoutState>(DEFAULT_SPLIT_LAYOUT)
 

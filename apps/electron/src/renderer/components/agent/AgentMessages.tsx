@@ -37,6 +37,7 @@ import { ToolActivityList } from './ToolActivityItem'
 import { userProfileAtom } from '@/atoms/user-profile'
 import { tabMinimapCacheAtom } from '@/atoms/tab-atoms'
 import { channelsAtom } from '@/atoms/chat-atoms'
+import { useStickToBottomContext } from 'use-stick-to-bottom'
 import { ScrollPositionManager } from '@/hooks/useScrollPositionMemory'
 import { cn } from '@/lib/utils'
 import { Spinner } from '@/components/ui/spinner'
@@ -44,6 +45,26 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { groupIntoTurns, MessageGroupRenderer, getGroupId, getGroupPreview, extractUserText, parseAttachedFiles as sdkParseAttachedFiles, isImageFile as sdkIsImageFile, CompactingIndicator, type MessageGroup } from './SDKMessageRenderer'
 import type { AgentMessage, AgentEventUsage, RetryAttempt, SDKMessage } from '@proma/shared'
 import type { ToolActivity, AgentStreamState } from '@/atoms/agent-atoms'
+
+// ===== 发送消息后自动滚动到底部 =====
+
+function AutoScrollOnUserSend({ messages }: { messages: AgentMessage[] }): null {
+  const { scrollToBottom } = useStickToBottomContext()
+  const prevLenRef = React.useRef(messages.length)
+
+  React.useEffect(() => {
+    const prevLen = prevLenRef.current
+    prevLenRef.current = messages.length
+    if (messages.length > prevLen) {
+      const last = messages[messages.length - 1]
+      if (last?.role === 'user') {
+        scrollToBottom()
+      }
+    }
+  }, [messages.length, messages, scrollToBottom])
+
+  return null
+}
 
 /** AgentMessages 属性接口 */
 interface AgentMessagesProps {
@@ -836,6 +857,7 @@ export function AgentMessages({ sessionId, sessionModelId, messages, messagesLoa
     <BasePathsProvider basePaths={attachedDirs}>
     <Conversation resize={ready && !transitioning ? 'smooth' : 'instant'} className={ready ? 'opacity-100 transition-opacity duration-200' : 'opacity-0'}>
       <ScrollPositionManager id={sessionId} ready={ready} />
+      <AutoScrollOnUserSend messages={messages} />
       <ConversationContent>
         {!hasContent && !streaming ? (
           <EmptyState />

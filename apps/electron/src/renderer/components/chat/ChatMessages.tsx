@@ -113,6 +113,26 @@ function ScrollTopLoader({ hasMore, loading, onLoadMore }: ScrollTopLoaderProps)
   return null
 }
 
+// ===== 发送消息后自动滚动到底部 =====
+
+function AutoScrollOnUserSend({ messages }: { messages: ChatMessage[] }): null {
+  const { scrollToBottom } = useStickToBottomContext()
+  const prevLenRef = React.useRef(messages.length)
+
+  React.useEffect(() => {
+    const prevLen = prevLenRef.current
+    prevLenRef.current = messages.length
+    if (messages.length > prevLen) {
+      const last = messages[messages.length - 1]
+      if (last?.role === 'user') {
+        scrollToBottom()
+      }
+    }
+  }, [messages.length, messages, scrollToBottom])
+
+  return null
+}
+
 // ===== 主组件 =====
 
 interface ChatMessagesProps {
@@ -330,6 +350,7 @@ export function ChatMessages({
   return (
     <Conversation resize={ready && !transitioning ? 'smooth' : 'instant'} className={ready ? 'opacity-100 transition-opacity duration-200' : 'opacity-0'}>
       <ScrollPositionManager id={conversationId} ready={ready} />
+      <AutoScrollOnUserSend messages={messages} />
       {/* 滚动到顶部时自动加载更多历史 */}
       <ScrollTopLoader
         hasMore={hasMore}

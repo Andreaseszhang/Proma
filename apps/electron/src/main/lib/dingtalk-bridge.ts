@@ -21,6 +21,7 @@ import { getDecryptedBotClientSecret } from './dingtalk-config'
 import { BridgeCommandHandler, type BridgeAttachment } from './bridge-command-handler'
 import { inferImageMediaType, saveImageToSession, inferExtension, MAX_IMAGE_SIZE } from './bridge-attachment-utils'
 import { getAgentWorkspace } from './agent-workspace-manager'
+import { getSettings } from './settings-service'
 
 // ===== 类型声明 =====
 
@@ -107,6 +108,7 @@ class DingTalkBridge {
   private pendingImages = new Map<string, { images: DingTalkImageAttachment[]; createdAt: number }>()
   private static readonly PENDING_IMAGES_TTL = 10 * 60 * 1000 // 10 minutes
   private static readonly PENDING_IMAGES_MAX = 20
+  private pendingImagesCleanupTimer: ReturnType<typeof setInterval> | null = null
 
   /** access_token 缓存 */
   private accessToken: { value: string; expiresAt: number } | null = null
@@ -209,6 +211,7 @@ class DingTalkBridge {
 
       await this.client.connect()
       this.commandHandler.subscribe()
+      this.pendingImagesCleanupTimer = setInterval(() => this.cleanExpiredPendingImages(), 20 * 60 * 1000)
 
       this.updateStatus({ status: 'connected', connectedAt: Date.now() })
       console.log(`[钉钉 Bridge/${this.botConfig.name}] Stream 连接已建立`)
@@ -232,6 +235,10 @@ class DingTalkBridge {
       this.client = null
     }
     this.commandHandler.unsubscribe()
+    if (this.pendingImagesCleanupTimer) {
+      clearInterval(this.pendingImagesCleanupTimer)
+      this.pendingImagesCleanupTimer = null
+    }
     this.pendingImages.clear()
     this.messageQueue = Promise.resolve()
     this.accessToken = null
@@ -394,17 +401,19 @@ class DingTalkBridge {
       return
     }
 
-    // 确保 binding，保存图片
+    // 先验证 workspace 是否有效，避免 ensureBinding 创建孤儿 binding
+    const preCheckWorkspaceId = this.botConfig.defaultWorkspaceId ?? getSettings().agentWorkspaceId ?? ''
+    if (!preCheckWorkspaceId || !getAgentWorkspace(preCheckWorkspaceId)) {
+      await this.replyTextViaWebhook(data.sessionWebhook, '⚠️ 当前未设置工作区，无法保存图片')
+      return
+    }
+
     const binding = this.commandHandler.ensureBinding(chatId)
     if (!binding) {
       await this.replyTextViaWebhook(data.sessionWebhook, '请先在 Proma 设置中选择 Agent 渠道。')
       return
     }
-    const workspace = binding.workspaceId ? getAgentWorkspace(binding.workspaceId) : undefined
-    if (!workspace) {
-      await this.replyTextViaWebhook(data.sessionWebhook, '⚠️ 当前未设置工作区，无法保存图片')
-      return
-    }
+    const workspace = getAgentWorkspace(binding.workspaceId)!
 
     const attachments: BridgeAttachment[] = allImages.map((img) => {
       const hint = `dingtalk-${img.id}`
@@ -425,11 +434,14 @@ class DingTalkBridge {
   /** 通过 sessionWebhook 发送纯文本（用于提示/警告） */
   private async replyTextViaWebhook(webhook: string, text: string): Promise<void> {
     try {
-      await fetch(webhook, {
+      const resp = await fetch(webhook, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ msgtype: 'text', text: { content: text } }),
       })
+      if (!resp.ok) {
+        console.warn(`[钉钉 Bridge/${this.botConfig.name}] webhook 回复失败: HTTP ${resp.status}`)
+      }
     } catch (error) {
       console.error(`[钉钉 Bridge/${this.botConfig.name}] webhook 发送失败:`, error)
     }

@@ -6,11 +6,22 @@
  */
 
 import { mkdirSync, writeFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { join, resolve, basename } from 'node:path'
 import { getAgentSessionWorkspacePath } from './config-paths'
 
 /** 图片大小警告阈值 */
 export const MAX_IMAGE_SIZE = 10 * 1024 * 1024
+
+/** 允许的图片扩展名白名单 */
+const SAFE_IMAGE_EXTENSIONS: Record<string, string> = {
+  jpeg: 'jpg',
+  jpg: 'jpg',
+  png: 'png',
+  gif: 'gif',
+  webp: 'webp',
+  bmp: 'bmp',
+  svg: 'svg',
+}
 
 /**
  * 通过 magic bytes 推断图片 MIME 类型
@@ -34,12 +45,29 @@ export function inferImageMediaType(buffer: Buffer): string {
 }
 
 /**
- * MIME 类型 → 文件扩展名
+ * MIME 类型 → 文件扩展名（白名单，不识别的一律回退 jpg）
  */
 export function inferExtension(mediaType: string): string {
-  const sub = mediaType.split('/')[1]
-  if (sub === 'jpeg') return 'jpg'
-  return sub || 'jpg'
+  const sub = mediaType.split('/')[1]?.toLowerCase() ?? ''
+  return SAFE_IMAGE_EXTENSIONS[sub] ?? 'jpg'
+}
+
+/**
+ * 校验路径是否在目标目录内（防路径穿越）
+ */
+function ensurePathWithin(targetPath: string, parentDir: string): void {
+  const resolved = resolve(targetPath)
+  const resolvedParent = resolve(parentDir)
+  if (!resolved.startsWith(resolvedParent + '/') && resolved !== resolvedParent) {
+    throw new Error(`路径穿越: ${resolved} 超出 ${resolvedParent}`)
+  }
+}
+
+/**
+ * 清理文件名，移除路径分隔符和危险字符
+ */
+function sanitizeFileName(name: string): string {
+  return basename(name).replace(/[/\\:*?"<>|]/g, '_')
 }
 
 /**
@@ -56,8 +84,9 @@ export function saveImageToSession(
 ): string {
   const sessionDir = getAgentSessionWorkspacePath(workspaceSlug, sessionId)
   const ext = inferExtension(mediaType)
-  const filename = `${fileNameHint}.${ext}`
+  const filename = `${sanitizeFileName(fileNameHint)}.${ext}`
   const targetPath = join(sessionDir, filename)
+  ensurePathWithin(targetPath, sessionDir)
 
   mkdirSync(sessionDir, { recursive: true })
   writeFileSync(targetPath, data)
@@ -78,7 +107,8 @@ export function saveFileToSession(
   data: Buffer,
 ): string {
   const sessionDir = getAgentSessionWorkspacePath(workspaceSlug, sessionId)
-  const targetPath = join(sessionDir, fileName)
+  const targetPath = join(sessionDir, sanitizeFileName(fileName))
+  ensurePathWithin(targetPath, sessionDir)
 
   mkdirSync(sessionDir, { recursive: true })
   writeFileSync(targetPath, data)

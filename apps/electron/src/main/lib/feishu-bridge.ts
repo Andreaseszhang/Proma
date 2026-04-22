@@ -35,9 +35,8 @@ import {
   getAgentWorkspace,
   getWorkspaceCapabilities,
 } from './agent-workspace-manager'
-import { getFeishuBotBindingsPath } from './config-paths'
-import { inferImageMediaType, saveImageToSession, saveFileToSession, inferExtension } from './bridge-attachment-utils'
-import { writeFileSync, readFileSync, existsSync, readdirSync } from 'node:fs'
+import { getAgentSessionWorkspacePath, getFeishuBotBindingsPath } from './config-paths'
+import { mkdirSync, writeFileSync, readFileSync, existsSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { getSettings } from './settings-service'
 import { presenceService } from './feishu-presence'
@@ -438,6 +437,70 @@ class FeishuBridge {
     return Buffer.concat(chunks)
   }
 
+  /**
+   * 保存文件到 Agent session 工作目录
+   */
+  private saveFileToSession(
+    workspaceSlug: string,
+    sessionId: string,
+    fileName: string,
+    data: Buffer,
+  ): string {
+    const sessionDir = getAgentSessionWorkspacePath(workspaceSlug, sessionId)
+    const targetPath = join(sessionDir, fileName)
+
+    mkdirSync(sessionDir, { recursive: true })
+    writeFileSync(targetPath, data)
+    console.log(`[飞书 Bridge] 文件已保存: ${targetPath} (${data.length} bytes)`)
+
+    return targetPath
+  }
+
+  /**
+   * 通过 magic bytes 推断图片 MIME 类型
+   */
+  private inferImageMediaType(buffer: Buffer): string {
+    if (buffer.length < 4) return 'image/jpeg'
+
+    // JPEG: FF D8 FF
+    if (buffer[0] === 0xFF && buffer[1] === 0xD8 && buffer[2] === 0xFF) return 'image/jpeg'
+    // PNG: 89 50 4E 47
+    if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) return 'image/png'
+    // GIF: 47 49 46 38
+    if (buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x38) return 'image/gif'
+    // WebP: 52 49 46 46 ... 57 45 42 50
+    if (buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46 &&
+        buffer.length >= 12 && buffer[8] === 0x57 && buffer[9] === 0x45 && buffer[10] === 0x42 && buffer[11] === 0x50) {
+      return 'image/webp'
+    }
+
+    return 'image/jpeg'
+  }
+
+  /**
+   * 保存图片到 Agent session 工作目录
+   *
+   * @returns 图片文件的绝对路径
+   */
+  private saveImageToSession(
+    workspaceSlug: string,
+    sessionId: string,
+    imageKey: string,
+    mediaType: string,
+    data: Buffer,
+  ): string {
+    const sessionDir = getAgentSessionWorkspacePath(workspaceSlug, sessionId)
+    const ext = mediaType.split('/')[1] || 'jpg'
+    const filename = `feishu-${imageKey}.${ext}`
+    const targetPath = join(sessionDir, filename)
+
+    mkdirSync(sessionDir, { recursive: true })
+    writeFileSync(targetPath, data)
+    console.log(`[飞书 Bridge] 图片已保存: ${targetPath} (${data.length} bytes)`)
+
+    return targetPath
+  }
+
   // ===== 飞书消息处理 =====
 
   private async handleFeishuMessage(data: Record<string, unknown>): Promise<void> {
@@ -535,7 +598,7 @@ class FeishuBridge {
           } else if (node.tag === 'img' && node.image_key) {
             try {
               const imageData = await this.downloadFeishuImage(messageId, node.image_key)
-              const mediaType = inferImageMediaType(imageData)
+              const mediaType = this.inferImageMediaType(imageData)
               imageAttachments.push({ imageKey: node.image_key, data: imageData, mediaType })
             } catch (error) {
               console.error('[飞书 Bridge] 下载富文本图片失败:', error)
@@ -549,7 +612,7 @@ class FeishuBridge {
       if (content.image_key) {
         try {
           const imageData = await this.downloadFeishuImage(messageId, content.image_key)
-          const mediaType = inferImageMediaType(imageData)
+          const mediaType = this.inferImageMediaType(imageData)
           if (imageData.length > 10 * 1024 * 1024) {
             console.warn(`[飞书 Bridge] 图片较大: ${(imageData.length / 1024 / 1024).toFixed(1)}MB`)
           }
@@ -1077,13 +1140,13 @@ class FeishuBridge {
     const workspace = binding.workspaceId ? getAgentWorkspace(binding.workspaceId) : undefined
     if (workspace) {
       for (const img of imageAttachments) {
-        const savedPath = saveImageToSession(
-          workspace.slug, binding.sessionId, `feishu-${img.imageKey}`, img.mediaType, img.data,
+        const savedPath = this.saveImageToSession(
+          workspace.slug, binding.sessionId, img.imageKey, img.mediaType, img.data,
         )
-        attachedRefs.push(`- feishu-${img.imageKey}.${inferExtension(img.mediaType)}: ${savedPath}`)
+        attachedRefs.push(`- feishu-${img.imageKey}: ${savedPath}`)
       }
       for (const file of fileAttachments) {
-        const savedPath = saveFileToSession(
+        const savedPath = this.saveFileToSession(
           workspace.slug, binding.sessionId, file.fileName, file.data,
         )
         attachedRefs.push(`- ${file.fileName}: ${savedPath}`)

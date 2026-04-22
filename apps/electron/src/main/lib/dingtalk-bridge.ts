@@ -413,7 +413,11 @@ class DingTalkBridge {
       await this.replyTextViaWebhook(data.sessionWebhook, '请先在 Proma 设置中选择 Agent 渠道。')
       return
     }
-    const workspace = getAgentWorkspace(binding.workspaceId)!
+    const workspace = getAgentWorkspace(binding.workspaceId)
+    if (!workspace) {
+      await this.replyTextViaWebhook(data.sessionWebhook, '⚠️ 当前未设置工作区，无法保存图片')
+      return
+    }
 
     const attachments: BridgeAttachment[] = allImages.map((img) => {
       const hint = `dingtalk-${img.id}`

@@ -19,7 +19,9 @@ import type {
 import { WECHAT_IPC_CHANNELS, WECHAT_ITEM_TYPE, WECHAT_MESSAGE_TYPE, WECHAT_MESSAGE_STATE } from '@proma/shared'
 import { getDecryptedCredentials, saveWeChatCredentials, clearWeChatCredentials, getWeChatConfig, updateWeChatDefaultWorkspace } from './wechat-config'
 import { getWeChatSyncPath } from './config-paths'
-import { BridgeCommandHandler } from './bridge-command-handler'
+import { BridgeCommandHandler, type BridgeAttachment } from './bridge-command-handler'
+import { inferImageMediaType, saveImageToSession, inferExtension, MAX_IMAGE_SIZE } from './bridge-attachment-utils'
+import { getAgentWorkspace } from './agent-workspace-manager'
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import * as crypto from 'node:crypto'
 import QRCode from 'qrcode'
@@ -35,6 +37,9 @@ const MAX_CONSECUTIVE_FAILURES = 5
 const INITIAL_BACKOFF_MS = 3_000
 const MAX_BACKOFF_MS = 60_000
 const SESSION_EXPIRED_CODE = -14
+const DOWNLOAD_IMAGE_TIMEOUT_MS = 30_000
+const HANDLE_MESSAGE_TIMEOUT_MS = 90_000
+const PENDING_IMAGES_CLEANUP_INTERVAL = 7 * 60 * 1000
 
 // ===== iLink API 响应类型 =====
 
@@ -80,6 +85,32 @@ function generateWechatUIN(): string {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/**
+ * 解析 iLink aes_key 为 16 字节原始 AES key
+ *
+ * 参考官方 SDK @tencent-weixin/openclaw-weixin：
+ * - 图片场景：base64(raw 16 bytes)
+ * - 文件/语音/视频：base64(32-char hex string)
+ * 先 base64 解码，若长度为 16 则直接用；若为 32 字符 hex 则再解一层。
+ */
+function parseAesKey(aesKeyBase64: string): Buffer {
+  const decoded = Buffer.from(aesKeyBase64, 'base64')
+  if (decoded.length === 16) return decoded
+  if (decoded.length === 32 && /^[0-9a-fA-F]{32}$/.test(decoded.toString('ascii'))) {
+    return Buffer.from(decoded.toString('ascii'), 'hex')
+  }
+  throw new Error(`aes_key 解析失败：期望 16 字节或 32 字符 hex，实际 ${decoded.length} 字节`)
+}
+
+function decryptAesEcbWithKey(ciphertext: Buffer, key: Buffer): Buffer {
+  if (ciphertext.length === 0 || ciphertext.length % 16 !== 0) {
+    throw new Error(`AES-ECB 密文长度非法: ${ciphertext.length}`)
+  }
+  const decipher = crypto.createDecipheriv('aes-128-ecb', key, null)
+  decipher.setAutoPadding(true)
+  return Buffer.concat([decipher.update(ciphertext), decipher.final()])
 }
 
 // ===== iLink HTTP 客户端 =====
@@ -152,6 +183,69 @@ class ILinkClient {
     }, 10_000)
   }
 
+  /**
+   * 下载图片
+   *
+   * 策略：
+   * 1. 如果 image_item.url 存在，直接 fetch（部分图片服务端已解密）
+   * 2. 否则通过 media.encrypt_query_param 构建 CDN URL，fetch 加密字节后用 AES-128-ECB 解密
+   *
+   * aes_key 格式不确定，按 base64→16B / base64→hex→16B / hex→16B 依次尝试。
+   */
+  async downloadImage(item: WeChatMessageItem): Promise<Buffer> {
+    const img = item.image_item
+    if (!img) throw new Error('缺少 image_item')
+
+    // 路径 1: 直接使用 url
+    if (img.url) {
+      const ac = new AbortController()
+      const t = setTimeout(() => ac.abort(), DOWNLOAD_IMAGE_TIMEOUT_MS)
+      try {
+        const resp = await fetch(img.url, { signal: ac.signal })
+        if (!resp.ok) throw new Error(`直连 url 失败: HTTP ${resp.status}`)
+        return Buffer.from(await resp.arrayBuffer())
+      } finally {
+        clearTimeout(t)
+      }
+    }
+
+    if (!img.media) throw new Error('image_item 既无 url 也无 media')
+    const encryptQueryParam = img.media.encrypt_query_param
+    const fullUrl = img.media.full_url
+
+    // aeskey: image_item.aeskey (hex) 或 media.aes_key (base64)
+    let aesKeyBase64: string | undefined
+    if (img.aeskey) {
+      aesKeyBase64 = Buffer.from(img.aeskey, 'hex').toString('base64')
+    } else if (img.media.aes_key) {
+      aesKeyBase64 = img.media.aes_key
+    }
+
+    if (!encryptQueryParam && !fullUrl) throw new Error('缺少 encrypt_query_param 和 full_url')
+
+    const cdnBaseUrl = 'https://novac2c.cdn.weixin.qq.com/c2c'
+    const url = fullUrl ?? `${cdnBaseUrl}/download?encrypted_query_param=${encodeURIComponent(encryptQueryParam!)}`
+
+    const ac = new AbortController()
+    const t = setTimeout(() => ac.abort(), DOWNLOAD_IMAGE_TIMEOUT_MS)
+    let encrypted: Buffer
+    try {
+      const resp = await fetch(url, { signal: ac.signal })
+      if (!resp.ok) {
+        const body = await resp.text().catch(() => '')
+        throw new Error(`CDN 下载失败: HTTP ${resp.status} ${body.slice(0, 200)}`)
+      }
+      encrypted = Buffer.from(await resp.arrayBuffer())
+    } finally {
+      clearTimeout(t)
+    }
+
+    if (!aesKeyBase64) return encrypted
+
+    const key = parseAesKey(aesKeyBase64)
+    return decryptAesEcbWithKey(encrypted, key)
+  }
+
   private async post<T>(path: string, body: unknown, timeoutMs: number, signal?: AbortSignal): Promise<T> {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), timeoutMs)
@@ -196,6 +290,12 @@ class ILinkClient {
 
 // ===== 单例 Bridge =====
 
+interface WeChatImageAttachment {
+  id: string
+  data: Buffer
+  mediaType: string
+}
+
 class WeChatBridge {
   private client: ILinkClient | null = null
   private state: WeChatBridgeState = { status: 'disconnected' }
@@ -203,6 +303,10 @@ class WeChatBridge {
   private loginAbortController: AbortController | null = null
   private getUpdatesBuf = ''
   private polling = false
+  private pendingImages = new Map<string, { images: WeChatImageAttachment[]; createdAt: number }>()
+  private static readonly PENDING_IMAGES_TTL = 10 * 60 * 1000 // 10 minutes
+  private static readonly PENDING_IMAGES_MAX = 15
+  private pendingImagesCleanupTimer: ReturnType<typeof setInterval> | null = null
 
   /** 通用命令处理器（命令路由 + Agent 消息路由 + EventBus 监听） */
   private commandHandler = new BridgeCommandHandler({
@@ -291,6 +395,11 @@ class WeChatBridge {
     this.client = null
     this.polling = false
     this.commandHandler.unsubscribe()
+    if (this.pendingImagesCleanupTimer) {
+      clearInterval(this.pendingImagesCleanupTimer)
+      this.pendingImagesCleanupTimer = null
+    }
+    this.pendingImages.clear()
     this.updateStatus({ status: 'disconnected', qrCodeData: undefined })
     console.log('[微信 Bridge] 已停止')
   }
@@ -384,6 +493,9 @@ class WeChatBridge {
     // 订阅 Agent EventBus 接收 Agent 回复
     this.commandHandler.subscribe()
 
+    // 定期清理过期的图片缓冲
+    this.pendingImagesCleanupTimer = setInterval(() => this.cleanExpiredPendingImages(), PENDING_IMAGES_CLEANUP_INTERVAL)
+
     this.updateStatus({ status: 'connected', connectedAt: Date.now(), qrCodeData: undefined })
     console.log('[微信 Bridge] 长轮询已启动')
 
@@ -433,9 +545,21 @@ class WeChatBridge {
           this.saveSyncBuf()
         }
 
-        // 处理消息
+        // 处理消息（串行避免同一 chatId 并发创建 session，单条超时保护）
         for (const msg of resp.msgs) {
-          this.handleMessage(msg)
+          let timeoutId: ReturnType<typeof setTimeout> | undefined
+          try {
+            await Promise.race([
+              this.handleMessage(msg),
+              new Promise<never>((_, reject) => {
+                timeoutId = setTimeout(() => reject(new Error('handleMessage 超时')), HANDLE_MESSAGE_TIMEOUT_MS)
+              }),
+            ])
+          } catch (error) {
+            console.error('[微信 Bridge] 处理消息失败:', error)
+          } finally {
+            if (timeoutId) clearTimeout(timeoutId)
+          }
         }
       } catch (error) {
         if (signal.aborted) return
@@ -453,33 +577,135 @@ class WeChatBridge {
     }
   }
 
+  private cleanExpiredPendingImages(): void {
+    const now = Date.now()
+    for (const [chatId, entry] of this.pendingImages) {
+      if (now - entry.createdAt > WeChatBridge.PENDING_IMAGES_TTL) {
+        console.log(`[微信 Bridge] 清理过期图片缓冲: ${chatId.slice(0, 8)}... (${entry.images.length} 张)`)
+        this.pendingImages.delete(chatId)
+      }
+    }
+  }
+
   /** 处理收到的消息，委托给通用命令处理器 */
-  private handleMessage(msg: WeChatIncomingMessage): void {
+  private async handleMessage(msg: WeChatIncomingMessage): Promise<void> {
     // 只处理已完成的用户消息
     if (msg.message_type !== WECHAT_MESSAGE_TYPE.USER) return
     if (msg.message_state !== WECHAT_MESSAGE_STATE.FINISH) return
+    if (!this.client) return
 
     const text = msg.item_list
       .filter((item) => item.type === WECHAT_ITEM_TYPE.TEXT && item.text_item)
       .map((item) => item.text_item!.text)
       .join('')
 
-    if (!text.trim()) return
+    const imageItems = msg.item_list.filter(
+      (item) => item.type === WECHAT_ITEM_TYPE.IMAGE && item.image_item,
+    )
+
+    const chatId = msg.from_user_id
+    const contextToken = msg.context_token
+
+    // 纯粹的空消息
+    if (!text.trim() && imageItems.length === 0) return
 
     console.log('[微信 Bridge] 收到消息:', {
-      from: msg.from_user_id,
+      from: chatId,
       messageId: msg.message_id,
       text: text.length > 100 ? text.slice(0, 100) + '...' : text,
+      imageCount: imageItems.length,
     })
 
-    // 委托给通用命令处理器（自动区分 / 命令 vs 普通消息）
-    this.commandHandler.handleIncomingMessage(
-      msg.from_user_id,
-      text,
-      { contextToken: msg.context_token },
-    ).catch((error) => {
-      console.error('[微信 Bridge] 处理消息失败:', error)
+    // 下载图片
+    const downloads: WeChatImageAttachment[] = []
+    const msgId = msg.message_id ?? `msg-${Date.now()}`
+    for (let idx = 0; idx < imageItems.length; idx++) {
+      try {
+        const buf = await this.client.downloadImage(imageItems[idx]!)
+        const mediaType = inferImageMediaType(buf)
+        if (buf.length > MAX_IMAGE_SIZE) {
+          console.warn(`[微信 Bridge] 图片较大: ${(buf.length / 1024 / 1024).toFixed(1)}MB`)
+        }
+        downloads.push({ id: `${msgId}-${idx}`, data: buf, mediaType })
+      } catch (error) {
+        console.error('[微信 Bridge] 图片下载失败:', error)
+        await this.client.sendText(chatId, '⚠️ 一张图片下载失败，已跳过', contextToken)
+      }
+    }
+
+    // 清理过期缓冲
+    this.cleanExpiredPendingImages()
+
+    // 纯图片消息 → 缓冲，等待文字触发
+    if (!text.trim() && downloads.length > 0) {
+      const entry = this.pendingImages.get(chatId)
+      const existing = entry ? entry.images : []
+      const merged = [...existing, ...downloads].slice(-WeChatBridge.PENDING_IMAGES_MAX)
+      this.pendingImages.set(chatId, { images: merged, createdAt: entry?.createdAt ?? Date.now() })
+      await this.client.sendText(
+        chatId,
+        `📎 已收到 ${merged.length} 张图片，请继续发送文字消息以触发处理。`,
+        contextToken,
+      )
+      return
+    }
+
+    // 文字消息（可能携带或触发缓冲的图片）
+    if (!text.trim()) return
+
+    // 合并缓冲图片
+    const pendingEntry = this.pendingImages.get(chatId)
+    const pending = pendingEntry ? pendingEntry.images : []
+    const allImages = [...pending, ...downloads]
+    this.pendingImages.delete(chatId)
+
+    // 无图片 → 原有纯文本路径
+    if (allImages.length === 0) {
+      await this.commandHandler.handleIncomingMessage(chatId, text, { contextToken })
+      return
+    }
+
+    // 命令消息携带图片（极少见）：把图片放回缓冲，仅处理命令
+    if (text.startsWith('/')) {
+      this.pendingImages.set(chatId, { images: allImages, createdAt: Date.now() })
+      await this.commandHandler.handleIncomingMessage(chatId, text, { contextToken })
+      return
+    }
+
+    // 有图片：先检查 session 是否正在运行，避免保存图片后消息被拦截
+    if (this.commandHandler.isSessionActive(chatId)) {
+      this.pendingImages.set(chatId, { images: allImages, createdAt: Date.now() })
+      await this.client.sendText(chatId, '❌ 上一条消息仍在处理中，图片已暂存，请稍候再试', contextToken)
+      return
+    }
+
+    // 确保 binding 存在，保存图片到会话目录
+    const binding = this.commandHandler.ensureBinding(chatId)
+    if (!binding) {
+      await this.client.sendText(chatId, '请先在 Proma 设置中选择 Agent 渠道。', contextToken)
+      return
+    }
+    const workspace = binding.workspaceId ? getAgentWorkspace(binding.workspaceId) : undefined
+    if (!workspace) {
+      await this.client.sendText(chatId, '⚠️ 当前未设置工作区，无法保存图片', contextToken)
+      return
+    }
+
+    const attachments: BridgeAttachment[] = allImages.map((img) => {
+      const hint = `wechat-${img.id}`
+      const absolutePath = saveImageToSession(
+        workspace.slug,
+        binding.sessionId,
+        hint,
+        img.mediaType,
+        img.data,
+      )
+      // label 必须带扩展名，Proma 渲染器据此识别图片类型以显示预览
+      const label = `${hint}.${inferExtension(img.mediaType)}`
+      return { absolutePath, label, kind: 'image' as const }
     })
+
+    await this.commandHandler.handleIncomingMessage(chatId, text, { contextToken }, attachments)
   }
 
   // ===== 同步游标持久化 =====

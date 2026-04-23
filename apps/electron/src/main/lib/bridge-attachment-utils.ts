@@ -6,7 +6,7 @@
  */
 
 import { mkdirSync, writeFileSync } from 'node:fs'
-import { join, resolve, basename } from 'node:path'
+import { join, resolve, basename, relative } from 'node:path'
 import { getAgentSessionWorkspacePath } from './config-paths'
 
 /** 图片大小警告阈值 */
@@ -58,7 +58,8 @@ export function inferExtension(mediaType: string): string {
 function ensurePathWithin(targetPath: string, parentDir: string): void {
   const resolved = resolve(targetPath)
   const resolvedParent = resolve(parentDir)
-  if (!resolved.startsWith(resolvedParent + '/') && resolved !== resolvedParent) {
+  const rel = relative(resolvedParent, resolved)
+  if (rel.startsWith('..') || resolve(resolvedParent, rel) !== resolved) {
     throw new Error(`路径穿越: ${resolved} 超出 ${resolvedParent}`)
   }
 }

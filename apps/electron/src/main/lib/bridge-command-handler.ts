@@ -112,7 +112,7 @@ export class BridgeCommandHandler {
     contextData?: unknown,
     attachments?: BridgeAttachment[],
   ): Promise<void> {
-    if (text.startsWith('/')) {
+    if (text.trimStart().startsWith('/')) {
       // 命令消息不携带附件（附件由 Bridge 缓冲，等普通消息触发）
       await this.handleCommand(chatId, text, contextData)
     } else {

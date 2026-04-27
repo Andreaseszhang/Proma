@@ -259,7 +259,7 @@ export function WorkspaceSelector(): React.ReactElement {
 
   return (
     <>
-      <div className="rounded-xl">
+      <div className={expanded ? 'border border-border rounded-lg overflow-hidden' : undefined}>
         {/* Toggle Bar — 点击展开/收起工作区列表 */}
         <div
           onClick={() => setExpanded((v) => !v)}
@@ -286,7 +286,7 @@ export function WorkspaceSelector(): React.ReactElement {
 
         {/* 展开后的工作区列表 */}
         {expanded && (
-          <div className="overflow-y-auto scrollbar-thin flex flex-col pb-1" style={{ maxHeight: 176 }}>
+          <div className="overflow-y-auto scrollbar-thin flex flex-col pb-1" style={{ maxHeight: 140 }}>
             {workspaces.map((ws) => (
               <div key={ws.id} className="relative">
                 {/* 上方插入指示线 */}

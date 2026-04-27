@@ -934,13 +934,18 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
 
       {/* 新对话/新会话按钮 + 搜索按钮 */}
       <div className="px-3 pt-2 flex items-center gap-1.5">
-        <button
-          onClick={mode === 'agent' ? handleNewAgentSession : handleNewConversation}
-          className="flex-1 flex items-center gap-2 px-3 py-2 rounded-[10px] text-[13px] font-medium text-foreground/70 bg-primary/5 hover:bg-primary/10 transition-colors duration-100 titlebar-no-drag border border-dashed border-[hsl(var(--dashed-border))] hover:border-[hsl(var(--dashed-border-hover))]"
-        >
-          <Plus size={14} />
-          <span>{mode === 'agent' ? '新会话' : '新对话'}</span>
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={mode === 'agent' ? handleNewAgentSession : handleNewConversation}
+              className="flex-1 flex items-center gap-2 px-3 py-2 rounded-[10px] text-[13px] font-medium text-foreground/70 bg-primary/5 hover:bg-primary/10 transition-colors duration-100 titlebar-no-drag border border-dashed border-[hsl(var(--dashed-border))] hover:border-[hsl(var(--dashed-border-hover))]"
+            >
+              <Plus size={14} />
+              <span>{mode === 'agent' ? '新会话' : '新对话'}</span>
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">{mode === 'agent' ? '新会话' : '新对话'} (⌘N)</TooltipContent>
+        </Tooltip>
         <Tooltip>
           <TooltipTrigger asChild>
             <button
@@ -1009,22 +1014,27 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
               >
                 {/* Tab 切换按钮 */}
                 <div className="pt-2 px-3 flex-shrink-0">
-                  <div className="flex items-center gap-1 mb-0.5">
+                  <div className="flex border-b border-border/30">
                     <button
                       onClick={() => setAgentSubTab('working')}
                       className={cn(
-                        'px-2.5 py-0.5 rounded-md text-[12px] font-medium transition-colors titlebar-no-drag inline-flex items-center',
+                        'flex-1 flex items-center justify-center gap-1.5 pb-1.5 text-[12px] font-medium transition-colors titlebar-no-drag border-b-2',
                         agentSubTab === 'working'
-                          ? 'bg-foreground/[0.08] text-foreground/80'
-                          : 'text-foreground/40 hover:text-foreground/60 hover:bg-foreground/[0.04]'
+                          ? 'border-primary text-primary subtab-active'
+                          : 'border-transparent text-muted-foreground/70 hover:text-foreground'
                       )}
                     >
-                      工作中
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Hammer size={13} fill="currentColor" />
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom">工作中</TooltipContent>
+                      </Tooltip>
                       {hasWorkingSessions && (
                         <span className={cn(
-                          'ml-1.5 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[10px]',
+                          'inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[10px]',
                           agentSubTab === 'working'
-                            ? 'bg-foreground/10 text-foreground/60'
+                            ? 'bg-primary/10 text-primary'
                             : 'bg-foreground/10 text-foreground/50'
                         )}>
                           {workingGroups.todo.length + workingGroups.running.length + workingGroups.done.length}
@@ -1034,18 +1044,23 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
                     <button
                       onClick={() => setAgentSubTab('pinned')}
                       className={cn(
-                        'px-2.5 py-0.5 rounded-md text-[12px] font-medium transition-colors titlebar-no-drag inline-flex items-center',
+                        'flex-1 flex items-center justify-center gap-1.5 pb-1.5 text-[12px] font-medium transition-colors titlebar-no-drag border-b-2',
                         agentSubTab === 'pinned'
-                          ? 'bg-foreground/[0.08] text-foreground/80'
-                          : 'text-foreground/40 hover:text-foreground/60 hover:bg-foreground/[0.04]'
+                          ? 'border-primary text-primary subtab-active'
+                          : 'border-transparent text-muted-foreground/70 hover:text-foreground'
                       )}
                     >
-                      置顶
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Pin size={13} fill="currentColor" />
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom">置顶</TooltipContent>
+                      </Tooltip>
                       {pinnedAgentSessions.length > 0 && (
                         <span className={cn(
-                          'ml-1.5 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[10px]',
+                          'inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[10px]',
                           agentSubTab === 'pinned'
-                            ? 'bg-foreground/10 text-foreground/60'
+                            ? 'bg-primary/10 text-primary'
                             : 'bg-foreground/10 text-foreground/50'
                         )}>
                           {pinnedAgentSessions.length}
@@ -1058,7 +1073,7 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
                 {/* Tab 内容（自己滚动） */}
                 <div className="flex-1 overflow-y-auto scrollbar-none px-3 pb-1 min-h-0">
                   {agentSubTab === 'working' && (
-                    <div className="pt-0.5 pb-0.5">
+                    <div className="pt-2 pb-0.5">
                       {hasWorkingSessions ? (() => {
                         const workingItems: Array<{ session: AgentSessionMeta; accent: SessionLeftAccent; keyPrefix: string }> = [
                           ...workingGroups.todo.map((s) => ({ session: s, accent: 'orange' as const, keyPrefix: 'working-todo' })),
@@ -1099,7 +1114,7 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
                   )}
 
                   {agentSubTab === 'pinned' && (
-                    <div className="pt-0.5 pb-0.5">
+                    <div className="pt-2 pb-0.5">
                       {pinnedAgentSessions.length > 0 ? (
                         <div className="flex flex-col gap-0.5">
                           {pinnedAgentSessions.map((session) => (

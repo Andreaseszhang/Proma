@@ -401,6 +401,11 @@
   color: inherit !important;
 }
 
+/* 苍穹暮色：subtab 选中态浅化 */
+.theme-ocean-dark .subtab-active {
+  color: hsl(205 70% 65%) !important;
+}
+
 /* ===== 森系主题：会话/工作区选中状态 ===== */
 /* 森息晨光：浅绿背景 + 深绿文字 */
 .theme-forest-light .session-item-selected,
@@ -422,6 +427,11 @@
 .theme-forest-dark .session-item-selected *,
 .theme-forest-dark .workspace-item-selected * {
   color: inherit !important;
+}
+
+/* 森息夜语：subtab 选中态浅化 */
+.theme-forest-dark .subtab-active {
+  color: hsl(150 45% 60%) !important;
 }
 
 /* ===== 莫兰迪主题：模式切换器选中状态 ===== */

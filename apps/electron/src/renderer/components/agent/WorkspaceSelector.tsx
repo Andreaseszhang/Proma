@@ -297,9 +297,9 @@ export function WorkspaceSelector(): React.ReactElement {
 
   return (
     <>
-      <div className="rounded-lg border border-border/60 overflow-hidden">
+      <div className="rounded-xl px-1 py-1.5">
         {/* 头部 */}
-        <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-border/40">
+        <div className="flex items-center justify-between px-2.5 py-1.5">
           <span className="text-[11px] font-medium text-foreground/50 uppercase tracking-wide">工作区</span>
           <button
             onClick={handleStartCreate}
@@ -334,8 +334,8 @@ export function WorkspaceSelector(): React.ReactElement {
                 className={cn(
                   'group w-full flex items-center gap-1 px-1 py-[5px] rounded-md text-[13px] transition-colors duration-100 cursor-pointer titlebar-no-drag',
                   ws.id === currentWorkspaceId
-                    ? 'workspace-item-selected bg-foreground/[0.08] text-foreground shadow-[0_1px_2px_0_rgba(0,0,0,0.05)]'
-                    : 'text-foreground/70 hover:bg-foreground/[0.04]',
+                    ? 'workspace-item-selected text-foreground font-semibold'
+                    : 'text-foreground/60 hover:text-foreground/80',
                   dragId === ws.id && 'opacity-40',
                 )}
               >

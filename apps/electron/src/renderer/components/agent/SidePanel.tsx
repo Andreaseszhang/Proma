@@ -7,7 +7,7 @@
 
 import * as React from 'react'
 import { useAtomValue, useSetAtom } from 'jotai'
-import { X, FolderOpen, ExternalLink, RefreshCw, ChevronRight, MoreHorizontal, FolderSearch, Pencil, FolderInput, Info, FolderHeart, MessageSquarePlus } from 'lucide-react'
+import { X, FolderOpen, ExternalLink, RefreshCw, ChevronRight, MoreHorizontal, FolderSearch, Pencil, FolderInput, FolderHeart, MessageSquarePlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
@@ -275,10 +275,9 @@ export function SidePanel({ sessionId, sessionPath }: SidePanelProps): React.Rea
                     <>
                       <div className="flex items-center gap-1 pl-3 pr-2 h-[32px] flex-shrink-0">
                         <FolderOpen className="size-3 text-muted-foreground" />
-                        <span className="text-[11px] font-medium text-muted-foreground">会话文件</span>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <Info className="size-3 text-muted-foreground/50 cursor-help" />
+                            <span className="text-[11px] font-medium text-muted-foreground cursor-help">会话文件</span>
                           </TooltipTrigger>
                           <TooltipContent side="bottom" className="max-w-[200px]">
                             <p>当前会话的专属文件，仅本次对话的 Agent 可以访问</p>
@@ -287,38 +286,35 @@ export function SidePanel({ sessionId, sessionPath }: SidePanelProps): React.Rea
                         <span className="text-[10px] text-muted-foreground/75 truncate flex-1" title={sessionPath}>
                           {breadcrumb}
                         </span>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
+                        {/* 更多操作菜单 */}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
                             <Button
                               type="button"
                               variant="ghost"
                               size="icon"
                               className="h-5 w-5 flex-shrink-0"
-                              onClick={() => window.electronAPI.openFile(sessionPath).catch(console.error)}
                             >
-                              <ExternalLink className="size-2.5" />
+                              <MoreHorizontal className="size-2.5" />
                             </Button>
-                          </TooltipTrigger>
-                          <TooltipContent side="bottom">
-                            <p>在 Finder 中打开</p>
-                          </TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-5 w-5 flex-shrink-0"
-                              onClick={handleRefresh}
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-36 min-w-0 p-0.5">
+                            <DropdownMenuItem
+                              className="text-xs py-1 [&>svg]:size-3"
+                              onSelect={() => window.electronAPI.openFile(sessionPath).catch(console.error)}
                             >
-                              <RefreshCw className="size-2.5" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent side="bottom">
-                            <p>刷新文件列表</p>
-                          </TooltipContent>
-                        </Tooltip>
+                              <ExternalLink />
+                              在 Finder 中打开
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-xs py-1 [&>svg]:size-3"
+                              onSelect={handleRefresh}
+                            >
+                              <RefreshCw />
+                              刷新文件列表
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                         {/* 关闭面板按钮 */}
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -396,10 +392,9 @@ export function SidePanel({ sessionId, sessionPath }: SidePanelProps): React.Rea
                   <div className="flex-1 min-h-0 flex flex-col mx-2 mb-2">
                     <div className="flex items-center gap-1 px-2 h-[32px] flex-shrink-0">
                       <FolderHeart className="size-3 text-muted-foreground" />
-                      <span className="text-[11px] font-medium text-muted-foreground">工作区文件</span>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <Info className="size-3 text-muted-foreground/50 cursor-help" />
+                          <span className="text-[11px] font-medium text-muted-foreground cursor-help">工作区文件</span>
                         </TooltipTrigger>
                         <TooltipContent side="bottom" className="max-w-[220px]">
                           <p>工作区内所有会话可访问的文件和文件夹，每个新对话都可以自动读取</p>
@@ -407,22 +402,27 @@ export function SidePanel({ sessionId, sessionPath }: SidePanelProps): React.Rea
                       </Tooltip>
                       <div className="flex-1" />
                       {workspaceFilesPath && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
                             <Button
                               type="button"
                               variant="ghost"
                               size="icon"
                               className="h-5 w-5 flex-shrink-0"
-                              onClick={() => window.electronAPI.openFile(workspaceFilesPath).catch(console.error)}
                             >
-                              <ExternalLink className="size-2.5" />
+                              <MoreHorizontal className="size-2.5" />
                             </Button>
-                          </TooltipTrigger>
-                          <TooltipContent side="bottom">
-                            <p>在 Finder 中打开工作区文件目录</p>
-                          </TooltipContent>
-                        </Tooltip>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-36 min-w-0 p-0.5">
+                            <DropdownMenuItem
+                              className="text-xs py-1 [&>svg]:size-3"
+                              onSelect={() => window.electronAPI.openFile(workspaceFilesPath).catch(console.error)}
+                            >
+                              <ExternalLink />
+                              在 Finder 中打开
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       )}
                     </div>
                     {/* 工作区文件内容区（独立滚动） */}

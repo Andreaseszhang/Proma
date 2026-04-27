@@ -286,7 +286,7 @@ export function WorkspaceSelector(): React.ReactElement {
 
         {/* 展开后的工作区列表 */}
         {expanded && (
-          <div className="overflow-y-auto scrollbar-thin flex flex-col px-1 pb-1" style={{ maxHeight: 176 }}>
+          <div className="overflow-y-auto scrollbar-thin flex flex-col pb-1" style={{ maxHeight: 176 }}>
             {workspaces.map((ws) => (
               <div key={ws.id} className="relative">
                 {/* 上方插入指示线 */}
@@ -303,7 +303,7 @@ export function WorkspaceSelector(): React.ReactElement {
                   onDragEnd={handleDragEnd}
                   onClick={() => handleSelect(ws)}
                   className={cn(
-                    'group w-full flex items-center gap-1 px-3 py-[7px] rounded-xl text-[13px] transition-colors duration-100 cursor-pointer titlebar-no-drag',
+                    'group w-full flex items-center gap-2 px-3 py-[7px] rounded-[10px] text-[13px] transition-colors duration-100 cursor-pointer titlebar-no-drag',
                     ws.id === currentWorkspaceId
                       ? 'workspace-item-selected text-foreground'
                       : 'text-foreground/60 hover:text-foreground/80',

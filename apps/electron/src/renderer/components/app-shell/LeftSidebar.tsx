@@ -1024,12 +1024,7 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
                           : 'border-transparent text-muted-foreground/70 hover:text-foreground'
                       )}
                     >
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Hammer size={13} fill="currentColor" />
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom">工作中</TooltipContent>
-                      </Tooltip>
+                      工作中
                       {hasWorkingSessions && (
                         <span className={cn(
                           'inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[10px]',
@@ -1050,12 +1045,7 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
                           : 'border-transparent text-muted-foreground/70 hover:text-foreground'
                       )}
                     >
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Pin size={13} fill="currentColor" />
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom">置顶</TooltipContent>
-                      </Tooltip>
+                      置顶
                       {pinnedAgentSessions.length > 0 && (
                         <span className={cn(
                           'inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[10px]',
@@ -1157,7 +1147,7 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
           )}
 
           {/* 下区标题：最近会话 */}
-          <div className="px-3 pt-2 pb-1 text-[11px] font-medium text-foreground/40 select-none flex-shrink-0">
+          <div className="px-3 pt-[1px] pb-1 text-[11px] font-medium text-muted-foreground select-none flex-shrink-0">
             最近会话
           </div>
 
@@ -1445,7 +1435,7 @@ function ConversationItem({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       className={cn(
-        'relative w-full flex items-center gap-2 px-3 py-[7px] rounded-xl transition-colors duration-100 titlebar-no-drag text-left',
+        'relative w-full flex items-center gap-2 px-3 py-[7px] rounded-[10px] transition-colors duration-100 titlebar-no-drag text-left',
         active
           ? 'session-item-selected bg-primary/10 shadow-[0_1px_2px_0_rgba(0,0,0,0.05)]'
           : 'hover:bg-primary/5'
@@ -1647,23 +1637,16 @@ function AgentSessionItem({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       className={cn(
-        'relative w-full flex items-center gap-2 py-[7px] rounded-xl transition-colors duration-100 titlebar-no-drag text-left',
-        leftAccent ? 'pl-[27px] pr-3' : 'px-3',
+        'relative w-full flex items-center gap-2 px-3 py-[7px] rounded-[10px] transition-colors duration-100 titlebar-no-drag text-left',
         active
-          ? cn(
-              'session-item-selected shadow-[0_1px_2px_0_rgba(0,0,0,0.05)]',
-              !leftAccent && 'bg-primary/10',
-            )
+          ? 'session-item-selected bg-primary/10 shadow-[0_1px_2px_0_rgba(0,0,0,0.05)]'
           : 'hover:bg-primary/5'
       )}
-      style={active && leftAccent ? {
-        background: 'linear-gradient(to right, transparent 15px, hsl(var(--primary) / 0.1) 15px)',
-      } : undefined}
     >
       {leftAccent && (
         <span
           className={cn(
-            'absolute left-[8px] top-1.5 bottom-1.5 w-[2px] rounded-full pointer-events-none',
+            'absolute left-1 top-1.5 bottom-1.5 w-[2px] rounded-full pointer-events-none',
             SESSION_LEFT_ACCENT_CLASS[leftAccent]
           )}
         />

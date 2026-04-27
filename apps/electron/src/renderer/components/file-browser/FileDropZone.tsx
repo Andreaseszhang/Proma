@@ -174,7 +174,6 @@ export function FileDropZone({ workspaceSlug, sessionId, target = 'session', onF
         </>
       ) : (
         <>
-          <Paperclip className="size-3.5 text-muted-foreground/60 flex-shrink-0" />
           <span className="text-[11px] text-muted-foreground/75 flex-1 truncate">
             {isDragOver ? '释放以添加文件' : '拖拽文件到此处'}
           </span>

@@ -259,7 +259,7 @@ export function WorkspaceSelector(): React.ReactElement {
 
   return (
     <>
-      <div className={expanded ? 'border border-border rounded-lg overflow-hidden' : undefined}>
+      <div>
         {/* Toggle Bar — 点击展开/收起工作区列表 */}
         <div
           onClick={() => setExpanded((v) => !v)}

@@ -16,7 +16,7 @@
 import * as React from 'react'
 import { useAtom, useAtomValue, useSetAtom, useStore } from 'jotai'
 import { toast } from 'sonner'
-import { Bot, CornerDownLeft, Square, Settings, Paperclip, FolderPlus, X, Copy, Check, Brain, Map as MapIcon, Sparkles } from 'lucide-react'
+import { Bot, CornerDownLeft, Square, Settings, Paperclip, FolderPlus, X, Copy, Check, Brain, Map as MapIcon, Sparkles, PanelRight } from 'lucide-react'
 import { AgentMessages } from './AgentMessages'
 import { AgentHeader } from './AgentHeader'
 import { ContextUsageBadge } from './ContextUsageBadge'
@@ -74,6 +74,9 @@ import {
   allPendingAskUserRequestsAtom,
   allPendingExitPlanRequestsAtom,
   finalizeStreamingActivities,
+  currentAgentSessionIdAtom,
+  agentSidePanelOpenMapAtom,
+  workspaceFilesVersionAtom,
 } from '@/atoms/agent-atoms'
 import type { AgentContextStatus } from '@/atoms/agent-atoms'
 import { settingsOpenAtom } from '@/atoms/settings-tab'
@@ -185,6 +188,12 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
   const stoppedByUserSessions = useAtomValue(stoppedByUserSessionsAtom)
   const sendWithCmdEnter = useAtomValue(sendWithCmdEnterAtom)
   const stoppedByUser = stoppedByUserSessions.has(sessionId)
+  // 文件面板
+  const panelOpenMap = useAtomValue(agentSidePanelOpenMapAtom)
+  const isPanelOpen = panelOpenMap.get(sessionId) ?? true
+  const setPanelOpenMap = useSetAtom(agentSidePanelOpenMapAtom)
+  const filesVersion = useAtomValue(workspaceFilesVersionAtom)
+  const hasFileChanges = filesVersion > 0
   const liveMessagesMap = useAtomValue(liveMessagesMapAtom)
   const setLiveMessagesMap = useSetAtom(liveMessagesMapAtom)
   // 稳定化空数组引用，避免 ?? [] 每次创建新引用导致下游 useMemo 链不必要重算
@@ -1313,6 +1322,28 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
   return (
     <>
     <AgentSessionProvider sessionId={sessionId}>
+      {/* 文件面板打开按钮（仅面板关闭时显示，固定右上角） */}
+      {!isPanelOpen && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="fixed right-4 top-[63px] z-50 titlebar-no-drag h-7 w-7"
+              onClick={() => setPanelOpenMap((prev) => { const m = new Map(prev); m.set(sessionId, true); return m })}
+            >
+              <PanelRight className="size-3.5" />
+              {hasFileChanges && (
+                <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-primary animate-pulse" />
+              )}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent side="bottom">
+            <p>打开文件面板</p>
+          </TooltipContent>
+        </Tooltip>
+      )}
       {/* 主内容区域 */}
       <div className="flex flex-col h-full flex-1 min-w-0 max-w-[min(72rem,100%)] mx-auto">
         {/* Agent Header */}

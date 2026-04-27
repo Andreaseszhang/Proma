@@ -124,28 +124,6 @@ export function AgentHeader({ sessionId }: AgentHeaderProps): React.ReactElement
               <Pencil className="size-3.5" />
             </button>
           </div>
-          {/* 文件面板打开按钮（仅面板关闭时显示） */}
-          {!isPanelOpen && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="relative titlebar-no-drag h-7 w-7 flex-shrink-0"
-                  onClick={togglePanel}
-                >
-                  <PanelRight className="size-3.5" />
-                  {hasFileChanges && (
-                    <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-primary animate-pulse" />
-                  )}
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">
-                <p>打开文件面板</p>
-              </TooltipContent>
-            </Tooltip>
-          )}
         </>
       )}
     </div>

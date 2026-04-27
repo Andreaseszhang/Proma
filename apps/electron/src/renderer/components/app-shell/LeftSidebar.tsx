@@ -92,7 +92,7 @@ function SidebarItem({ icon, label, active, suffix, onClick }: SidebarItemProps)
     <button
       onClick={onClick}
       className={cn(
-        'w-full flex items-center justify-between px-3 py-2 rounded-[10px] text-[13px] transition-colors duration-100 titlebar-no-drag',
+        'w-full flex items-center justify-between px-3 py-2 rounded-xl text-[13px] transition-colors duration-100 titlebar-no-drag',
         active
           ? 'bg-primary/10 text-foreground shadow-[0_1px_2px_0_rgba(0,0,0,0.05)]'
           : 'text-foreground/60 hover:bg-primary/5 hover:text-foreground'
@@ -844,7 +844,7 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
             <TooltipTrigger asChild>
               <button
                 onClick={() => setSidebarCollapsed(false)}
-                className="p-2 rounded-[10px] text-foreground/60 hover:bg-foreground/[0.04] hover:text-foreground transition-colors titlebar-no-drag"
+                className="p-2 rounded-xl text-foreground/60 hover:bg-foreground/[0.04] hover:text-foreground transition-colors titlebar-no-drag"
               >
                 <PanelLeftOpen size={18} />
               </button>
@@ -859,7 +859,7 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
             <TooltipTrigger asChild>
               <button
                 onClick={mode === 'agent' ? handleNewAgentSession : handleNewConversation}
-                className="p-2 rounded-[10px] text-foreground/70 bg-primary/5 hover:bg-primary/10 transition-colors titlebar-no-drag border border-dashed border-[hsl(var(--dashed-border))] hover:border-[hsl(var(--dashed-border-hover))]"
+                className="p-2 rounded-xl text-foreground/70 bg-primary/5 hover:bg-primary/10 transition-colors titlebar-no-drag border border-dashed border-[hsl(var(--dashed-border))] hover:border-[hsl(var(--dashed-border-hover))]"
               >
                 <Plus size={16} />
               </button>
@@ -879,7 +879,7 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
             <TooltipTrigger asChild>
               <button
                 onClick={() => setSettingsOpen(true)}
-                className="relative p-1 rounded-[10px] transition-colors titlebar-no-drag hover:bg-foreground/5"
+                className="relative p-1 rounded-xl transition-colors titlebar-no-drag hover:bg-foreground/5"
               >
                 <UserAvatar avatar={userProfile.avatar} size={28} />
                 {(hasUpdate || hasEnvironmentIssues) && (
@@ -915,7 +915,7 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
             <TooltipTrigger asChild>
               <button
                 onClick={() => setSidebarCollapsed(true)}
-                className="mt-2 size-[36px] flex-shrink-0 flex items-center justify-center rounded-[10px] text-foreground/40 hover:bg-foreground/[0.04] hover:text-foreground/60 transition-colors titlebar-no-drag"
+                className="mt-2 size-[36px] flex-shrink-0 flex items-center justify-center rounded-xl text-foreground/40 hover:bg-foreground/[0.04] hover:text-foreground/60 transition-colors titlebar-no-drag"
               >
                 <PanelLeftClose size={14} />
               </button>
@@ -938,7 +938,7 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
           <TooltipTrigger asChild>
             <button
               onClick={mode === 'agent' ? handleNewAgentSession : handleNewConversation}
-              className="flex-1 flex items-center gap-2 px-3 py-2 rounded-[10px] text-[13px] font-medium text-foreground/70 bg-primary/5 hover:bg-primary/10 transition-colors duration-100 titlebar-no-drag border border-dashed border-[hsl(var(--dashed-border))] hover:border-[hsl(var(--dashed-border-hover))]"
+              className="flex-1 flex items-center gap-2 px-3 py-2 rounded-xl text-[13px] font-medium text-foreground/70 bg-primary/5 hover:bg-primary/10 transition-colors duration-100 titlebar-no-drag border border-dashed border-[hsl(var(--dashed-border))] hover:border-[hsl(var(--dashed-border-hover))]"
             >
               <Plus size={14} />
               <span>{mode === 'agent' ? '新会话' : '新对话'}</span>
@@ -950,7 +950,7 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
           <TooltipTrigger asChild>
             <button
               onClick={() => setSearchDialogOpen(true)}
-              className="flex-shrink-0 size-[36px] flex items-center justify-center rounded-[10px] text-foreground/40 bg-primary/5 hover:bg-primary/10 hover:text-foreground/60 transition-colors duration-100 titlebar-no-drag border border-dashed border-[hsl(var(--dashed-border))] hover:border-[hsl(var(--dashed-border-hover))]"
+              className="flex-shrink-0 size-[36px] flex items-center justify-center rounded-xl text-foreground/40 bg-primary/5 hover:bg-primary/10 hover:text-foreground/60 transition-colors duration-100 titlebar-no-drag border border-dashed border-[hsl(var(--dashed-border))] hover:border-[hsl(var(--dashed-border-hover))]"
             >
               <Search size={14} />
             </button>
@@ -1148,10 +1148,10 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
                 </div>
               </div>
 
-              {/* 拖拽分割条：默认 1px 细线，hover 扩为 4px 热区 */}
+              {/* 拖拽分割条：视觉与右侧分隔线统一，py-1.5 扩大拖拽判定区域 */}
               <div
                 onMouseDown={handleAgentTopResizeStart}
-                className="h-px bg-border/60 hover:h-1 hover:bg-foreground/[0.08] cursor-row-resize titlebar-no-drag flex-shrink-0 transition-[height,background-color] duration-75"
+                className="mx-3 my-3 py-1.5 border-t border-muted-foreground/20 cursor-row-resize titlebar-no-drag flex-shrink-0"
               />
             </>
           )}
@@ -1278,7 +1278,7 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
             {mode === 'chat' && archivedConversationCount > 0 && (
               <button
                 onClick={() => setViewMode('archived')}
-                className="w-full flex items-center gap-2 px-3 py-2 rounded-[10px] text-[12px] text-foreground/40 hover:bg-foreground/[0.04] hover:text-foreground/60 transition-colors titlebar-no-drag"
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[12px] text-foreground/40 hover:bg-foreground/[0.04] hover:text-foreground/60 transition-colors titlebar-no-drag"
               >
                 <Archive size={13} className="text-foreground/30" />
                 <span>已归档 ({archivedConversationCount})</span>
@@ -1287,7 +1287,7 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
             {mode === 'agent' && archivedAgentSessionCount > 0 && (
               <button
                 onClick={() => setViewMode('archived')}
-                className="w-full flex items-center gap-2 px-3 py-2 rounded-[10px] text-[12px] text-foreground/40 hover:bg-foreground/[0.04] hover:text-foreground/60 transition-colors titlebar-no-drag"
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[12px] text-foreground/40 hover:bg-foreground/[0.04] hover:text-foreground/60 transition-colors titlebar-no-drag"
               >
                 <Archive size={13} className="text-foreground/30" />
                 <span>已归档 ({archivedAgentSessionCount})</span>
@@ -1297,7 +1297,7 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
         ) : (
           <button
             onClick={() => setViewMode('active')}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-[10px] text-[12px] text-foreground/60 bg-foreground/[0.04] hover:bg-foreground/[0.07] hover:text-foreground/80 transition-colors titlebar-no-drag"
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-[12px] text-foreground/60 bg-foreground/[0.04] hover:bg-foreground/[0.07] hover:text-foreground/80 transition-colors titlebar-no-drag"
           >
             <ArrowLeft size={13} className="text-foreground/50" />
             <span>返回活跃{mode === 'agent' ? '会话' : '对话'}</span>
@@ -1312,7 +1312,7 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
             <TooltipTrigger asChild>
               <button
                 onClick={() => { setSettingsTab('agent'); setSettingsOpen(true) }}
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-[10px] text-[12px] text-foreground/50 hover:bg-foreground/[0.04] hover:text-foreground/70 transition-colors titlebar-no-drag"
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-[12px] text-foreground/50 hover:bg-foreground/[0.04] hover:text-foreground/70 transition-colors titlebar-no-drag"
               >
                 <div className="flex items-center gap-2.5 flex-1 min-w-0">
                   <span className="flex items-center gap-1">
@@ -1338,7 +1338,7 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
       <div className="px-3 pb-3">
         <button
           onClick={() => setSettingsOpen(true)}
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-[10px] transition-colors titlebar-no-drag text-foreground/70 hover:bg-foreground/[0.04] hover:text-foreground"
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-xl transition-colors titlebar-no-drag text-foreground/70 hover:bg-foreground/[0.04] hover:text-foreground"
         >
           <UserAvatar avatar={userProfile.avatar} size={28} />
           <span className="flex-1 text-sm truncate text-left">{userProfile.userName}</span>
@@ -1445,7 +1445,7 @@ function ConversationItem({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       className={cn(
-        'relative w-full flex items-center gap-2 px-3 py-[7px] rounded-[10px] transition-colors duration-100 titlebar-no-drag text-left',
+        'relative w-full flex items-center gap-2 px-3 py-[7px] rounded-xl transition-colors duration-100 titlebar-no-drag text-left',
         active
           ? 'session-item-selected bg-primary/10 shadow-[0_1px_2px_0_rgba(0,0,0,0.05)]'
           : 'hover:bg-primary/5'
@@ -1647,16 +1647,23 @@ function AgentSessionItem({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       className={cn(
-        'relative w-full flex items-center gap-2 px-3 py-[7px] rounded-[10px] transition-colors duration-100 titlebar-no-drag text-left',
+        'relative w-full flex items-center gap-2 py-[7px] rounded-xl transition-colors duration-100 titlebar-no-drag text-left',
+        leftAccent ? 'pl-[27px] pr-3' : 'px-3',
         active
-          ? 'session-item-selected bg-primary/10 shadow-[0_1px_2px_0_rgba(0,0,0,0.05)]'
+          ? cn(
+              'session-item-selected shadow-[0_1px_2px_0_rgba(0,0,0,0.05)]',
+              !leftAccent && 'bg-primary/10',
+            )
           : 'hover:bg-primary/5'
       )}
+      style={active && leftAccent ? {
+        background: 'linear-gradient(to right, transparent 15px, hsl(var(--primary) / 0.1) 15px)',
+      } : undefined}
     >
       {leftAccent && (
         <span
           className={cn(
-            'absolute left-1 top-1.5 bottom-1.5 w-[2px] rounded-full pointer-events-none',
+            'absolute left-[8px] top-1.5 bottom-1.5 w-[2px] rounded-full pointer-events-none',
             SESSION_LEFT_ACCENT_CLASS[leftAccent]
           )}
         />

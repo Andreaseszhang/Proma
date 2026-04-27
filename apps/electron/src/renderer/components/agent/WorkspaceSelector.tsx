@@ -7,7 +7,7 @@
 
 import * as React from 'react'
 import { useAtom } from 'jotai'
-import { FolderOpen, Plus, Pencil, Trash2, GripVertical } from 'lucide-react'
+import { FolderOpen, Plus, Pencil, Trash2, GripVertical, ChevronRight, ChevronDown } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import {
@@ -24,55 +24,12 @@ import {
   agentWorkspacesAtom,
   currentAgentWorkspaceIdAtom,
 } from '@/atoms/agent-atoms'
-import { workspaceListHeightAtom } from '@/atoms/sidebar-atoms'
 import type { AgentWorkspace } from '@proma/shared'
 
 export function WorkspaceSelector(): React.ReactElement {
   const [workspaces, setWorkspaces] = useAtom(agentWorkspacesAtom)
   const [currentWorkspaceId, setCurrentWorkspaceId] = useAtom(currentAgentWorkspaceIdAtom)
-  const [listHeight, setListHeight] = useAtom(workspaceListHeightAtom)
-
-  // 高度拖拽调整
-  const listRef = React.useRef<HTMLDivElement>(null)
-  const resizing = React.useRef(false)
-  const startY = React.useRef(0)
-  const startH = React.useRef(0)
-  const cleanupResizeRef = React.useRef<(() => void) | null>(null)
-
-  React.useEffect(() => {
-    return () => { cleanupResizeRef.current?.() }
-  }, [])
-
-  const handleResizeStart = React.useCallback(
-    (e: React.MouseEvent) => {
-      e.preventDefault()
-      resizing.current = true
-      startY.current = e.clientY
-      // 用实际渲染高度作为起点，避免 maxHeight > 实际高度时不跟手
-      startH.current = listRef.current?.getBoundingClientRect().height ?? 120
-
-      const onMove = (ev: MouseEvent): void => {
-        if (!resizing.current) return
-        const delta = ev.clientY - startY.current
-        const next = Math.min(400, Math.max(80, startH.current + delta))
-        setListHeight(next)
-      }
-      const onUp = (): void => {
-        resizing.current = false
-        document.removeEventListener('mousemove', onMove)
-        document.removeEventListener('mouseup', onUp)
-        document.body.style.cursor = ''
-        document.body.style.userSelect = ''
-        cleanupResizeRef.current = null
-      }
-      document.addEventListener('mousemove', onMove)
-      document.addEventListener('mouseup', onUp)
-      document.body.style.cursor = 'row-resize'
-      document.body.style.userSelect = 'none'
-      cleanupResizeRef.current = onUp
-    },
-    [setListHeight],
-  )
+  const [expanded, setExpanded] = React.useState(false)
 
   // 新建状态
   const [creating, setCreating] = React.useState(false)
@@ -295,124 +252,131 @@ export function WorkspaceSelector(): React.ReactElement {
     setDropIndicator(null)
   }
 
+  const currentWorkspace = React.useMemo(
+    () => workspaces.find((w) => w.id === currentWorkspaceId) ?? workspaces[0] ?? null,
+    [workspaces, currentWorkspaceId],
+  )
+
   return (
     <>
-      <div className="rounded-xl px-1 py-1.5">
-        {/* 头部 */}
-        <div className="flex items-center justify-between px-2.5 py-1.5">
-          <span className="text-[11px] font-medium text-foreground/50 uppercase tracking-wide">工作区</span>
+      <div className="rounded-xl">
+        {/* Toggle Bar — 点击展开/收起工作区列表 */}
+        <div
+          onClick={() => setExpanded((v) => !v)}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl hover:bg-foreground/[0.04] cursor-pointer titlebar-no-drag transition-colors"
+        >
+          {expanded
+            ? <ChevronDown size={13} className="text-foreground/40 flex-shrink-0" />
+            : <ChevronRight size={13} className="text-foreground/40 flex-shrink-0" />
+          }
+          <span className="text-[13px] font-medium text-foreground/50 uppercase tracking-wide">工作区</span>
+          {!expanded && (
+            <span className="flex-1 min-w-0 truncate text-[13px] font-medium text-foreground/60 ml-[27px]">
+              {currentWorkspace?.name ?? '默认'}
+            </span>
+          )}
           <button
-            onClick={handleStartCreate}
-            className="p-1 rounded hover:bg-foreground/[0.06] text-foreground/35 hover:text-foreground/60 transition-colors titlebar-no-drag"
+            onClick={(e) => { e.stopPropagation(); handleStartCreate() }}
+            className="p-0.5 rounded hover:bg-foreground/[0.08] text-foreground/35 hover:text-foreground/60 transition-colors flex-shrink-0 ml-auto"
             title="新建工作区"
           >
             <Plus size={13} />
           </button>
         </div>
 
-        {/* 工作区列表 */}
-        <div
-          ref={listRef}
-          className="overflow-y-auto scrollbar-thin flex flex-col p-1"
-          style={{ maxHeight: listHeight }}
-        >
-          {workspaces.map((ws) => (
-            <div key={ws.id} className="relative">
-              {/* 上方插入指示线 */}
-              {dropIndicator?.id === ws.id && dropIndicator.position === 'before' && (
-                <div className="absolute top-0 left-1 right-1 h-0.5 bg-primary rounded-full z-10" />
-              )}
-
-              <div
-                draggable={editingId !== ws.id}
-                onDragStart={(e) => handleDragStart(e, ws.id)}
-                onDragOver={(e) => handleDragOver(e, ws.id)}
-                onDragLeave={handleDragLeave}
-                onDrop={(e) => handleDrop(e, ws.id)}
-                onDragEnd={handleDragEnd}
-                onClick={() => handleSelect(ws)}
-                className={cn(
-                  'group w-full flex items-center gap-1 px-1 py-[5px] rounded-md text-[13px] transition-colors duration-100 cursor-pointer titlebar-no-drag',
-                  ws.id === currentWorkspaceId
-                    ? 'workspace-item-selected text-foreground font-semibold'
-                    : 'text-foreground/60 hover:text-foreground/80',
-                  dragId === ws.id && 'opacity-40',
+        {/* 展开后的工作区列表 */}
+        {expanded && (
+          <div className="overflow-y-auto scrollbar-thin flex flex-col px-1 pb-1" style={{ maxHeight: 176 }}>
+            {workspaces.map((ws) => (
+              <div key={ws.id} className="relative">
+                {/* 上方插入指示线 */}
+                {dropIndicator?.id === ws.id && dropIndicator.position === 'before' && (
+                  <div className="absolute top-0 left-1 right-1 h-0.5 bg-primary rounded-full z-10" />
                 )}
-              >
-              {/* 拖拽手柄 */}
-              <GripVertical size={12} className="flex-shrink-0 text-foreground/20 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing" />
 
-              <FolderOpen size={13} className="flex-shrink-0 text-foreground/40" />
+                <div
+                  draggable={editingId !== ws.id}
+                  onDragStart={(e) => handleDragStart(e, ws.id)}
+                  onDragOver={(e) => handleDragOver(e, ws.id)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, ws.id)}
+                  onDragEnd={handleDragEnd}
+                  onClick={() => handleSelect(ws)}
+                  className={cn(
+                    'group w-full flex items-center gap-1 px-3 py-[7px] rounded-xl text-[13px] transition-colors duration-100 cursor-pointer titlebar-no-drag',
+                    ws.id === currentWorkspaceId
+                      ? 'workspace-item-selected text-foreground'
+                      : 'text-foreground/60 hover:text-foreground/80',
+                    dragId === ws.id && 'opacity-40',
+                  )}
+                >
+                {/* 拖拽手柄 */}
+                <GripVertical size={12} className="flex-shrink-0 text-foreground/20 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing" />
 
-              {editingId === ws.id ? (
+                <FolderOpen size={13} className="flex-shrink-0 text-foreground/40" />
+
+                {editingId === ws.id ? (
+                  <input
+                    ref={editInputRef}
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    onKeyDown={handleRenameKeyDown}
+                    onBlur={handleRename}
+                    onClick={(e) => e.stopPropagation()}
+                    className="flex-1 min-w-0 bg-transparent text-[13px] text-foreground border-b border-primary/50 outline-none px-0.5"
+                    maxLength={50}
+                  />
+                ) : (
+                  <>
+                    <span className="flex-1 min-w-0 truncate">{ws.name}</span>
+
+                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                      <button
+                        onClick={(e) => handleStartRename(e, ws)}
+                        className="p-0.5 rounded hover:bg-foreground/[0.08] text-foreground/30 hover:text-foreground/60 transition-colors"
+                        title="重命名"
+                      >
+                        <Pencil size={12} />
+                      </button>
+                      {canDelete(ws) && (
+                        <button
+                          onClick={(e) => handleStartDelete(e, ws.id)}
+                          className="p-0.5 rounded hover:bg-destructive/10 text-foreground/30 hover:text-destructive transition-colors"
+                          title="删除"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      )}
+                    </div>
+                  </>
+                )}
+                </div>
+
+                {/* 下方插入指示线 */}
+                {dropIndicator?.id === ws.id && dropIndicator.position === 'after' && (
+                  <div className="absolute bottom-0 left-1 right-1 h-0.5 bg-primary rounded-full z-10" />
+                )}
+              </div>
+            ))}
+
+            {/* 新建工作区输入框 */}
+            {creating && (
+              <div className="flex items-center gap-2 px-2 py-[5px]">
+                <FolderOpen size={13} className="flex-shrink-0 text-foreground/40" />
                 <input
-                  ref={editInputRef}
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  onKeyDown={handleRenameKeyDown}
-                  onBlur={handleRename}
-                  onClick={(e) => e.stopPropagation()}
+                  ref={createInputRef}
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  onKeyDown={handleCreateKeyDown}
+                  onBlur={() => setCreating(false)}
+                  placeholder="工作区名称..."
                   className="flex-1 min-w-0 bg-transparent text-[13px] text-foreground border-b border-primary/50 outline-none px-0.5"
                   maxLength={50}
                 />
-              ) : (
-                <>
-                  <span className="flex-1 min-w-0 truncate">{ws.name}</span>
-
-                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-                    <button
-                      onClick={(e) => handleStartRename(e, ws)}
-                      className="p-0.5 rounded hover:bg-foreground/[0.08] text-foreground/30 hover:text-foreground/60 transition-colors"
-                      title="重命名"
-                    >
-                      <Pencil size={12} />
-                    </button>
-                    {canDelete(ws) && (
-                      <button
-                        onClick={(e) => handleStartDelete(e, ws.id)}
-                        className="p-0.5 rounded hover:bg-destructive/10 text-foreground/30 hover:text-destructive transition-colors"
-                        title="删除"
-                      >
-                        <Trash2 size={12} />
-                      </button>
-                    )}
-                  </div>
-                </>
-              )}
               </div>
-
-              {/* 下方插入指示线 */}
-              {dropIndicator?.id === ws.id && dropIndicator.position === 'after' && (
-                <div className="absolute bottom-0 left-1 right-1 h-0.5 bg-primary rounded-full z-10" />
-              )}
-            </div>
-          ))}
-
-          {/* 新建工作区输入框 */}
-          {creating && (
-            <div className="flex items-center gap-2 px-2 py-[5px]">
-              <FolderOpen size={13} className="flex-shrink-0 text-foreground/40" />
-              <input
-                ref={createInputRef}
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                onKeyDown={handleCreateKeyDown}
-                onBlur={() => setCreating(false)}
-                placeholder="工作区名称..."
-                className="flex-1 min-w-0 bg-transparent text-[13px] text-foreground border-b border-primary/50 outline-none px-0.5"
-                maxLength={50}
-              />
-            </div>
-          )}
-        </div>
-
-        {/* 拖拽调整高度的 handle */}
-        <div
-          onMouseDown={handleResizeStart}
-          className="h-1 cursor-row-resize group/resize flex items-center justify-center hover:bg-foreground/[0.06] transition-colors titlebar-no-drag"
-        >
-          <div className="w-8 h-[2px] rounded-full bg-foreground/0 group-hover/resize:bg-foreground/20 transition-colors" />
-        </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 删除确认弹窗 */}

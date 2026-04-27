@@ -8,7 +8,7 @@
  * - Chrome 风格等分宽度（不滚动）
  */
 
-import * as React from 'react'
+import React from 'react'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import {
   tabsAtom,
@@ -64,6 +64,7 @@ export function TabBar(): React.ReactElement {
   const setConvParallel = useSetAtom(conversationParallelModeAtom)
   const setConvPromptId = useSetAtom(conversationPromptIdAtom)
   const setAgentSidePanelOpen = useSetAtom(agentSidePanelOpenMapAtom)
+  const setAgentSessions = useSetAtom(agentSessionsAtom)
 
   /** 清理关闭标签对应的 per-conversation/session Map atoms 条目 */
   const cleanupMapAtoms = React.useCallback((tabId: string) => {
@@ -145,7 +146,16 @@ export function TabBar(): React.ReactElement {
       next.delete(tabId)
       return next
     })
-  }, [tabs, activeTabId, setTabs, setActiveTabId, cleanupMapAtoms, setWorkingDone, syncActiveTabSideEffects])
+    // 如果该会话被手动标记为工作中，关闭标签时取消该标记
+    const session = agentSessions.find((s) => s.id === tabId)
+    if (session?.manualWorking) {
+      window.electronAPI.toggleManualWorkingAgentSession(tabId).then((updated) => {
+        setAgentSessions((prev) =>
+          prev.map((s) => (s.id === updated.id ? updated : s))
+        )
+      }).catch(console.error)
+    }
+  }, [tabs, activeTabId, setTabs, setActiveTabId, cleanupMapAtoms, setWorkingDone, syncActiveTabSideEffects, agentSessions, setAgentSessions])
 
   const handleDragStart = React.useCallback((tabId: string, e: React.PointerEvent) => {
     if (e.button !== 0) return // 只处理左键

@@ -695,6 +695,8 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
         setAgentSessions((prev) =>
           prev.map((s) => (s.id === updated.id ? updated : s))
         )
+        // 标记工作中时自动打开对应标签页
+        openSession('agent', id, original?.title ?? '')
         if (original?.archived && updated.manualWorking && !updated.archived) {
           toast.success('已取消归档并标记为工作中')
         }

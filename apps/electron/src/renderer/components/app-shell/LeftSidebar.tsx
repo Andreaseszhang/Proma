@@ -1014,7 +1014,7 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
               >
                 {/* Tab 切换按钮 */}
                 <div className="pt-3 px-3 flex-shrink-0">
-                  <div className="flex border-b border-border/30">
+                  <div className="flex border-t border-border/30">
                     <button
                       onClick={() => setAgentSubTab('working')}
                       className={cn(

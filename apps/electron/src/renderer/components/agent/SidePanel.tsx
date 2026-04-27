@@ -371,7 +371,6 @@ export function SidePanel({ sessionId, sessionPath }: SidePanelProps): React.Rea
                           onFilesUploaded={handleFilesUploaded}
                           onAttachFolder={handleAttachFolder}
                           onFoldersDropped={handleSessionFoldersDropped}
-                          tooltip="拖拽文件到此处，供 Agent 读取和处理"
                         />
                       </div>
                       {/* ===== 分隔线 ===== */}
@@ -461,7 +460,6 @@ export function SidePanel({ sessionId, sessionPath }: SidePanelProps): React.Rea
                         onFilesUploaded={handleFilesUploaded}
                         onAttachFolder={handleAttachWorkspaceFolder}
                         onFoldersDropped={handleWorkspaceFoldersDropped}
-                        tooltip="拖拽文件到此处，供本工作区内所有 Agent 访问"
                       />
                     </div>
                   </div>

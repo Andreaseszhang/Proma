@@ -19,13 +19,12 @@ interface FileDropZoneProps {
   onFilesUploaded: () => void
   onAttachFolder?: () => void
   onFoldersDropped?: (folderPaths: string[]) => void
-  /** 拖拽区域的 tooltip 提示文字 */
-  tooltip?: string
 }
 
-export function FileDropZone({ workspaceSlug, sessionId, target = 'session', onFilesUploaded, onAttachFolder, onFoldersDropped, tooltip }: FileDropZoneProps): React.ReactElement {
+export function FileDropZone({ workspaceSlug, sessionId, target = 'session', onFilesUploaded, onAttachFolder, onFoldersDropped }: FileDropZoneProps): React.ReactElement {
   const [isDragOver, setIsDragOver] = React.useState(false)
   const [isUploading, setIsUploading] = React.useState(false)
+  const [activeTooltip, setActiveTooltip] = React.useState<'paperclip' | 'folder' | null>(null)
 
   const isWorkspace = target === 'workspace'
 
@@ -174,10 +173,10 @@ export function FileDropZone({ workspaceSlug, sessionId, target = 'session', onF
         </>
       ) : (
         <>
-          <span className="text-[11px] text-muted-foreground/75 flex-1 truncate">
+          <span className="text-[11px] text-muted-foreground/75 flex-1 truncate ml-[7px]">
             {isDragOver ? '释放以添加文件' : '拖拽文件到此处'}
           </span>
-          <Tooltip>
+          <Tooltip open={activeTooltip === 'paperclip'}>
             <TooltipTrigger asChild>
               <Button
                 type="button"
@@ -185,16 +184,18 @@ export function FileDropZone({ workspaceSlug, sessionId, target = 'session', onF
                 size="icon"
                 className="h-5 w-5 flex-shrink-0 text-muted-foreground/60 hover:text-foreground"
                 onClick={handleSelectFiles}
+                onMouseEnter={() => setActiveTooltip('paperclip')}
+                onMouseLeave={() => setActiveTooltip(null)}
               >
                 <Paperclip className="size-3" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent side="bottom">
+            <TooltipContent side="bottom" className="data-[state=closed]:animate-none data-[state=closed]:opacity-0 pointer-events-none">
               <p>{isWorkspace ? '添加文件到工作区文件目录' : '将文件放入 Agent 工作文件夹'}</p>
             </TooltipContent>
           </Tooltip>
           {onAttachFolder && (
-            <Tooltip>
+            <Tooltip open={activeTooltip === 'folder'}>
               <TooltipTrigger asChild>
                 <Button
                   type="button"
@@ -202,11 +203,13 @@ export function FileDropZone({ workspaceSlug, sessionId, target = 'session', onF
                   size="icon"
                   className="h-5 w-5 flex-shrink-0 text-muted-foreground/60 hover:text-foreground"
                   onClick={onAttachFolder}
+                  onMouseEnter={() => setActiveTooltip('folder')}
+                  onMouseLeave={() => setActiveTooltip(null)}
                 >
                   <FolderPlus className="size-3" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent side="bottom">
+              <TooltipContent side="bottom" className="data-[state=closed]:animate-none data-[state=closed]:opacity-0 pointer-events-none">
                 <p>{isWorkspace ? '附加文件夹供工作区所有会话访问' : '告知 Agent 你想处理的文件夹'}</p>
               </TooltipContent>
             </Tooltip>
@@ -218,18 +221,7 @@ export function FileDropZone({ workspaceSlug, sessionId, target = 'session', onF
 
   return (
     <div className="flex-shrink-0 px-3 pt-2 pb-1.5">
-      {tooltip && !isDragOver && !isUploading ? (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            {dropZone}
-          </TooltipTrigger>
-          <TooltipContent side="bottom">
-            <p className="text-[12px]">{tooltip}</p>
-          </TooltipContent>
-        </Tooltip>
-      ) : (
-        dropZone
-      )}
+      {dropZone}
     </div>
   )
 }

@@ -351,6 +351,15 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
     }
   }, [activeTabId, mode, viewMode, pinnedAgentSessions, workingSessionIds])
 
+  /** 切换工作区时默认显示置顶区，避免遗漏各工作区置顶的会话 */
+  const prevWorkspaceIdForSubTab = React.useRef<string | null>(currentWorkspaceId)
+  React.useEffect(() => {
+    if (currentWorkspaceId === prevWorkspaceIdForSubTab.current) return
+    prevWorkspaceIdForSubTab.current = currentWorkspaceId
+    if (mode !== 'agent' || viewMode !== 'active') return
+    setAgentSubTab('pinned')
+  }, [currentWorkspaceId, mode, viewMode])
+
   /** 对话按日期分组（根据 viewMode 过滤归档状态，排除 draft） */
   const conversationGroups = React.useMemo(
     () => {

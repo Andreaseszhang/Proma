@@ -177,6 +177,8 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
   const [pinnedExpanded, setPinnedExpanded] = React.useState(true)
   /** Agent 上区子 Tab：'working' | 'pinned'，默认 working 在前 */
   const [agentSubTab, setAgentSubTab] = React.useState<'working' | 'pinned'>('working')
+  /** 刚置顶的会话 ID（用于闪烁高亮），为 null 时不闪烁 */
+  const [flashSessionId, setFlashSessionId] = React.useState<string | null>(null)
   const [userProfile, setUserProfile] = useAtom(userProfileAtom)
   const selectedModel = useAtomValue(selectedModelAtom)
   const streamingIds = useAtomValue(streamingConversationIdsAtom)
@@ -664,6 +666,11 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
       if (original?.archived && updated.pinned && !updated.archived) {
         toast.success('已取消归档并置顶')
       }
+      // 置顶非工作中的会话时，自动切换到置顶子标签页并闪烁
+      if (updated.pinned && !original?.pinned && !workingSessionIds.has(id)) {
+        setAgentSubTab('pinned')
+        setFlashSessionId(id)
+      }
     } catch (error) {
       console.error('[侧边栏] 切换 Agent 会话置顶失败:', error)
     }
@@ -1111,6 +1118,8 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
                               indicatorStatus={agentIndicatorMap.get(session.id) ?? 'idle'}
                               isInWorkingSection={workingSessionIds.has(session.id)}
                               showPinIcon={false}
+                              flash={session.id === flashSessionId}
+                              onFlashEnd={() => setFlashSessionId(null)}
                               onSelect={() => handleSelectAgentSession(session.id, session.title)}
                               onRequestDelete={() => handleRequestDelete(session.id)}
                               onRequestMove={() => setMoveTargetId(session.id)}
@@ -1555,6 +1564,10 @@ interface AgentSessionItemProps {
   isInWorkingSection?: boolean
   /** 行左侧状态色块；未传则不显示 */
   leftAccent?: SessionLeftAccent
+  /** 是否播放置顶闪烁动画 */
+  flash?: boolean
+  /** 闪烁动画结束时回调 */
+  onFlashEnd?: () => void
   onSelect: () => void
   onRequestDelete: () => void
   onRequestMove: () => void
@@ -1574,6 +1587,8 @@ function AgentSessionItem({
   showPinIcon,
   isInWorkingSection,
   leftAccent,
+  flash,
+  onFlashEnd,
   onSelect,
   onRequestDelete,
   onRequestMove,
@@ -1631,8 +1646,10 @@ function AgentSessionItem({
       }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
+      onAnimationEnd={onFlashEnd}
       className={cn(
         'relative w-full flex items-center gap-2 px-3 py-[7px] rounded-[10px] transition-colors duration-100 titlebar-no-drag text-left',
+        flash && 'session-pin-flash',
         active
           ? 'session-item-selected bg-primary/10 shadow-[0_1px_2px_0_rgba(0,0,0,0.05)]'
           : 'hover:bg-primary/5'

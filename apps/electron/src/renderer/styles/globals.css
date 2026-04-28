@@ -790,3 +790,12 @@
 .file-browser-row-flash {
   animation: file-browser-flash 1.2s ease-out;
 }
+
+/* ===== 侧边栏置顶闪烁 ===== */
+@keyframes session-pin-flash {
+  0%   { background-color: hsl(var(--primary) / 0.15); }
+  100% { background-color: transparent; }
+}
+.session-pin-flash {
+  animation: session-pin-flash 1.7s ease-out;
+}

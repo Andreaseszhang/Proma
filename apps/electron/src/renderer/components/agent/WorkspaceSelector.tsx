@@ -259,11 +259,11 @@ export function WorkspaceSelector(): React.ReactElement {
 
   return (
     <>
-      <div>
+      <div className="relative -ml-[7px]">
         {/* Toggle Bar — 点击展开/收起工作区列表 */}
         <div
           onClick={() => setExpanded((v) => !v)}
-          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl hover:bg-foreground/[0.04] cursor-pointer titlebar-no-drag transition-colors"
+          className="flex items-center gap-1.5 pl-[4px] pr-2.5 py-1.5 rounded-xl hover:bg-foreground/[0.04] cursor-pointer titlebar-no-drag transition-colors"
         >
           {expanded
             ? <ChevronDown size={13} className="text-foreground/40 flex-shrink-0" />
@@ -286,6 +286,9 @@ export function WorkspaceSelector(): React.ReactElement {
 
         {/* 展开后的工作区列表 */}
         {expanded && (
+          <>
+          {/* 竖线指示器：从 chevron 下方延伸至列表底部 */}
+          <div className="absolute left-[9.5px] top-[24px] bottom-0 w-0.5 bg-primary/60 rounded-full" />
           <div className="overflow-y-auto scrollbar-thin flex flex-col pb-1" style={{ maxHeight: 140 }}>
             {workspaces.map((ws) => (
               <div key={ws.id} className="relative">
@@ -303,7 +306,7 @@ export function WorkspaceSelector(): React.ReactElement {
                   onDragEnd={handleDragEnd}
                   onClick={() => handleSelect(ws)}
                   className={cn(
-                    'group w-full flex items-center gap-2 px-3 py-[7px] rounded-[10px] text-[13px] transition-colors duration-100 cursor-pointer titlebar-no-drag',
+                    'group flex items-center gap-2 ml-[22px] w-[calc(100%-22px)] py-[7px] pr-2 rounded-[10px] text-[13px] transition-colors duration-100 cursor-pointer titlebar-no-drag',
                     ws.id === currentWorkspaceId
                       ? 'workspace-item-selected text-foreground'
                       : 'text-foreground/60 hover:text-foreground/80',
@@ -376,6 +379,7 @@ export function WorkspaceSelector(): React.ReactElement {
               </div>
             )}
           </div>
+          </>
         )}
       </div>
 

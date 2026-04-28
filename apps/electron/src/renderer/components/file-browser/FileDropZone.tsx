@@ -8,6 +8,7 @@
 import * as React from 'react'
 import { toast } from 'sonner'
 import { Paperclip, FolderPlus, Loader2 } from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { fileToBase64 } from '@/lib/file-utils'
 
@@ -166,27 +167,41 @@ export function FileDropZone({ workspaceSlug, sessionId, target = 'session', onF
       ) : (
         <>
           {/* 添加文件 */}
-          <div
-            className={zoneClass('left')}
-            onDragOver={(e) => handleDragOver(e, 'left')}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            onClick={handleSelectFiles}
-          >
-            <span className="text-[11px] text-muted-foreground/75">添加文件</span>
-            <Paperclip className="size-4 text-muted-foreground/60" />
-          </div>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div
+                className={zoneClass('left')}
+                onDragOver={(e) => handleDragOver(e, 'left')}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={handleSelectFiles}
+              >
+                <span className="text-[11px] text-muted-foreground/75">添加文件</span>
+                <Paperclip className="size-4 text-muted-foreground/60" />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="data-[state=closed]:animate-none data-[state=closed]:opacity-0 pointer-events-none">
+              <p>{isWorkspace ? '添加文件到工作区文件目录' : '将文件放入 Agent 工作文件夹'}</p>
+            </TooltipContent>
+          </Tooltip>
           {/* 附加文件 */}
-          <div
-            className={zoneClass('right')}
-            onDragOver={(e) => handleDragOver(e, 'right')}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            onClick={onAttachFolder}
-          >
-            <span className="text-[11px] text-muted-foreground/75">附加文件</span>
-            <FolderPlus className="size-4 text-muted-foreground/60" />
-          </div>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div
+                className={zoneClass('right')}
+                onDragOver={(e) => handleDragOver(e, 'right')}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={onAttachFolder}
+              >
+                <span className="text-[11px] text-muted-foreground/75">附加文件</span>
+                <FolderPlus className="size-4 text-muted-foreground/60" />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className="data-[state=closed]:animate-none data-[state=closed]:opacity-0 pointer-events-none">
+              <p>{isWorkspace ? '附加文件夹供工作区所有会话访问' : '告知 Agent 你想处理的文件夹'}</p>
+            </TooltipContent>
+          </Tooltip>
         </>
       )}
     </div>

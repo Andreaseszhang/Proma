@@ -289,7 +289,7 @@ export function SidePanel({ sessionId, sessionPath }: SidePanelProps): React.Rea
                           </TooltipContent>
                         </Tooltip>
                         {/* 操作按钮组 */}
-                        <span className="text-[10px] text-muted-foreground/75 truncate flex-1" title={sessionPath}>>
+                        <span className="text-[10px] text-muted-foreground/75 truncate flex-1" title={sessionPath}>
                           {breadcrumb}
                         </span>
                         <Tooltip>

@@ -17,7 +17,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
-import { cn } from '@/lib/utils'
+import { cn, bumpMapVersion } from '@/lib/utils'
 import {
   agentWorkspacesAtom,
   currentAgentWorkspaceIdAtom,
@@ -59,6 +59,10 @@ export function AgentSettings(): React.ReactElement {
   const setSettingsOpen = useSetAtom(settingsOpenAtom)
   const setAppMode = useSetAtom(appModeAtom)
   const bumpCapabilitiesVersion = useSetAtom(workspaceCapabilitiesVersionAtom)
+  const bumpCaps = React.useCallback(() => {
+    if (!currentWorkspaceId) return
+    bumpCapabilitiesVersion((prev) => bumpMapVersion(prev, currentWorkspaceId))
+  }, [bumpCapabilitiesVersion, currentWorkspaceId])
 
   // 派生当前工作区 slug
   const currentWorkspace = workspaces.find((w) => w.id === currentWorkspaceId)
@@ -254,7 +258,7 @@ ${skillList}
       const newConfig: WorkspaceMcpConfig = { servers: newServers }
       await window.electronAPI.saveWorkspaceMcpConfig(workspaceSlug, newConfig)
       setMcpConfig(newConfig)
-      bumpCapabilitiesVersion((v) => v + 1)
+      bumpCaps()
     } catch (error) {
       console.error('[Agent 设置] 删除 MCP 服务器失败:', error)
     }
@@ -274,7 +278,7 @@ ${skillList}
       }
       await window.electronAPI.saveWorkspaceMcpConfig(workspaceSlug, newConfig)
       setMcpConfig(newConfig)
-      bumpCapabilitiesVersion((v) => v + 1)
+      bumpCaps()
     } catch (error) {
       console.error('[Agent 设置] 切换 MCP 服务器状态失败:', error)
     }
@@ -287,7 +291,7 @@ ${skillList}
     try {
       await window.electronAPI.deleteWorkspaceSkill(workspaceSlug, skillSlug)
       setSkills((prev) => prev.filter((s) => s.slug !== skillSlug))
-      bumpCapabilitiesVersion((v) => v + 1)
+      bumpCaps()
     } catch (error) {
       console.error('[Agent 设置] 删除 Skill 失败:', error)
     }
@@ -298,7 +302,7 @@ ${skillList}
     try {
       await window.electronAPI.toggleWorkspaceSkill(workspaceSlug, skillSlug, enabled)
       setSkills((prev) => prev.map((s) => s.slug === skillSlug ? { ...s, enabled } : s))
-      bumpCapabilitiesVersion((v) => v + 1)
+      bumpCaps()
     } catch (error) {
       console.error('[Agent 设置] 切换 Skill 状态失败:', error)
     }
@@ -312,7 +316,7 @@ ${skillList}
     try {
       const imported = await window.electronAPI.importSkillFromWorkspace(workspaceSlug, sourceSlug, skillSlug)
       setSkills((prev) => prev.some((skill) => skill.slug === imported.slug) ? prev : [...prev, imported])
-      bumpCapabilitiesVersion((v) => v + 1)
+      bumpCaps()
       setShowImportDialog(false)
       toast.success(`已导入 Skill: ${imported.name}`)
     } catch (error) {
@@ -332,7 +336,7 @@ ${skillList}
     try {
       const updated = await window.electronAPI.updateSkillFromSource(workspaceSlug, skillSlug)
       setSkills((prev) => prev.map((s) => s.slug === skillSlug ? updated : s))
-      bumpCapabilitiesVersion((v) => v + 1)
+      bumpCaps()
       toast.success(`已同步更新 Skill: ${updated.name}`)
     } catch (error) {
       console.error('[Agent 设置] 更新 Skill 失败:', error)
@@ -348,7 +352,7 @@ ${skillList}
     setViewMode('list')
     setEditingServer(null)
     loadData()
-    bumpCapabilitiesVersion((v) => v + 1)
+    bumpCaps()
   }
 
   /** 取消表单 */

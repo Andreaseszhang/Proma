@@ -1,14 +1,13 @@
 /**
  * FileDropZone — 文件拖拽上传区域
  *
- * 极简 inline 提示，拖拽时高亮。文件上传后直接保存到目标目录。
+ * 两个并排 drop zone：添加文件（回形针）+ 附加文件（文件夹）
+ * 两个 zone 都接受文件和文件夹拖放。
  */
 
 import * as React from 'react'
 import { toast } from 'sonner'
 import { Paperclip, FolderPlus, Loader2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { fileToBase64 } from '@/lib/file-utils'
 
@@ -22,9 +21,8 @@ interface FileDropZoneProps {
 }
 
 export function FileDropZone({ workspaceSlug, sessionId, target = 'session', onFilesUploaded, onAttachFolder, onFoldersDropped }: FileDropZoneProps): React.ReactElement {
-  const [isDragOver, setIsDragOver] = React.useState(false)
+  const [isDragOver, setIsDragOver] = React.useState<'left' | 'right' | null>(null)
   const [isUploading, setIsUploading] = React.useState(false)
-  const [activeTooltip, setActiveTooltip] = React.useState<'paperclip' | 'folder' | null>(null)
 
   const isWorkspace = target === 'workspace'
 
@@ -62,22 +60,10 @@ export function FileDropZone({ workspaceSlug, sessionId, target = 'session', onF
     }
   }, [workspaceSlug, sessionId, isWorkspace, onFilesUploaded])
 
-  const handleDragOver = React.useCallback((e: React.DragEvent): void => {
-    e.preventDefault()
-    e.stopPropagation()
-    setIsDragOver(true)
-  }, [])
-
-  const handleDragLeave = React.useCallback((e: React.DragEvent): void => {
-    e.preventDefault()
-    e.stopPropagation()
-    setIsDragOver(false)
-  }, [])
-
   const handleDrop = React.useCallback(async (e: React.DragEvent): Promise<void> => {
     e.preventDefault()
     e.stopPropagation()
-    setIsDragOver(false)
+    setIsDragOver(null)
 
     const droppedFiles = Array.from(e.dataTransfer.files)
     if (droppedFiles.length === 0) return
@@ -98,12 +84,8 @@ export function FileDropZone({ workspaceSlug, sessionId, target = 'session', onF
       try {
         const { directories, files: filePaths } = await window.electronAPI.checkPathsType(paths)
 
-        if (directories.length > 0) {
-          if (onFoldersDropped) {
-            onFoldersDropped(directories)
-          } else {
-            toast.info('不支持拖拽文件夹', { description: '请使用「附加文件夹」按钮' })
-          }
+        if (directories.length > 0 && onFoldersDropped) {
+          onFoldersDropped(directories)
         }
 
         const regularFiles = filePaths.map((p) => pathMap.get(p)!).filter(Boolean)
@@ -118,6 +100,18 @@ export function FileDropZone({ workspaceSlug, sessionId, target = 'session', onF
       await saveFiles(droppedFiles)
     }
   }, [saveFiles, onFoldersDropped])
+
+  const handleDragOver = React.useCallback((e: React.DragEvent, side: 'left' | 'right'): void => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(side)
+  }, [])
+
+  const handleDragLeave = React.useCallback((e: React.DragEvent): void => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragOver(null)
+  }, [])
 
   const handleSelectFiles = React.useCallback(async (): Promise<void> => {
     try {
@@ -153,75 +147,48 @@ export function FileDropZone({ workspaceSlug, sessionId, target = 'session', onF
     }
   }, [workspaceSlug, sessionId, isWorkspace, onFilesUploaded])
 
-  const dropZone = (
-    <div
-      className={cn(
-        'flex items-center gap-1.5 rounded-lg px-2 py-3 transition-colors duration-200',
-        isDragOver
-          ? 'bg-primary/10 ring-1 ring-primary/30'
-          : 'bg-muted/40 hover:bg-muted/70',
-        isUploading && 'pointer-events-none opacity-60',
-      )}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-    >
-      {isUploading ? (
-        <>
-          <Loader2 className="size-3.5 text-muted-foreground animate-spin" />
-          <span className="text-[11px] text-muted-foreground">正在上传...</span>
-        </>
-      ) : (
-        <>
-          <span className="text-[11px] text-muted-foreground/75 flex-1 truncate ml-[7px]">
-            {isDragOver ? '释放以添加文件' : '拖拽文件到此处'}
-          </span>
-          <Tooltip open={activeTooltip === 'paperclip'}>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="h-5 w-5 flex-shrink-0 text-muted-foreground/60 hover:text-foreground"
-                onClick={handleSelectFiles}
-                onMouseEnter={() => setActiveTooltip('paperclip')}
-                onMouseLeave={() => setActiveTooltip(null)}
-              >
-                <Paperclip className="size-3" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="data-[state=closed]:animate-none data-[state=closed]:opacity-0 pointer-events-none">
-              <p>{isWorkspace ? '添加文件到工作区文件目录' : '将文件放入 Agent 工作文件夹'}</p>
-            </TooltipContent>
-          </Tooltip>
-          {onAttachFolder && (
-            <Tooltip open={activeTooltip === 'folder'}>
-              <TooltipTrigger asChild>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-5 w-5 flex-shrink-0 text-muted-foreground/60 hover:text-foreground"
-                  onClick={onAttachFolder}
-                  onMouseEnter={() => setActiveTooltip('folder')}
-                  onMouseLeave={() => setActiveTooltip(null)}
-                >
-                  <FolderPlus className="size-3" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom" className="data-[state=closed]:animate-none data-[state=closed]:opacity-0 pointer-events-none">
-                <p>{isWorkspace ? '附加文件夹供工作区所有会话访问' : '告知 Agent 你想处理的文件夹'}</p>
-              </TooltipContent>
-            </Tooltip>
-          )}
-        </>
-      )}
-    </div>
-  )
+  const zoneClass = (side: 'left' | 'right'): string =>
+    cn(
+      'flex-1 flex flex-col items-center justify-center gap-1 rounded-lg px-2 py-2.5 transition-colors duration-200 cursor-pointer',
+      isDragOver === side
+        ? 'bg-primary/25 ring-2 ring-primary/50'
+        : 'bg-muted/40 hover:bg-muted/70',
+      isUploading && 'pointer-events-none opacity-60',
+    )
 
   return (
-    <div className="flex-shrink-0 px-3 pt-2 pb-1.5">
-      {dropZone}
+    <div className="flex gap-2 px-3 pt-2 pb-1.5 flex-shrink-0">
+      {isUploading ? (
+        <div className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-[11px] text-muted-foreground">
+          <Loader2 className="size-3.5 animate-spin" />
+          正在上传...
+        </div>
+      ) : (
+        <>
+          {/* 添加文件 */}
+          <div
+            className={zoneClass('left')}
+            onDragOver={(e) => handleDragOver(e, 'left')}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={handleSelectFiles}
+          >
+            <span className="text-[11px] text-muted-foreground/75">添加文件</span>
+            <Paperclip className="size-4 text-muted-foreground/60" />
+          </div>
+          {/* 附加文件 */}
+          <div
+            className={zoneClass('right')}
+            onDragOver={(e) => handleDragOver(e, 'right')}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={onAttachFolder}
+          >
+            <span className="text-[11px] text-muted-foreground/75">附加文件</span>
+            <FolderPlus className="size-4 text-muted-foreground/60" />
+          </div>
+        </>
+      )}
     </div>
   )
 }

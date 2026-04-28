@@ -192,8 +192,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
   const panelOpenMap = useAtomValue(agentSidePanelOpenMapAtom)
   const isPanelOpen = panelOpenMap.get(sessionId) ?? true
   const setPanelOpenMap = useSetAtom(agentSidePanelOpenMapAtom)
-  const filesVersion = useAtomValue(workspaceFilesVersionAtom)
-  const hasFileChanges = filesVersion > 0
+  const filesVersionMap = useAtomValue(workspaceFilesVersionAtom)
   const liveMessagesMap = useAtomValue(liveMessagesMapAtom)
   const setLiveMessagesMap = useSetAtom(liveMessagesMapAtom)
   // 稳定化空数组引用，避免 ?? [] 每次创建新引用导致下游 useMemo 链不必要重算
@@ -219,6 +218,11 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
     if (!meta) return globalWorkspaceId // 数据未加载，回退全局
     return meta.workspaceId ?? null     // 数据已加载，以会话自身为准
   }, [sessions, sessionId, globalWorkspaceId])
+  // 按工作区隔离的文件变更指示：仅当前工作区有文件变更时才显示脉冲点
+  const hasFileChanges = React.useMemo(
+    () => (filesVersionMap.get(currentWorkspaceId ?? '') ?? 0) > 0,
+    [filesVersionMap, currentWorkspaceId],
+  )
   const [pendingPrompt, setPendingPrompt] = useAtom(agentPendingPromptAtom)
   const [pendingFiles, setPendingFiles] = useAtom(agentPendingFilesAtom)
   const workspaces = useAtomValue(agentWorkspacesAtom)

@@ -7,10 +7,8 @@
 
 import * as React from 'react'
 import { useAtomValue, useSetAtom } from 'jotai'
-import { Pencil, Check, X, PanelRight } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { agentSessionsAtom, agentSidePanelOpenMapAtom, workspaceFilesVersionAtom } from '@/atoms/agent-atoms'
+import { Pencil, Check, X } from 'lucide-react'
+import { agentSessionsAtom } from '@/atoms/agent-atoms'
 
 /** AgentHeader 属性接口 */
 interface AgentHeaderProps {
@@ -24,21 +22,6 @@ export function AgentHeader({ sessionId }: AgentHeaderProps): React.ReactElement
   const [editing, setEditing] = React.useState(false)
   const [editTitle, setEditTitle] = React.useState('')
   const inputRef = React.useRef<HTMLInputElement>(null)
-
-  // 文件面板切换状态
-  const sidePanelOpenMap = useAtomValue(agentSidePanelOpenMapAtom)
-  const setSidePanelOpenMap = useSetAtom(agentSidePanelOpenMapAtom)
-  const filesVersion = useAtomValue(workspaceFilesVersionAtom)
-  const isPanelOpen = sidePanelOpenMap.get(sessionId) ?? true
-  const hasFileChanges = filesVersion > 0
-
-  const togglePanel = React.useCallback(() => {
-    setSidePanelOpenMap((prev) => {
-      const map = new Map(prev)
-      map.set(sessionId, !(map.get(sessionId) ?? true))
-      return map
-    })
-  }, [sessionId, setSidePanelOpenMap])
 
   if (!session) return null
 

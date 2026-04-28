@@ -276,11 +276,11 @@ export const agentPendingPromptAtom = atom<AgentPendingPrompt | null>(null)
 /** Agent 待发送文件列表 */
 export const agentPendingFilesAtom = atom<AgentPendingFile[]>([])
 
-/** 工作区能力版本号 — 每次修改 MCP/Skills 后自增，触发侧边栏重新获取 */
-export const workspaceCapabilitiesVersionAtom = atom(0)
+/** 工作区能力版本号 — 每次修改 MCP/Skills 后自增，触发侧边栏重新获取（按 workspaceId 隔离） */
+export const workspaceCapabilitiesVersionAtom = atom<Map<string, number>>(new Map())
 
-/** 工作区文件版本号 — 文件变化时自增，触发文件浏览器重新加载 */
-export const workspaceFilesVersionAtom = atom(0)
+/** 工作区文件版本号 — 文件变化时自增，触发文件浏览器重新加载（按 workspaceId 隔离） */
+export const workspaceFilesVersionAtom = atom<Map<string, number>>(new Map())
 
 // ===== 侧面板 Atoms =====
 

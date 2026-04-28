@@ -200,7 +200,8 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
 
   // 工作区能力（MCP + Skill 计数）
   const [capabilities, setCapabilities] = React.useState<WorkspaceCapabilities | null>(null)
-  const capabilitiesVersion = useAtomValue(workspaceCapabilitiesVersionAtom)
+  const capabilitiesVersionMap = useAtomValue(workspaceCapabilitiesVersionAtom)
+  const capabilitiesVersion = capabilitiesVersionMap.get(currentWorkspaceId ?? '') ?? 0
 
   // Tab 状态
   const [tabs, setTabs] = useAtom(tabsAtom)
@@ -927,13 +928,13 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
 
       {/* Agent 模式：工作区选择器 */}
       {mode === 'agent' && (
-        <div className="px-3 pt-2">
+        <div className="px-3 pt-[13px]">
           <WorkspaceSelector />
         </div>
       )}
 
       {/* 新对话/新会话按钮 + 搜索按钮 */}
-      <div className="px-3 pt-2 flex items-center gap-1.5">
+      <div className="px-3 pt-[15px] flex items-center gap-1.5">
         <Tooltip>
           <TooltipTrigger asChild>
             <button
@@ -1013,12 +1014,12 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
                 className="flex flex-col min-h-0 flex-shrink-0 overflow-hidden"
               >
                 {/* Tab 切换按钮 */}
-                <div className="pt-3 px-3 flex-shrink-0">
+                <div className="pt-[22px] px-3 flex-shrink-0">
                   <div className="flex border-b border-border/30">
                     <button
                       onClick={() => setAgentSubTab('working')}
                       className={cn(
-                        'relative flex-1 flex items-center justify-center gap-1.5 pb-1.5 text-[12px] font-medium transition-colors titlebar-no-drag',
+                        'relative flex-1 flex items-center justify-center gap-1.5 pb-1.5 pl-[3px] text-[12px] font-medium transition-colors titlebar-no-drag',
                         agentSubTab === 'working'
                           ? 'text-primary subtab-active'
                           : 'text-muted-foreground/70 hover:text-foreground'
@@ -1026,13 +1027,13 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
                     >
                       工作中
                       {agentSubTab === 'working' && (
-                        <span className="absolute bottom-[3px] left-1/2 -translate-x-1/2 w-9/10 h-[3px] bg-primary rounded-full" />
+                        <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4/5 h-0.5 bg-primary/60 indicator-line" />
                       )}
                       {hasWorkingSessions && (
                         <span className={cn(
                           'inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[10px]',
                           agentSubTab === 'working'
-                            ? 'bg-primary/10 text-primary'
+                            ? 'bg-primary/20 text-primary'
                             : 'bg-foreground/10 text-foreground/50'
                         )}>
                           {workingGroups.todo.length + workingGroups.running.length + workingGroups.done.length}
@@ -1042,7 +1043,7 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
                     <button
                       onClick={() => setAgentSubTab('pinned')}
                       className={cn(
-                        'relative flex-1 flex items-center justify-center gap-1.5 pb-1.5 text-[12px] font-medium transition-colors titlebar-no-drag',
+                        'relative flex-1 flex items-center justify-center gap-1.5 pb-1.5 pl-[3px] text-[12px] font-medium transition-colors titlebar-no-drag',
                         agentSubTab === 'pinned'
                           ? 'text-primary subtab-active'
                           : 'text-muted-foreground/70 hover:text-foreground'
@@ -1050,13 +1051,13 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
                     >
                       置顶
                       {agentSubTab === 'pinned' && (
-                        <span className="absolute bottom-[3px] left-1/2 -translate-x-1/2 w-9/10 h-[3px] bg-primary rounded-full" />
+                        <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4/5 h-0.5 bg-primary/60 indicator-line" />
                       )}
                       {pinnedAgentSessions.length > 0 && (
                         <span className={cn(
                           'inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full text-[10px]',
                           agentSubTab === 'pinned'
-                            ? 'bg-primary/10 text-primary'
+                            ? 'bg-primary/20 text-primary'
                             : 'bg-foreground/10 text-foreground/50'
                         )}>
                           {pinnedAgentSessions.length}
@@ -1153,7 +1154,7 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
           )}
 
           {/* 下区标题：最近会话 */}
-          <div className="px-3 -mt-[3px] pb-1 text-[11px] font-medium text-muted-foreground select-none flex-shrink-0">
+          <div className="px-3 -mt-[5px] pb-1 text-[11px] font-medium text-muted-foreground select-none flex-shrink-0">
             最近会话
           </div>
 

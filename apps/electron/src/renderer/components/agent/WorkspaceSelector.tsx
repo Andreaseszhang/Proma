@@ -31,6 +31,14 @@ export function WorkspaceSelector(): React.ReactElement {
   const [currentWorkspaceId, setCurrentWorkspaceId] = useAtom(currentAgentWorkspaceIdAtom)
   const [expanded, setExpanded] = React.useState(false)
 
+  // 折叠时清理拖拽状态，防止 DOM 卸载导致 dragend 丢失
+  React.useEffect(() => {
+    if (!expanded) {
+      setDragId(null)
+      setDropIndicator(null)
+    }
+  }, [expanded])
+
   // 新建状态
   const [creating, setCreating] = React.useState(false)
   const [newName, setNewName] = React.useState('')
@@ -263,7 +271,7 @@ export function WorkspaceSelector(): React.ReactElement {
         {/* Toggle Bar — 点击展开/收起工作区列表 */}
         <div
           onClick={() => setExpanded((v) => !v)}
-          className="flex items-center gap-1.5 pl-[4px] pr-2.5 py-1.5 rounded-xl hover:bg-foreground/[0.04] cursor-pointer titlebar-no-drag transition-colors"
+          className="flex items-center gap-1.5 pl-[6px] pr-2.5 py-1.5 rounded-xl hover:bg-foreground/[0.04] cursor-pointer titlebar-no-drag transition-colors"
         >
           {expanded
             ? <ChevronDown size={13} className="text-foreground/40 flex-shrink-0" />
@@ -271,7 +279,7 @@ export function WorkspaceSelector(): React.ReactElement {
           }
           <span className="text-[13px] font-medium text-foreground/50 uppercase tracking-wide">工作区</span>
           {!expanded && (
-            <span className="flex-1 min-w-0 truncate text-[13px] font-medium text-foreground/60 ml-[27px]">
+            <span className="flex-1 min-w-0 truncate text-[13px] font-medium text-foreground/50 tracking-wide ml-[27px]">
               {currentWorkspace?.name ?? '默认'}
             </span>
           )}
@@ -288,7 +296,7 @@ export function WorkspaceSelector(): React.ReactElement {
         {expanded && (
           <>
           {/* 竖线指示器：从 chevron 下方延伸至列表底部 */}
-          <div className="absolute left-[9.5px] top-[24px] bottom-0 w-0.5 bg-primary/60 rounded-full" />
+          <div className="absolute left-[11.5px] top-[24px] bottom-0 w-0.5 bg-primary/60 rounded-full indicator-line" />
           <div className="overflow-y-auto scrollbar-thin flex flex-col pb-1" style={{ maxHeight: 140 }}>
             {workspaces.map((ws) => (
               <div key={ws.id} className="relative">

@@ -16,7 +16,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { cn } from '@/lib/utils'
+import { cn, bumpMapVersion } from '@/lib/utils'
 import { FileBrowser, FileDropZone, FileTypeIcon } from '@/components/file-browser'
 import {
   agentSidePanelOpenMapAtom,
@@ -60,13 +60,16 @@ export function SidePanel({ sessionId, sessionPath }: SidePanelProps): React.Rea
     })
   }, [sessionId, setSidePanelOpenMap])
 
-  const filesVersion = useAtomValue(workspaceFilesVersionAtom)
-  const setFilesVersion = useSetAtom(workspaceFilesVersionAtom)
-  const hasFileChanges = filesVersion > 0
-
-  // 派生当前工作区 slug（用于 FileDropZone IPC 调用）
+  // 派生当前工作区 ID（用于文件版本隔离和 FileDropZone IPC 调用）
   const currentWorkspaceId = useAtomValue(currentAgentWorkspaceIdAtom)
   const workspaces = useAtomValue(agentWorkspacesAtom)
+
+  const filesVersionMap = useAtomValue(workspaceFilesVersionAtom)
+  const setFilesVersionMap = useSetAtom(workspaceFilesVersionAtom)
+  // 按工作区隔离文件变更指示
+  const filesVersion = filesVersionMap.get(currentWorkspaceId ?? '') ?? 0
+  const hasFileChanges = filesVersion > 0
+
   const workspaceSlug = workspaces.find((w) => w.id === currentWorkspaceId)?.slug ?? null
 
   // 附加目录列表（会话级）
@@ -179,13 +182,15 @@ export function SidePanel({ sessionId, sessionPath }: SidePanelProps): React.Rea
 
   // 文件上传完成后递增版本号，触发 FileBrowser 刷新
   const handleFilesUploaded = React.useCallback(() => {
-    setFilesVersion((prev) => prev + 1)
-  }, [setFilesVersion])
+    if (!currentWorkspaceId) return
+    setFilesVersionMap((prev) => bumpMapVersion(prev, currentWorkspaceId))
+  }, [setFilesVersionMap, currentWorkspaceId])
 
   // 手动刷新文件列表
   const handleRefresh = React.useCallback(() => {
-    setFilesVersion((prev) => prev + 1)
-  }, [setFilesVersion])
+    if (!currentWorkspaceId) return
+    setFilesVersionMap((prev) => bumpMapVersion(prev, currentWorkspaceId))
+  }, [setFilesVersionMap, currentWorkspaceId])
 
   // 添加文件到聊天
   const pendingFiles = useAtomValue(agentPendingFilesAtom)
@@ -284,15 +289,7 @@ export function SidePanel({ sessionId, sessionPath }: SidePanelProps): React.Rea
                           </TooltipContent>
                         </Tooltip>
                         {/* 操作按钮组 */}
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Info className="size-3 text-muted-foreground/50 cursor-help" />
-                          </TooltipTrigger>
-                          <TooltipContent side="bottom" className="max-w-[200px]">
-                            <p>当前会话的专属文件，仅本次对话的 Agent 可以访问</p>
-                          </TooltipContent>
-                        </Tooltip>
-                        <span className="text-[10px] text-muted-foreground/75 truncate flex-1" title={sessionPath}>
+                        <span className="text-[10px] text-muted-foreground/75 truncate flex-1" title={sessionPath}>>
                           {breadcrumb}
                         </span>
                         <Tooltip>

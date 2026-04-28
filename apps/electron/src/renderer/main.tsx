@@ -7,6 +7,7 @@
 import React, { useEffect, useMemo, useRef } from 'react'
 import ReactDOM from 'react-dom/client'
 import { useSetAtom, useAtomValue, useStore } from 'jotai'
+import { bumpMapVersion } from '@/lib/utils'
 import App from './App'
 import {
   themeModeAtom,
@@ -279,10 +280,14 @@ function AgentSettingsInitializer(): null {
           .catch(console.error)
       }
 
-      bumpCapabilities((v) => v + 1)
+      if (currentWorkspaceId) {
+        bumpCapabilities((prev) => bumpMapVersion(prev, currentWorkspaceId))
+      }
     })
     const unsubFiles = window.electronAPI.onWorkspaceFilesChanged(() => {
-      bumpFiles((v) => v + 1)
+      if (currentWorkspaceId) {
+        bumpFiles((prev) => bumpMapVersion(prev, currentWorkspaceId))
+      }
     })
 
     return () => {

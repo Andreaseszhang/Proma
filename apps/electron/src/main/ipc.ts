@@ -1259,11 +1259,24 @@ export function registerIpcHandlers(): void {
       if (!validModes.has(mode)) {
         throw new Error(`无效的权限模式: ${mode}`)
       }
-      if (!isAgentSessionActive(sessionId)) return
-      await updateAgentPermissionMode(sessionId, mode).catch((err) => {
-        console.warn(`[IPC] 运行中权限模式切换失败: sessionId=${sessionId}`, err)
-        throw err
-      })
+      // 会话不存在时直接抛错（避免 updateAgentSessionMeta 的通用异常被降级为 warn）
+      if (!getAgentSessionMeta(sessionId)) {
+        throw new Error(`Agent 会话不存在: ${sessionId}`)
+      }
+      // 持久化到 session meta（重启后可恢复，即使 session 未运行也要写）。
+      // 这里的 catch 仅用于兜底磁盘 I/O 类异常，不影响后续热切换。
+      try {
+        updateAgentSessionMeta(sessionId, { permissionMode: mode })
+      } catch (err) {
+        console.warn(`[IPC] 持久化 session 权限模式失败: sessionId=${sessionId}`, err)
+      }
+      // 若 session 正在跑，同步热切换运行时模式
+      if (isAgentSessionActive(sessionId)) {
+        await updateAgentPermissionMode(sessionId, mode).catch((err) => {
+          console.warn(`[IPC] 运行中权限模式切换失败: sessionId=${sessionId}`, err)
+          throw err
+        })
+      }
     }
   )
 
@@ -1480,6 +1493,14 @@ export function registerIpcHandlers(): void {
             const ws = getAgentWorkspace(meta.workspaceId)
             if (ws) {
               setWorkspacePermissionMode(ws.slug, targetMode)
+            }
+          }
+          // 持久化到 session meta，和 cycleMode 路径保持一致（重启后该 session 能恢复）
+          if (meta) {
+            try {
+              updateAgentSessionMeta(sessionId, { permissionMode: targetMode })
+            } catch (err) {
+              console.warn(`[IPC] ExitPlanMode 持久化 session 权限模式失败: sessionId=${sessionId}`, err)
             }
           }
           event.sender.send(AGENT_IPC_CHANNELS.STREAM_EVENT, {

@@ -10,7 +10,7 @@ import * as React from 'react'
 import { useAtom, useAtomValue } from 'jotai'
 import { Zap, Compass, Map as MapIcon } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { agentPermissionModeMapAtom, agentDefaultPermissionModeAtom, currentAgentWorkspaceIdAtom, agentWorkspacesAtom } from '@/atoms/agent-atoms'
+import { agentPermissionModeMapAtom, agentDefaultPermissionModeAtom, currentAgentWorkspaceIdAtom, agentWorkspacesAtom, agentSessionsAtom } from '@/atoms/agent-atoms'
 import type { PromaPermissionMode } from '@proma/shared'
 import { PROMA_PERMISSION_MODE_ORDER } from '@proma/shared'
 
@@ -47,6 +47,21 @@ export function PermissionModeSelector({ sessionId }: PermissionModeSelectorProp
   const mode = modeMap.get(sessionId) ?? defaultMode
   const currentWorkspaceId = useAtomValue(currentAgentWorkspaceIdAtom)
   const workspaces = useAtomValue(agentWorkspacesAtom)
+  const sessions = useAtomValue(agentSessionsAtom)
+
+  // 派生当前 session 的持久化权限模式。sessions 数组在流式中会因消息计数、running
+  // 状态等无关字段频繁更新，这里用 memo 把 effect 依赖收窄到 permissionMode 本身，
+  // 避免无关字段变化触发 effect 重跑（仍会引发组件 re-render，但 effect 的 dep 值相
+  // 等时不会重新执行 seed 逻辑）。
+  const persistedSessionMode = React.useMemo(
+    () => sessions.find((s) => s.id === sessionId)?.permissionMode,
+    [sessions, sessionId],
+  )
+  // sessions 列表尚未加载到此 session 时为 true（冷启动时机）
+  const sessionExistsInList = React.useMemo(
+    () => sessions.some((s) => s.id === sessionId),
+    [sessions, sessionId],
+  )
 
   // 获取当前工作区的 slug
   const workspaceSlug = React.useMemo(() => {
@@ -55,17 +70,33 @@ export function PermissionModeSelector({ sessionId }: PermissionModeSelectorProp
     return ws?.slug ?? null
   }, [currentWorkspaceId, workspaces])
 
-  // 初始化：如果当前 session 不在 Map 中，优先从 workspace 配置读取持久化的模式；
-  // 读取失败或没有 workspaceSlug 时，回退到全局 defaultMode。
+  // 初始化：如果当前 session 不在 Map 中，按以下优先级读回：
+  // 1. session meta.permissionMode（每个 tab 独立持久化，重启恢复各自的值）
+  // 2. workspace config（作为该工作区内新会话的默认）
+  // 3. 全局 defaultMode
   // 注意：只写入当前 session，不回写到 agentDefaultPermissionModeAtom，避免跨会话污染。
   React.useEffect(() => {
     if (modeMap.has(sessionId)) return
+    // sessions 列表尚未加载到此 session（冷启动时机），先不 seed，等 sessions 更新后重跑
+    if (!sessionExistsInList) return
 
-    const seedFromWorkspace = async (): Promise<void> => {
-      let seed: PromaPermissionMode = defaultMode
+    const seed = async (): Promise<void> => {
+      // 1. session meta
+      if (persistedSessionMode != null) {
+        setModeMap((prev: Map<string, PromaPermissionMode>) => {
+          if (prev.has(sessionId)) return prev
+          const next = new Map(prev)
+          next.set(sessionId, persistedSessionMode)
+          return next
+        })
+        return
+      }
+
+      // 2. workspace config（作为新会话默认）
+      let seedMode: PromaPermissionMode = defaultMode
       if (workspaceSlug) {
         try {
-          seed = await window.electronAPI.getPermissionMode(workspaceSlug)
+          seedMode = await window.electronAPI.getPermissionMode(workspaceSlug)
         } catch (error) {
           console.error('[PermissionModeSelector] 读取工作区权限模式失败:', error)
         }
@@ -73,14 +104,14 @@ export function PermissionModeSelector({ sessionId }: PermissionModeSelectorProp
       setModeMap((prev: Map<string, PromaPermissionMode>) => {
         if (prev.has(sessionId)) return prev
         const next = new Map(prev)
-        next.set(sessionId, seed)
+        next.set(sessionId, seedMode)
         return next
       })
     }
 
-    void seedFromWorkspace()
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅 sessionId / workspaceSlug 变化时初始化
-  }, [sessionId, workspaceSlug])
+    void seed()
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- 只在 session/workspace/持久化模式/sessions 是否已载入变化时重跑
+  }, [sessionId, workspaceSlug, persistedSessionMode, sessionExistsInList])
 
   /** 循环切换模式 */
   const cycleMode = React.useCallback(async () => {

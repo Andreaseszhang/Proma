@@ -558,6 +558,8 @@ export interface AgentSessionMeta {
   manualWorking?: boolean
   /** 最后一次流式执行是否被用户主动中断 */
   stoppedByUser?: boolean
+  /** 该会话当前的权限模式（持久化到磁盘，重启后恢复）。未设置时回退到 workspace 默认值 */
+  permissionMode?: PromaPermissionMode
   /** 创建时间戳 */
   createdAt: number
   /** 更新时间戳 */

@@ -74,7 +74,6 @@ import {
   allPendingAskUserRequestsAtom,
   allPendingExitPlanRequestsAtom,
   finalizeStreamingActivities,
-  currentAgentSessionIdAtom,
   agentSidePanelOpenMapAtom,
   workspaceFilesVersionAtom,
 } from '@/atoms/agent-atoms'
@@ -1326,7 +1325,8 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
   return (
     <>
     <AgentSessionProvider sessionId={sessionId}>
-      {/* 文件面板打开按钮（仅面板关闭时显示，固定右上角） */}
+      {/* 文件面板打开按钮（仅面板关闭时显示，固定右上角）
+          垂直位置：titlebar 底部 + AgentHeader 内垂直居中（(header高 - 按钮高)/2） */}
       {!isPanelOpen && (
         <Tooltip>
           <TooltipTrigger asChild>
@@ -1334,7 +1334,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
               type="button"
               variant="ghost"
               size="icon"
-              className="fixed right-4 top-[63px] z-50 titlebar-no-drag h-7 w-7"
+              className="fixed right-4 top-[calc(var(--titlebar-height)+(var(--agent-header-height)-1.75rem)/2)] z-50 titlebar-no-drag h-7 w-7"
               onClick={() => setPanelOpenMap((prev) => { const m = new Map(prev); m.set(sessionId, true); return m })}
             >
               <PanelRight className="size-3.5" />

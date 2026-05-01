@@ -31,14 +31,6 @@ export function WorkspaceSelector(): React.ReactElement {
   const [currentWorkspaceId, setCurrentWorkspaceId] = useAtom(currentAgentWorkspaceIdAtom)
   const [expanded, setExpanded] = React.useState(false)
 
-  // 折叠时清理拖拽状态，防止 DOM 卸载导致 dragend 丢失
-  React.useEffect(() => {
-    if (!expanded) {
-      setDragId(null)
-      setDropIndicator(null)
-    }
-  }, [expanded])
-
   // 新建状态
   const [creating, setCreating] = React.useState(false)
   const [newName, setNewName] = React.useState('')
@@ -57,6 +49,14 @@ export function WorkspaceSelector(): React.ReactElement {
   // 拖拽状态
   const [dragId, setDragId] = React.useState<string | null>(null)
   const [dropIndicator, setDropIndicator] = React.useState<{ id: string; position: 'before' | 'after' } | null>(null)
+
+  // 折叠时清理拖拽状态，防止 DOM 卸载导致 dragend 丢失
+  React.useEffect(() => {
+    if (!expanded) {
+      setDragId(null)
+      setDropIndicator(null)
+    }
+  }, [expanded, setDragId, setDropIndicator])
 
   /** 切换工作区 */
   const handleSelect = (workspace: AgentWorkspace): void => {

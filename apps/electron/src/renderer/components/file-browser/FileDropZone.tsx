@@ -1,7 +1,7 @@
 /**
  * FileDropZone — 文件拖拽上传区域
  *
- * 两个并排 drop zone：添加文件（回形针）+ 附加文件（文件夹）
+ * 两个并排 drop zone：添加文件（回形针）+ 附加文件夹（文件夹）
  * 两个 zone 都接受文件和文件夹拖放。
  */
 
@@ -18,7 +18,7 @@ interface FileDropZoneProps {
   target?: 'session' | 'workspace'
   onFilesUploaded: () => void
   onAttachFolder?: () => void
-  onFoldersDropped?: (folderPaths: string[]) => void
+  onFoldersDropped: (folderPaths: string[]) => void
 }
 
 export function FileDropZone({ workspaceSlug, sessionId, target = 'session', onFilesUploaded, onAttachFolder, onFoldersDropped }: FileDropZoneProps): React.ReactElement {
@@ -29,6 +29,10 @@ export function FileDropZone({ workspaceSlug, sessionId, target = 'session', onF
 
   const saveFiles = React.useCallback(async (files: globalThis.File[]): Promise<void> => {
     if (files.length === 0) return
+    if (!isWorkspace && !sessionId) {
+      console.error('[FileDropZone] session 模式下 sessionId 不能为空')
+      return
+    }
 
     setIsUploading(true)
     try {
@@ -61,7 +65,7 @@ export function FileDropZone({ workspaceSlug, sessionId, target = 'session', onF
     }
   }, [workspaceSlug, sessionId, isWorkspace, onFilesUploaded])
 
-  const handleDrop = React.useCallback(async (e: React.DragEvent): Promise<void> => {
+  const handleDrop = React.useCallback(async (e: React.DragEvent, side: 'left' | 'right'): Promise<void> => {
     e.preventDefault()
     e.stopPropagation()
     setIsDragOver(null)
@@ -85,20 +89,30 @@ export function FileDropZone({ workspaceSlug, sessionId, target = 'session', onF
       try {
         const { directories, files: filePaths } = await window.electronAPI.checkPathsType(paths)
 
-        if (directories.length > 0 && onFoldersDropped) {
-          onFoldersDropped(directories)
-        }
-
-        const regularFiles = filePaths.map((p) => pathMap.get(p)!).filter(Boolean)
-        if (regularFiles.length > 0) {
-          await saveFiles(regularFiles)
+        // 左侧：只上传文件，忽略目录
+        if (side === 'left') {
+          const regularFiles = filePaths.map((p) => pathMap.get(p)!).filter(Boolean)
+          if (regularFiles.length > 0) {
+            await saveFiles(regularFiles)
+          }
+        } else {
+          // 右侧：只附加文件夹，不上传文件
+          if (directories.length > 0) {
+            onFoldersDropped(directories)
+          }
         }
       } catch (error) {
         console.error('[FileDropZone] 路径检测失败，回退处理:', error)
-        await saveFiles(droppedFiles)
+        // 回退：左侧按常规文件处理
+        if (side === 'left') {
+          await saveFiles(droppedFiles)
+        }
       }
     } else {
-      await saveFiles(droppedFiles)
+      // 无路径信息回退：左侧按常规文件处理
+      if (side === 'left') {
+        await saveFiles(droppedFiles)
+      }
     }
   }, [saveFiles, onFoldersDropped])
 
@@ -115,6 +129,10 @@ export function FileDropZone({ workspaceSlug, sessionId, target = 'session', onF
   }, [])
 
   const handleSelectFiles = React.useCallback(async (): Promise<void> => {
+    if (!isWorkspace && !sessionId) {
+      console.error('[FileDropZone] session 模式下 sessionId 不能为空')
+      return
+    }
     try {
       const result = await window.electronAPI.openFileDialog()
       if (result.files.length === 0) return
@@ -173,7 +191,7 @@ export function FileDropZone({ workspaceSlug, sessionId, target = 'session', onF
                 className={zoneClass('left')}
                 onDragOver={(e) => handleDragOver(e, 'left')}
                 onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
+                onDrop={(e) => handleDrop(e, 'left')}
                 onClick={handleSelectFiles}
               >
                 <span className="text-[11px] text-muted-foreground/75">添加文件</span>
@@ -184,17 +202,17 @@ export function FileDropZone({ workspaceSlug, sessionId, target = 'session', onF
               <p>{isWorkspace ? '添加文件到工作区文件目录' : '将文件放入 Agent 工作文件夹'}</p>
             </TooltipContent>
           </Tooltip>
-          {/* 附加文件 */}
+          {/* 附加文件夹 */}
           <Tooltip>
             <TooltipTrigger asChild>
               <div
                 className={zoneClass('right')}
                 onDragOver={(e) => handleDragOver(e, 'right')}
                 onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
+                onDrop={(e) => handleDrop(e, 'right')}
                 onClick={onAttachFolder}
               >
-                <span className="text-[11px] text-muted-foreground/75">附加文件</span>
+                <span className="text-[11px] text-muted-foreground/75">附加文件夹</span>
                 <FolderPlus className="size-4 text-muted-foreground/60" />
               </div>
             </TooltipTrigger>

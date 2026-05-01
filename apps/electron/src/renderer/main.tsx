@@ -261,10 +261,24 @@ function AgentSettingsInitializer(): null {
   }, [currentWorkspaceId, workspaces])
 
   // 订阅主进程文件监听推送
+  //
+  // 用 ref 镜像 currentWorkspaceId / workspaces，让回调每次触发时读最新值，
+  // 而订阅生命周期本身只在 mount/unmount 时各跑一次 —— 避免工作区切换导致
+  // unsubscribe → re-subscribe 的时间窗口里丢失主进程推送的事件。
+  const workspaceIdRef = useRef(currentWorkspaceId)
+  const workspacesRef = useRef(workspaces)
+  useEffect(() => {
+    workspaceIdRef.current = currentWorkspaceId
+  }, [currentWorkspaceId])
+  useEffect(() => {
+    workspacesRef.current = workspaces
+  }, [workspaces])
+
   useEffect(() => {
     const unsubCapabilities = window.electronAPI.onCapabilitiesChanged(() => {
+      const id = workspaceIdRef.current
       // 查找当前工作区 slug
-      const ws = workspaces.find((w) => w.id === currentWorkspaceId)
+      const ws = workspacesRef.current.find((w) => w.id === id)
       if (ws) {
         window.electronAPI
           .getWorkspaceCapabilities(ws.slug)
@@ -280,13 +294,14 @@ function AgentSettingsInitializer(): null {
           .catch(console.error)
       }
 
-      if (currentWorkspaceId) {
-        bumpCapabilities((prev) => bumpMapVersion(prev, currentWorkspaceId))
+      if (id) {
+        bumpCapabilities((prev) => bumpMapVersion(prev, id))
       }
     })
     const unsubFiles = window.electronAPI.onWorkspaceFilesChanged(() => {
-      if (currentWorkspaceId) {
-        bumpFiles((prev) => bumpMapVersion(prev, currentWorkspaceId))
+      const id = workspaceIdRef.current
+      if (id) {
+        bumpFiles((prev) => bumpMapVersion(prev, id))
       }
     })
 
@@ -294,7 +309,7 @@ function AgentSettingsInitializer(): null {
       unsubCapabilities()
       unsubFiles()
     }
-  }, [bumpCapabilities, bumpFiles, currentWorkspaceId, workspaces])
+  }, [bumpCapabilities, bumpFiles])
 
   return null
 }

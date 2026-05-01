@@ -68,7 +68,6 @@ export function SidePanel({ sessionId, sessionPath }: SidePanelProps): React.Rea
   const setFilesVersionMap = useSetAtom(workspaceFilesVersionAtom)
   // 按工作区隔离文件变更指示
   const filesVersion = filesVersionMap.get(currentWorkspaceId ?? '') ?? 0
-  const hasFileChanges = filesVersion > 0
 
   const workspaceSlug = workspaces.find((w) => w.id === currentWorkspaceId)?.slug ?? null
 

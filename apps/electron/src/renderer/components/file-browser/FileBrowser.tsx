@@ -43,7 +43,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
-import { workspaceFilesVersionAtom, fileBrowserAutoRevealAtom, recentlyModifiedPathsAtom, currentAgentSessionIdAtom } from '@/atoms/agent-atoms'
+import { workspaceFilesVersionAtom, fileBrowserAutoRevealAtom, recentlyModifiedPathsAtom, currentAgentSessionIdAtom, currentAgentWorkspaceIdAtom } from '@/atoms/agent-atoms'
 import type { FileEntry } from '@proma/shared'
 import { FileTypeIcon } from './FileTypeIcon'
 
@@ -92,7 +92,9 @@ export function FileBrowser({ rootPath, hideToolbar, embedded, hideEmpty, onAddT
   const [entries, setEntries] = React.useState<FileEntry[]>([])
   const [loading, setLoading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
-  const filesVersion = useAtomValue(workspaceFilesVersionAtom)
+  const filesVersionMap = useAtomValue(workspaceFilesVersionAtom)
+  const currentWorkspaceId = useAtomValue(currentAgentWorkspaceIdAtom)
+  const filesVersion = filesVersionMap.get(currentWorkspaceId ?? '') ?? 0
 
   // ===== Agent 写入文件时的自动定位 =====
   const autoReveal = useAtomValue(fileBrowserAutoRevealAtom)

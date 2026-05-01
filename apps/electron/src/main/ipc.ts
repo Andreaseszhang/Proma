@@ -1236,7 +1236,7 @@ export function registerIpcHandlers(): void {
     }
   )
 
-  // 设置工作区权限模式（同时更新运行中的活跃 session）
+  // 设置工作区权限模式（持久化到工作区配置）
   ipcMain.handle(
     AGENT_IPC_CHANNELS.SET_PERMISSION_MODE,
     async (_, workspaceSlug: string, mode: PromaPermissionMode): Promise<void> => {
@@ -1246,17 +1246,24 @@ export function registerIpcHandlers(): void {
       }
       // 持久化到工作区配置
       setWorkspacePermissionMode(workspaceSlug, mode)
-      // 同步更新该工作区下所有运行中的 session
-      const sessions = listAgentSessions()
-      for (const session of sessions) {
-        if (!session.workspaceId || !isAgentSessionActive(session.id)) continue
-        const sessionWs = getAgentWorkspace(session.workspaceId)
-        if (sessionWs?.slug === workspaceSlug) {
-          updateAgentPermissionMode(session.id, mode).catch((err) => {
-            console.warn(`[IPC] 运行中权限模式切换失败: sessionId=${session.id}`, err)
-          })
-        }
+      // 注意：不再广播到该工作区下其他运行中的 session，
+      // 避免跨窗口状态污染（每个 session 独立维护自己的权限模式）
+    }
+  )
+
+  // 热切换指定会话的权限模式（运行中生效，不广播）
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.UPDATE_SESSION_PERMISSION_MODE,
+    async (_, sessionId: string, mode: PromaPermissionMode): Promise<void> => {
+      const validModes = new Set<string>(['auto', 'bypassPermissions', 'plan'])
+      if (!validModes.has(mode)) {
+        throw new Error(`无效的权限模式: ${mode}`)
       }
+      if (!isAgentSessionActive(sessionId)) return
+      await updateAgentPermissionMode(sessionId, mode).catch((err) => {
+        console.warn(`[IPC] 运行中权限模式切换失败: sessionId=${sessionId}`, err)
+        throw err
+      })
     }
   )
 

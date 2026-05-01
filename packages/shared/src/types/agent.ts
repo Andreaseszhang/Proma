@@ -1325,6 +1325,8 @@ export const AGENT_IPC_CHANNELS = {
   SET_PERMISSION_MODE: 'agent:set-permission-mode',
   /** 获取权限模式（渲染进程 → 主进程） */
   GET_PERMISSION_MODE: 'agent:get-permission-mode',
+  /** 热切换指定会话的权限模式（运行中生效，不广播到其他会话） */
+  UPDATE_SESSION_PERMISSION_MODE: 'agent:update-session-permission-mode',
 
   // AskUserQuestion 交互式问答
   /** AskUser 响应（渲染进程 → 主进程） */

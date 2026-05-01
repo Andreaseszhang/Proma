@@ -7,7 +7,7 @@
  */
 
 import * as React from 'react'
-import { useAtom, useAtomValue, useSetAtom } from 'jotai'
+import { useAtom, useAtomValue } from 'jotai'
 import { Zap, Compass, Map as MapIcon } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { agentPermissionModeMapAtom, agentDefaultPermissionModeAtom, currentAgentWorkspaceIdAtom, agentWorkspacesAtom } from '@/atoms/agent-atoms'
@@ -44,7 +44,6 @@ interface PermissionModeSelectorProps {
 export function PermissionModeSelector({ sessionId }: PermissionModeSelectorProps): React.ReactElement | null {
   const [modeMap, setModeMap] = useAtom(agentPermissionModeMapAtom)
   const defaultMode = useAtomValue(agentDefaultPermissionModeAtom)
-  const setDefaultMode = useSetAtom(agentDefaultPermissionModeAtom)
   const mode = modeMap.get(sessionId) ?? defaultMode
   const currentWorkspaceId = useAtomValue(currentAgentWorkspaceIdAtom)
   const workspaces = useAtomValue(agentWorkspacesAtom)
@@ -56,32 +55,32 @@ export function PermissionModeSelector({ sessionId }: PermissionModeSelectorProp
     return ws?.slug ?? null
   }, [currentWorkspaceId, workspaces])
 
-  // 初始化：如果当前 session 不在 Map 中，从默认值写入，确保隔离
+  // 初始化：如果当前 session 不在 Map 中，优先从 workspace 配置读取持久化的模式；
+  // 读取失败或没有 workspaceSlug 时，回退到全局 defaultMode。
+  // 注意：只写入当前 session，不回写到 agentDefaultPermissionModeAtom，避免跨会话污染。
   React.useEffect(() => {
-    if (!modeMap.has(sessionId)) {
+    if (modeMap.has(sessionId)) return
+
+    const seedFromWorkspace = async (): Promise<void> => {
+      let seed: PromaPermissionMode = defaultMode
+      if (workspaceSlug) {
+        try {
+          seed = await window.electronAPI.getPermissionMode(workspaceSlug)
+        } catch (error) {
+          console.error('[PermissionModeSelector] 读取工作区权限模式失败:', error)
+        }
+      }
       setModeMap((prev: Map<string, PromaPermissionMode>) => {
         if (prev.has(sessionId)) return prev
         const next = new Map(prev)
-        next.set(sessionId, defaultMode)
+        next.set(sessionId, seed)
         return next
       })
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅 sessionId 变化时初始化
-  }, [sessionId])
 
-  // 加载工作区权限模式（仅值变化时更新，避免切换会话时抖动）
-  React.useEffect(() => {
-    if (!workspaceSlug) return
-
-    window.electronAPI.getPermissionMode(workspaceSlug)
-      .then((savedMode) => {
-        if (savedMode !== defaultMode) setDefaultMode(savedMode)
-      })
-      .catch((error) => {
-        console.error('[PermissionModeSelector] 加载权限模式失败:', error)
-      })
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- 只在 workspaceSlug 变化时重新加载
-  }, [workspaceSlug])
+    void seedFromWorkspace()
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅 sessionId / workspaceSlug 变化时初始化
+  }, [sessionId, workspaceSlug])
 
   /** 循环切换模式 */
   const cycleMode = React.useCallback(async () => {
@@ -103,6 +102,13 @@ export function PermissionModeSelector({ sessionId }: PermissionModeSelectorProp
       } catch (error) {
         console.error('[PermissionModeSelector] 保存权限模式失败:', error)
       }
+    }
+
+    // 热切换运行中的当前 session（主进程 isActive 判空 no-op，未运行时调用无副作用）
+    try {
+      await window.electronAPI.updateSessionPermissionMode(sessionId, nextMode)
+    } catch (error) {
+      console.error('[PermissionModeSelector] 运行中切换权限模式失败:', error)
     }
   }, [mode, sessionId, workspaceSlug, setModeMap])
 

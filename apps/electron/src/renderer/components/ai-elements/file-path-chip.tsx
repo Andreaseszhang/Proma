@@ -97,13 +97,12 @@ export function FilePathChip({ filePath, basePath, basePaths, className }: FileP
   }, [trimmedPath, isAbsolute, candidateBases])
 
   const handleClick = React.useCallback(() => {
-    // 绝对路径直接预览；相对路径把候选 basePaths 交给主进程依次尝试
-    const target = isAbsolute ? trimmedPath : trimmedPath
-    const bases = isAbsolute ? undefined : (candidateBases.length > 0 ? candidateBases : undefined)
+    const target = trimmedPath
+    const bases = candidateBases.length > 0 ? candidateBases : undefined
     window.electronAPI.previewFile(target, bases).catch((error: unknown) => {
       console.error('[FilePathChip] 预览文件失败:', error)
     })
-  }, [trimmedPath, isAbsolute, candidateBases])
+  }, [trimmedPath, candidateBases])
 
   return (
     <button

@@ -471,10 +471,8 @@ const MarkdownInlineCode = React.memo(function MarkdownInlineCode({
   const text = typeof codeChildren === 'string' ? codeChildren : ''
 
   if (text) {
-    if (isAbsoluteFilePath(text)) {
-      return <FilePathChip filePath={text.trim()} />
-    }
-    // 相对路径：合并 basePath（主 cwd）+ basePaths（props 或 context 提供的附加目录）作为候选
+    // 合并 basePath（主 cwd）+ basePaths（props 或 context 提供的附加目录）作为候选
+    // 绝对路径和相对路径都需要：绝对路径可能因 session 清理等原因失效，需要 fallback 搜索
     const merged: string[] = []
     if (basePath) merged.push(basePath)
     const allExtra = basePaths || ctxBasePaths
@@ -483,6 +481,11 @@ const MarkdownInlineCode = React.memo(function MarkdownInlineCode({
         if (p && !merged.includes(p)) merged.push(p)
       }
     }
+
+    if (isAbsoluteFilePath(text)) {
+      return <FilePathChip filePath={text.trim()} basePaths={merged.length > 0 ? merged : undefined} />
+    }
+    // 相对路径
     if (merged.length > 0 && isRelativeFilePath(text)) {
       return <FilePathChip filePath={text.trim()} basePaths={merged} />
     }

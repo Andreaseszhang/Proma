@@ -18,6 +18,7 @@ import { BrowserWindow, shell, nativeTheme, ipcMain, dialog, screen } from 'elec
 import { resolve, basename, extname, join, dirname } from 'node:path'
 import {
   readFileSync,
+  readdirSync,
   statSync,
   writeFileSync,
   mkdirSync,
@@ -1455,24 +1456,112 @@ function watchExternalChange(previewWindow: BrowserWindow, state: PreviewWindowS
   }
 }
 
+const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', '.next', '__pycache__', '.venv', 'build', '.cache', 'target'])
+const MAX_DIRS_SCANNED = 500
+
+/**
+ * 在目录中按文件名搜索（限制深度和总扫描目录数，避免阻塞主进程）
+ * 跳过 node_modules、.git、dist 等大型目录
+ */
+function searchFileInDir(dir: string, filename: string, maxDepth: number, counter = { count: 0 }): string | null {
+  if (maxDepth < 0 || counter.count >= MAX_DIRS_SCANNED) return null
+  counter.count++
+  const directCandidate = resolve(dir, filename)
+  if (existsSync(directCandidate)) return directCandidate
+  if (maxDepth === 0) return null
+
+  try {
+    const entries = readdirSync(dir, { withFileTypes: true })
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue
+      if (SKIP_DIRS.has(entry.name)) continue
+      if (entry.name.startsWith('.')) continue
+      if (counter.count >= MAX_DIRS_SCANNED) return null
+      const found = searchFileInDir(resolve(dir, entry.name), filename, maxDepth - 1, counter)
+      if (found) return found
+    }
+  } catch {
+    // 无权访问的目录跳过
+  }
+  return null
+}
+
 /**
  * 解析待预览的文件路径
- * - 绝对路径：直接 resolve
+ * - 绝对路径：先直接 resolve，若文件不存在且有 basePaths，按文件名在 basePaths 中搜索 fallback
  * - 相对路径：依次尝试 basePaths，返回第一个存在的；都不存在则返回基于第一个 base 的拼接结果
  *   （让后续 statSync 抛出更明确的错误，而不是被相对 process.cwd 误导）
  */
 function resolveTargetPath(filePath: string, basePaths?: string[]): string {
-  if (filePath.startsWith('/') || /^[A-Za-z]:[\\/]/.test(filePath)) {
-    return resolve(filePath)
-  }
-  if (basePaths && basePaths.length > 0) {
+  const isAbs = filePath.startsWith('/') || /^[A-Za-z]:[\\/]/.test(filePath)
+
+  // 第一步：直接解析
+  if (isAbs) {
+    const resolved = resolve(filePath)
+    if (existsSync(resolved)) {
+      return resolved
+    }
+  } else if (basePaths && basePaths.length > 0) {
     for (const base of basePaths) {
       if (!base) continue
       const candidate = resolve(base, filePath)
-      if (existsSync(candidate)) return candidate
+      if (existsSync(candidate)) {
+        return candidate
+      }
     }
-    return resolve(basePaths[0]!, filePath)
   }
+
+  // 第二步：直接解析失败，进入 fallback 搜索
+  const filename = basename(filePath)
+  const resolvedInput = isAbs ? resolve(filePath) : (basePaths?.[0] ? resolve(basePaths[0], filePath) : resolve(filePath))
+
+  // 收集搜索根目录
+  const searchRoots: string[] = [...(basePaths || [])]
+
+  // 从路径中提取 session workspace 根目录
+  const wsRootMatch = resolvedInput.match(/^(.+\/agent-workspaces\/[^/]+\/[0-9a-f-]+)\//)
+  if (wsRootMatch) {
+    const wsRoot = wsRootMatch[1]!
+    if (!searchRoots.includes(wsRoot)) {
+      searchRoots.push(wsRoot)
+    }
+  }
+
+  if (searchRoots.length === 0) {
+    if (isAbs) return resolve(filePath)
+    if (basePaths && basePaths.length > 0) return resolve(basePaths[0]!, filePath)
+    return resolve(filePath)
+  }
+
+  // 共享计数器，所有策略共用同一个上限
+  const counter = { count: 0 }
+
+  // 策略 1：按文件名递归搜索
+  for (const root of searchRoots) {
+    if (!root) continue
+    const found = searchFileInDir(root, filename, 8, counter)
+    if (found) {
+      return found
+    }
+  }
+
+  // 策略 2：尝试路径结构匹配（适用于 agent-workspaces 路径）
+  const wsMatch = resolvedInput.match(/\/agent-workspaces\/[^/]+\/[0-9a-f-]+\/(.+)$/)
+  if (wsMatch) {
+    const relativePart = wsMatch[1]!
+    for (const root of searchRoots) {
+      if (!root) continue
+      const candidate = resolve(root, relativePart)
+      // 校验 resolved path 未逃逸 root
+      if ((candidate.startsWith(root + '/') || candidate === root) && existsSync(candidate)) {
+        return candidate
+      }
+    }
+  }
+
+  // 所有 fallback 未找到
+  if (isAbs) return resolve(filePath)
+  if (basePaths && basePaths.length > 0) return resolve(basePaths[0]!, filePath)
   return resolve(filePath)
 }
 
@@ -1481,7 +1570,8 @@ function resolveTargetPath(filePath: string, basePaths?: string[]): string {
  * 不支持的文件类型会调用系统默认应用打开
  *
  * @param filePath 绝对路径或相对路径
- * @param basePaths 当 filePath 为相对路径时，依次尝试这些基础目录解析（主 cwd + 附加目录）
+ * @param basePaths 候选基础目录列表。相对路径时依次尝试拼接解析；
+ *                  绝对路径文件不存在时，在目录中按文件名搜索 fallback
  */
 export function openFilePreview(filePath: string, basePaths?: string[]): void {
   const safePath = resolveTargetPath(filePath, basePaths)
@@ -1491,7 +1581,16 @@ export function openFilePreview(filePath: string, basePaths?: string[]): void {
 
   // 不支持的类型，直接用系统默认应用打开
   if (previewType === 'unsupported') {
-    shell.openPath(safePath)
+    shell.openPath(safePath).then((errMsg) => {
+      if (errMsg) console.error('[文件预览] 系统打开失败:', errMsg)
+    })
+    return
+  }
+
+  // 检查文件是否存在
+  if (!existsSync(safePath)) {
+    console.warn(`[文件预览] 文件不存在: ${safePath}`)
+    dialog.showErrorBox('无法打开文件', `文件不存在：\n${safePath}`)
     return
   }
 
@@ -1499,7 +1598,9 @@ export function openFilePreview(filePath: string, basePaths?: string[]): void {
   const stat = statSync(safePath)
   if (stat.size > MAX_FILE_SIZE) {
     console.warn(`[文件预览] 文件过大 (${(stat.size / 1024 / 1024).toFixed(1)}MB)，使用系统应用打开`)
-    shell.openPath(safePath)
+    shell.openPath(safePath).then((errMsg) => {
+      if (errMsg) console.error('[文件预览] 系统打开失败:', errMsg)
+    })
     return
   }
 
@@ -1508,21 +1609,32 @@ export function openFilePreview(filePath: string, basePaths?: string[]): void {
   let html: string
   let initialContent = ''
 
-  if (previewType === 'pdf') {
-    html = pdfPreviewHtml(safePath, filename)
-  } else if (previewType === 'image') {
-    html = imagePreviewHtml(safePath, filename)
-  } else if (previewType === 'video') {
-    html = videoPreviewHtml(safePath, filename)
-  } else if (previewType === 'docx') {
-    const buffer = readFileSync(safePath)
-    const base64 = buffer.toString('base64')
-    html = docxPreviewHtml(safePath, filename, base64)
-  } else {
-    initialContent = readFileSync(safePath, 'utf-8')
-    html = previewType === 'markdown'
-      ? markdownPreviewHtml(safePath, filename, initialContent)
-      : codePreviewHtml(safePath, filename, initialContent, ext)
+  try {
+    if (previewType === 'pdf') {
+      html = pdfPreviewHtml(safePath, filename)
+    } else if (previewType === 'image') {
+      html = imagePreviewHtml(safePath, filename)
+    } else if (previewType === 'video') {
+      html = videoPreviewHtml(safePath, filename)
+    } else if (previewType === 'docx') {
+      const buffer = readFileSync(safePath)
+      const base64 = buffer.toString('base64')
+      html = docxPreviewHtml(safePath, filename, base64)
+    } else {
+      initialContent = readFileSync(safePath, 'utf-8')
+      html = previewType === 'markdown'
+        ? markdownPreviewHtml(safePath, filename, initialContent)
+        : codePreviewHtml(safePath, filename, initialContent, ext)
+    }
+  } catch (err) {
+    console.error(`[文件预览] 读取文件失败 (${safePath}):`, err)
+    shell.openPath(safePath).then((shellErrMsg) => {
+      if (shellErrMsg) {
+        console.error('[文件预览] 系统打开也失败:', shellErrMsg)
+        dialog.showErrorBox('无法打开文件', `读取文件失败，系统打开也失败：\n${safePath}\n${shellErrMsg}`)
+      }
+    })
+    return
   }
 
   const tmpHtmlPath = writeTempHtml(html)

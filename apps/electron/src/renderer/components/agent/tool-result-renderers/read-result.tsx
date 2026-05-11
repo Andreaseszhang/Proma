@@ -13,6 +13,12 @@ import { resolvedThemeAtom } from '@/atoms/theme'
 import { CollapsibleResult } from './collapsible-result'
 import { PIERRE_FILE_CSS } from './pierre-styles'
 
+function cheapHash(s: string): number {
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0
+  return h >>> 0
+}
+
 interface ReadResultRendererProps {
   result: string
   isError: boolean
@@ -24,8 +30,7 @@ const CAT_N_LINE_RE = /^\s*\d+\t/
 /** 检测并去除 cat -n 格式行号前缀（"    1\tcontent" → "content"） */
 function stripCatLineNumbers(text: string): string {
   const lines = text.split('\n')
-  if (lines.length < 2) return text
-  // 只在前几行都匹配 cat -n 格式时才 strip，避免误伤普通内容
+  if (lines.length === 0) return text
   const sample = lines.slice(0, Math.min(5, lines.length))
   const allMatch = sample.every(line => line === '' || CAT_N_LINE_RE.test(line))
   if (!allMatch) return text
@@ -40,6 +45,16 @@ export function ReadResultRenderer({ result, isError, input }: ReadResultRendere
       ? (input.filePath as string)
       : ''
 
+  const options = React.useMemo(() => ({
+    theme: { dark: 'one-dark-pro' as const, light: 'one-light' as const },
+    disableFileHeader: true,
+    overflow: 'scroll' as const,
+    themeType: theme as 'light' | 'dark' | 'system',
+    unsafeCSS: PIERRE_FILE_CSS,
+  }), [theme])
+
+  // Claude Agent SDK Read 工具返回 cat -n 格式（"    1\tcontent"），
+  // 需要 strip 行号前缀，否则与 PierreFile 自身行号重复
   const renderCode = React.useCallback((text: string): React.ReactNode => {
     if (isError) {
       return (
@@ -49,22 +64,11 @@ export function ReadResultRenderer({ result, isError, input }: ReadResultRendere
       )
     }
 
-    // Claude Agent SDK Read 工具返回 cat -n 格式（"    1\tcontent"），
-    // 需要 strip 行号前缀，否则与 PierreFile 自身行号重复
     const stripped = stripCatLineNumbers(text)
-
     const file: FileContents = {
       name: filePath || 'file',
       contents: stripped,
-      cacheKey: `read:${filePath}:${stripped.length}:${stripped.slice(0, 32)}`,
-    }
-
-    const options = {
-      theme: { dark: 'one-dark-pro' as const, light: 'one-light' as const },
-      disableFileHeader: true,
-      overflow: 'scroll' as const,
-      themeType: theme as 'light' | 'dark' | 'system',
-      unsafeCSS: PIERRE_FILE_CSS,
+      cacheKey: `read:${filePath}:${cheapHash(stripped)}`,
     }
 
     return (
@@ -72,7 +76,7 @@ export function ReadResultRenderer({ result, isError, input }: ReadResultRendere
         <PierreFile file={file} options={options} />
       </div>
     )
-  }, [isError, filePath, theme])
+  }, [isError, filePath, theme, options])
 
   return (
     <CollapsibleResult

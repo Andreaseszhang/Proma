@@ -12,6 +12,12 @@ import { resolvedThemeAtom } from '@/atoms/theme'
 import { FilePathChip } from '@/components/ai-elements/file-path-chip'
 import { PIERRE_DIFF_CSS } from './pierre-styles'
 
+function cheapHash(s: string): number {
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0
+  return h >>> 0
+}
+
 interface WriteResultRendererProps {
   result: string
   isError: boolean
@@ -33,7 +39,7 @@ export function WriteResultRenderer({ result, isError, input }: WriteResultRende
   const newFile = React.useMemo<FileContents>(() => ({
     name: filePath || 'new-file',
     contents: content,
-    cacheKey: `new:${filePath}:${content.length}`,
+    cacheKey: `new:${filePath}:${cheapHash(content)}`,
   }), [filePath, content])
 
   const options = React.useMemo(() => ({

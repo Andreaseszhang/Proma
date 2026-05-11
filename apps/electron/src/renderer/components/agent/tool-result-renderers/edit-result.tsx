@@ -2,7 +2,7 @@
  * Edit 工具结果渲染器 — @pierre/diffs 版本
  *
  * 使用 @pierre/diffs MultiFileDiff 渲染 old_string → new_string 的差异，
- * 带 Shiki 语法高亮、行号、支持 unified/split 视图切换。
+ * 带 Shiki 语法高亮、行号，固定使用 unified 视图。
  */
 
 import * as React from 'react'
@@ -11,6 +11,12 @@ import { MultiFileDiff } from '@pierre/diffs/react'
 import type { FileContents } from '@pierre/diffs'
 import { resolvedThemeAtom } from '@/atoms/theme'
 import { PIERRE_DIFF_CSS } from './pierre-styles'
+
+function cheapHash(s: string): number {
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0
+  return h >>> 0
+}
 
 interface EditResultRendererProps {
   result: string
@@ -27,13 +33,13 @@ export function EditResultRenderer({ result, isError, input }: EditResultRendere
   const oldFile = React.useMemo<FileContents>(() => ({
     name: filePath,
     contents: oldStr,
-    cacheKey: `old:${filePath}:${oldStr.length}`,
+    cacheKey: `old:${filePath}:${cheapHash(oldStr)}`,
   }), [filePath, oldStr])
 
   const newFile = React.useMemo<FileContents>(() => ({
     name: filePath,
     contents: newStr,
-    cacheKey: `new:${filePath}:${newStr.length}`,
+    cacheKey: `new:${filePath}:${cheapHash(newStr)}`,
   }), [filePath, newStr])
 
   const options = React.useMemo(() => ({

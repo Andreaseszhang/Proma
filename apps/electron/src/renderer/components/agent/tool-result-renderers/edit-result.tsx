@@ -26,6 +26,30 @@ export function EditResultRenderer({ result, isError, input }: EditResultRendere
   const newStr = typeof input.new_string === 'string' ? input.new_string : ''
   const filePath = typeof input.file_path === 'string' ? input.file_path : 'file'
 
+  const oldFile = React.useMemo<FileContents>(() => ({
+    name: filePath,
+    contents: oldStr,
+    cacheKey: `old:${filePath}:${oldStr.length}`,
+  }), [filePath, oldStr])
+
+  const newFile = React.useMemo<FileContents>(() => ({
+    name: filePath,
+    contents: newStr,
+    cacheKey: `new:${filePath}:${newStr.length}`,
+  }), [filePath, newStr])
+
+  const options = React.useMemo(() => ({
+    diffStyle,
+    theme: { dark: 'one-dark-pro' as const, light: 'one-light' as const },
+    disableFileHeader: true,
+    diffIndicators: 'bars' as const,
+    hunkSeparators: 'line-info' as const,
+    lineDiffType: 'none' as const,
+    overflow: 'scroll' as const,
+    themeType: theme as 'light' | 'dark' | 'system',
+    unsafeCSS: PIERRE_DIFF_CSS,
+  }), [diffStyle, theme])
+
   if (isError) {
     return (
       <pre className="rounded-md p-3 text-[12px] font-mono text-destructive/80 bg-destructive/5 whitespace-pre-wrap break-all overflow-x-auto">
@@ -42,23 +66,8 @@ export function EditResultRenderer({ result, isError, input }: EditResultRendere
     )
   }
 
-  const oldFile: FileContents = { name: filePath, contents: oldStr }
-  const newFile: FileContents = { name: filePath, contents: newStr }
-
-  const options = {
-    diffStyle,
-    theme: { dark: 'one-dark-pro' as const, light: 'one-light' as const },
-    disableFileHeader: true,
-    diffIndicators: 'bars' as const,
-    hunkSeparators: 'line-info' as const,
-    lineDiffType: 'none' as const,
-    overflow: 'scroll' as const,
-    themeType: theme as 'light' | 'dark' | 'system',
-    unsafeCSS: PIERRE_DIFF_CSS,
-  }
-
   return (
-    <div className="rounded-md overflow-hidden bg-content-area max-h-[400px] overflow-y-auto">
+    <div className="rounded-md overflow-x-hidden overflow-y-auto bg-content-area max-h-[400px]">
       <MultiFileDiff oldFile={oldFile} newFile={newFile} options={options} />
     </div>
   )

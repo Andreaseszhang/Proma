@@ -19,6 +19,19 @@ interface ReadResultRendererProps {
   input: Record<string, unknown>
 }
 
+const CAT_N_LINE_RE = /^\s*\d+\t/
+
+/** 检测并去除 cat -n 格式行号前缀（"    1\tcontent" → "content"） */
+function stripCatLineNumbers(text: string): string {
+  const lines = text.split('\n')
+  if (lines.length < 2) return text
+  // 只在前几行都匹配 cat -n 格式时才 strip，避免误伤普通内容
+  const sample = lines.slice(0, Math.min(5, lines.length))
+  const allMatch = sample.every(line => line === '' || CAT_N_LINE_RE.test(line))
+  if (!allMatch) return text
+  return lines.map(line => line.replace(CAT_N_LINE_RE, '')).join('\n')
+}
+
 export function ReadResultRenderer({ result, isError, input }: ReadResultRendererProps): React.ReactElement {
   const theme = useAtomValue(resolvedThemeAtom)
   const filePath = typeof input.file_path === 'string'
@@ -36,9 +49,14 @@ export function ReadResultRenderer({ result, isError, input }: ReadResultRendere
       )
     }
 
+    // Claude Agent SDK Read 工具返回 cat -n 格式（"    1\tcontent"），
+    // 需要 strip 行号前缀，否则与 PierreFile 自身行号重复
+    const stripped = stripCatLineNumbers(text)
+
     const file: FileContents = {
       name: filePath || 'file',
-      contents: text,
+      contents: stripped,
+      cacheKey: `read:${filePath}:${stripped.length}:${stripped.slice(0, 32)}`,
     }
 
     const options = {
@@ -50,7 +68,7 @@ export function ReadResultRenderer({ result, isError, input }: ReadResultRendere
     }
 
     return (
-      <div className="rounded-md overflow-hidden bg-content-area">
+      <div className="rounded-md overflow-x-hidden overflow-y-auto bg-content-area max-h-[400px]">
         <PierreFile file={file} options={options} />
       </div>
     )

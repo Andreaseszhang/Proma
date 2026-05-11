@@ -23,29 +23,22 @@ export function WriteResultRenderer({ result, isError, input }: WriteResultRende
   const theme = useAtomValue(resolvedThemeAtom)
   const diffStyle = useAtomValue(agentDiffStyleAtom)
 
-  if (isError) {
-    return (
-      <pre className="rounded-md p-3 text-[12px] font-mono text-destructive/80 bg-destructive/5 whitespace-pre-wrap break-all overflow-x-auto">
-        {result}
-      </pre>
-    )
-  }
-
   const content = typeof input.content === 'string' ? input.content : ''
   const filePath = typeof input.file_path === 'string' ? input.file_path : ''
 
-  if (!content) {
-    return (
-      <div className="text-[12px] text-muted-foreground flex items-center gap-1">
-        已写入 {filePath ? <FilePathChip filePath={filePath} /> : <span className="font-mono text-foreground/70">文件</span>}
-      </div>
-    )
-  }
+  const oldFile = React.useMemo<FileContents>(() => ({
+    name: filePath || 'new-file',
+    contents: '',
+    cacheKey: `old:${filePath}:0`,
+  }), [filePath])
 
-  const oldFile: FileContents = { name: filePath || 'new-file', contents: '' }
-  const newFile: FileContents = { name: filePath || 'new-file', contents: content }
+  const newFile = React.useMemo<FileContents>(() => ({
+    name: filePath || 'new-file',
+    contents: content,
+    cacheKey: `new:${filePath}:${content.length}`,
+  }), [filePath, content])
 
-  const options = {
+  const options = React.useMemo(() => ({
     diffStyle,
     theme: { dark: 'one-dark-pro' as const, light: 'one-light' as const },
     disableFileHeader: true,
@@ -55,10 +48,26 @@ export function WriteResultRenderer({ result, isError, input }: WriteResultRende
     overflow: 'scroll' as const,
     themeType: theme as 'light' | 'dark' | 'system',
     unsafeCSS: PIERRE_DIFF_CSS,
+  }), [diffStyle, theme])
+
+  if (isError) {
+    return (
+      <pre className="rounded-md p-3 text-[12px] font-mono text-destructive/80 bg-destructive/5 whitespace-pre-wrap break-all overflow-x-auto">
+        {result}
+      </pre>
+    )
+  }
+
+  if (!content) {
+    return (
+      <div className="text-[12px] text-muted-foreground flex items-center gap-1">
+        已写入 {filePath ? <FilePathChip filePath={filePath} /> : <span className="font-mono text-foreground/70">文件</span>}
+      </div>
+    )
   }
 
   return (
-    <div className="rounded-md overflow-hidden bg-content-area max-h-[400px] overflow-y-auto">
+    <div className="rounded-md overflow-x-hidden overflow-y-auto bg-content-area max-h-[400px]">
       <MultiFileDiff oldFile={oldFile} newFile={newFile} options={options} />
     </div>
   )

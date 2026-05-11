@@ -42,7 +42,6 @@ import {
 } from './atoms/notifications'
 import {
   stickyUserMessageEnabledAtom,
-  agentDiffStyleAtom,
   initializeUiPreferences,
 } from './atoms/ui-preferences'
 import { useGlobalAgentListeners } from './hooks/useGlobalAgentListeners'
@@ -383,11 +382,10 @@ function DockBadgeInitializer(): null {
  */
 function UiPreferencesInitializer(): null {
   const setStickyUserMessageEnabled = useSetAtom(stickyUserMessageEnabledAtom)
-  const setAgentDiffStyle = useSetAtom(agentDiffStyleAtom)
 
   useEffect(() => {
-    initializeUiPreferences(setStickyUserMessageEnabled, setAgentDiffStyle)
-  }, [setStickyUserMessageEnabled, setAgentDiffStyle])
+    initializeUiPreferences(setStickyUserMessageEnabled)
+  }, [setStickyUserMessageEnabled])
 
   return null
 }

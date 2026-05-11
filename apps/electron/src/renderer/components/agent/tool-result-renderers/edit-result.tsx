@@ -10,7 +10,6 @@ import { useAtomValue } from 'jotai'
 import { MultiFileDiff } from '@pierre/diffs/react'
 import type { FileContents } from '@pierre/diffs'
 import { resolvedThemeAtom } from '@/atoms/theme'
-import { agentDiffStyleAtom } from '@/atoms/ui-preferences'
 import { PIERRE_DIFF_CSS } from './pierre-styles'
 
 interface EditResultRendererProps {
@@ -21,7 +20,6 @@ interface EditResultRendererProps {
 
 export function EditResultRenderer({ result, isError, input }: EditResultRendererProps): React.ReactElement {
   const theme = useAtomValue(resolvedThemeAtom)
-  const diffStyle = useAtomValue(agentDiffStyleAtom)
   const oldStr = typeof input.old_string === 'string' ? input.old_string : ''
   const newStr = typeof input.new_string === 'string' ? input.new_string : ''
   const filePath = typeof input.file_path === 'string' ? input.file_path : 'file'
@@ -39,7 +37,7 @@ export function EditResultRenderer({ result, isError, input }: EditResultRendere
   }), [filePath, newStr])
 
   const options = React.useMemo(() => ({
-    diffStyle,
+    diffStyle: 'unified' as const,
     theme: { dark: 'one-dark-pro' as const, light: 'one-light' as const },
     disableFileHeader: true,
     diffIndicators: 'bars' as const,
@@ -48,7 +46,7 @@ export function EditResultRenderer({ result, isError, input }: EditResultRendere
     overflow: 'scroll' as const,
     themeType: theme as 'light' | 'dark' | 'system',
     unsafeCSS: PIERRE_DIFF_CSS,
-  }), [diffStyle, theme])
+  }), [theme])
 
   if (isError) {
     return (

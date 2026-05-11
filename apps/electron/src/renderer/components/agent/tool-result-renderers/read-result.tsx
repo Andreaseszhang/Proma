@@ -1,15 +1,17 @@
 /**
- * Read 工具结果渲染器 — 语法高亮代码块
+ * Read 工具结果渲染器 — @pierre/diffs File 版本
  *
- * 使用 Shiki 进行语法高亮，带行号显示
+ * 使用 @pierre/diffs 的 File 组件渲染代码预览，
+ * 带 Shiki 语法高亮、行号、与 diff 视图一致的主题风格。
  */
 
 import * as React from 'react'
-import { highlightToTokens } from '@proma/core'
-import type { HighlightToken } from '@proma/core'
-import { cn } from '@/lib/utils'
-import { inferLanguageFromPath } from '../tool-utils'
+import { useAtomValue } from 'jotai'
+import { File as PierreFile } from '@pierre/diffs/react'
+import type { FileContents } from '@pierre/diffs'
+import { resolvedThemeAtom } from '@/atoms/theme'
 import { CollapsibleResult } from './collapsible-result'
+import { PIERRE_FILE_CSS } from './pierre-styles'
 
 interface ReadResultRendererProps {
   result: string
@@ -17,47 +19,13 @@ interface ReadResultRendererProps {
   input: Record<string, unknown>
 }
 
-/** 单行渲染（memoized） */
-const TokenLine = React.memo(function TokenLine({
-  tokens,
-  lineNumber,
-  fgColor,
-}: {
-  tokens: HighlightToken[]
-  lineNumber: number
-  fgColor: string
-}): React.ReactElement {
-  return (
-    <div className="flex">
-      <span className="shrink-0 w-10 text-right pr-3 select-none text-zinc-500 text-[11px]">
-        {lineNumber}
-      </span>
-      <span className="flex-1 whitespace-pre-wrap break-all">
-        {tokens.map((token, i) => (
-          <span key={i} style={{ color: token.color ?? fgColor }}>
-            {token.content}
-          </span>
-        ))}
-      </span>
-    </div>
-  )
-})
-
 export function ReadResultRenderer({ result, isError, input }: ReadResultRendererProps): React.ReactElement {
+  const theme = useAtomValue(resolvedThemeAtom)
   const filePath = typeof input.file_path === 'string'
     ? input.file_path
     : typeof input.filePath === 'string'
       ? (input.filePath as string)
       : ''
-
-  const language = inferLanguageFromPath(filePath)
-  const startLine = typeof input.offset === 'number' ? input.offset : 1
-
-  // 高亮处理
-  const highlighted = React.useMemo(() => {
-    if (isError) return null
-    return highlightToTokens({ code: result, language })
-  }, [result, language, isError])
 
   const renderCode = React.useCallback((text: string): React.ReactNode => {
     if (isError) {
@@ -68,47 +36,25 @@ export function ReadResultRenderer({ result, isError, input }: ReadResultRendere
       )
     }
 
-    if (!highlighted) {
-      // Fallback：无高亮
-      const lines = text.split('\n')
-      return (
-        <div className={cn(
-          'rounded-md font-mono text-[12px] leading-relaxed overflow-x-auto p-2',
-          'bg-zinc-900 text-zinc-100 dark:bg-zinc-950',
-        )}>
-          {lines.map((line, i) => (
-            <div key={i} className="flex">
-              <span className="shrink-0 w-10 text-right pr-3 select-none text-zinc-500 text-[11px]">
-                {startLine + i}
-              </span>
-              <span className="flex-1 whitespace-pre-wrap break-all">{line || '\u200B'}</span>
-            </div>
-          ))}
-        </div>
-      )
+    const file: FileContents = {
+      name: filePath || 'file',
+      contents: text,
     }
 
-    // 如果内容被截断（CollapsibleResult 传入的 text 可能少于 result），
-    // 则只渲染对应行数的 token
-    const textLineCount = text.split('\n').length
-    const linesToRender = highlighted.lines.slice(0, textLineCount)
+    const options = {
+      theme: { dark: 'one-dark-pro' as const, light: 'one-light' as const },
+      disableFileHeader: true,
+      overflow: 'scroll' as const,
+      themeType: theme as 'light' | 'dark' | 'system',
+      unsafeCSS: PIERRE_FILE_CSS,
+    }
 
     return (
-      <div
-        className="rounded-md font-mono text-[12px] leading-relaxed overflow-x-auto p-2"
-        style={{ backgroundColor: highlighted.bgColor }}
-      >
-        {linesToRender.map((tokens, i) => (
-          <TokenLine
-            key={startLine + i}
-            tokens={tokens}
-            lineNumber={startLine + i}
-            fgColor={highlighted.fgColor}
-          />
-        ))}
+      <div className="rounded-md overflow-hidden bg-content-area">
+        <PierreFile file={file} options={options} />
       </div>
     )
-  }, [highlighted, isError, startLine])
+  }, [isError, filePath, theme])
 
   return (
     <CollapsibleResult

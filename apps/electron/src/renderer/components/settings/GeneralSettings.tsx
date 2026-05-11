@@ -40,6 +40,8 @@ import {
 import {
   stickyUserMessageEnabledAtom,
   updateStickyUserMessageEnabled,
+  agentDiffStyleAtom,
+  updateAgentDiffStyle,
 } from '@/atoms/ui-preferences'
 import { cn } from '@/lib/utils'
 import { Button } from '../ui/button'
@@ -61,6 +63,7 @@ export function GeneralSettings(): React.ReactElement {
   const [notificationSoundEnabled, setNotificationSoundEnabled] = useAtom(notificationSoundEnabledAtom)
   const [notificationSounds, setNotificationSounds] = useAtom(notificationSoundsAtom)
   const [stickyUserMessageEnabled, setStickyUserMessageEnabled] = useAtom(stickyUserMessageEnabledAtom)
+  const [agentDiffStyle, setAgentDiffStyle] = useAtom(agentDiffStyleAtom)
   const [isEditingName, setIsEditingName] = React.useState(false)
   const [nameInput, setNameInput] = React.useState(userProfile.userName)
   const [showEmojiPicker, setShowEmojiPicker] = React.useState(false)
@@ -319,6 +322,23 @@ export function GeneralSettings(): React.ReactElement {
               updateStickyUserMessageEnabled(checked)
             }}
           />
+          <SettingsRow
+            label="Agent Diff 视图"
+            description="Agent 编辑文件时的代码差异显示方式"
+          >
+            <Select value={agentDiffStyle} onValueChange={(value: 'unified' | 'split') => {
+              setAgentDiffStyle(value)
+              updateAgentDiffStyle(value)
+            }}>
+              <SelectTrigger className="w-[120px] h-8 text-[13px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="unified">统一视图</SelectItem>
+                <SelectItem value="split">分栏视图</SelectItem>
+              </SelectContent>
+            </Select>
+          </SettingsRow>
         </SettingsCard>
       </SettingsSection>
     </div>

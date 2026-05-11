@@ -197,6 +197,8 @@ export interface AppSettings {
   shortcutOverrides?: ShortcutOverrides
   /** 是否显示用户消息悬浮置顶条（默认 true） */
   stickyUserMessageEnabled?: boolean
+  /** Agent Diff 视图模式：'unified' 统一视图 | 'split' 分栏视图（默认 'unified'） */
+  agentDiffStyle?: 'unified' | 'split'
   /** 应用图标变体 ID（dock + window icon），'default' 或 logo 变体 id */
   appIconVariant?: string
   /** 语音输入设置（Access Token 以加密态存储，由专用服务解密后返回渲染进程） */

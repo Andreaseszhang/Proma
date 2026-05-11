@@ -1,12 +1,17 @@
 /**
- * Edit 工具结果渲染器 — Diff 视图
+ * Edit 工具结果渲染器 — @pierre/diffs 版本
  *
- * 显示 old_string → new_string 的差异，
- * 删除行红色背景，新增行绿色背景
+ * 使用 @pierre/diffs MultiFileDiff 渲染 old_string → new_string 的差异，
+ * 带 Shiki 语法高亮、行号、支持 unified/split 视图切换。
  */
 
 import * as React from 'react'
-import { cn } from '@/lib/utils'
+import { useAtomValue } from 'jotai'
+import { MultiFileDiff } from '@pierre/diffs/react'
+import type { FileContents } from '@pierre/diffs'
+import { resolvedThemeAtom } from '@/atoms/theme'
+import { agentDiffStyleAtom } from '@/atoms/ui-preferences'
+import { PIERRE_DIFF_CSS } from './pierre-styles'
 
 interface EditResultRendererProps {
   result: string
@@ -15,8 +20,11 @@ interface EditResultRendererProps {
 }
 
 export function EditResultRenderer({ result, isError, input }: EditResultRendererProps): React.ReactElement {
+  const theme = useAtomValue(resolvedThemeAtom)
+  const diffStyle = useAtomValue(agentDiffStyleAtom)
   const oldStr = typeof input.old_string === 'string' ? input.old_string : ''
   const newStr = typeof input.new_string === 'string' ? input.new_string : ''
+  const filePath = typeof input.file_path === 'string' ? input.file_path : 'file'
 
   if (isError) {
     return (
@@ -26,7 +34,6 @@ export function EditResultRenderer({ result, isError, input }: EditResultRendere
     )
   }
 
-  // 无 diff 数据时显示成功消息
   if (!oldStr && !newStr) {
     return (
       <div className="text-[12px] text-muted-foreground">
@@ -35,47 +42,24 @@ export function EditResultRenderer({ result, isError, input }: EditResultRendere
     )
   }
 
-  const oldLines = oldStr.split('\n')
-  const newLines = newStr.split('\n')
+  const oldFile: FileContents = { name: filePath, contents: oldStr }
+  const newFile: FileContents = { name: filePath, contents: newStr }
+
+  const options = {
+    diffStyle,
+    theme: { dark: 'one-dark-pro' as const, light: 'one-light' as const },
+    disableFileHeader: true,
+    diffIndicators: 'bars' as const,
+    hunkSeparators: 'line-info' as const,
+    lineDiffType: 'none' as const,
+    overflow: 'scroll' as const,
+    themeType: theme as 'light' | 'dark' | 'system',
+    unsafeCSS: PIERRE_DIFF_CSS,
+  }
 
   return (
-    <div className="rounded-md font-mono text-[12px] leading-relaxed overflow-x-auto bg-zinc-900 dark:bg-zinc-950">
-      {/* 删除行 */}
-      {oldLines.length > 0 && oldStr && (
-        <div>
-          {oldLines.map((line, i) => (
-            <div
-              key={`del-${i}`}
-              className="flex bg-red-500/10"
-            >
-              <span className="shrink-0 w-10 text-right pr-3 select-none text-red-400/60 text-[11px]">
-                -
-              </span>
-              <span className={cn('flex-1 whitespace-pre-wrap break-all text-red-300')}>
-                {line || '\u200B'}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-      {/* 新增行 */}
-      {newLines.length > 0 && newStr && (
-        <div>
-          {newLines.map((line, i) => (
-            <div
-              key={`add-${i}`}
-              className="flex bg-green-500/10"
-            >
-              <span className="shrink-0 w-10 text-right pr-3 select-none text-green-400/60 text-[11px]">
-                +
-              </span>
-              <span className={cn('flex-1 whitespace-pre-wrap break-all text-green-300')}>
-                {line || '\u200B'}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
+    <div className="rounded-md overflow-hidden bg-content-area max-h-[400px] overflow-y-auto">
+      <MultiFileDiff oldFile={oldFile} newFile={newFile} options={options} />
     </div>
   )
 }

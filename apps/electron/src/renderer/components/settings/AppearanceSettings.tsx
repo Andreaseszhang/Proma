@@ -42,6 +42,14 @@ import proma8bitLogo from '@/assets/bots/proma-logos/proma-8bit.png'
 import promaCyberpunkLogo from '@/assets/bots/proma-logos/proma-cyberpunk.png'
 import promaFuturisticLogo from '@/assets/bots/proma-logos/proma-futuristic.png'
 
+// ===== 主题预览图片导入 =====
+import themeCloudDancer from '@/assets/theme-previews/theme-cloud-dancer.png'
+import themeOceanLight from '@/assets/theme-previews/theme-ocean-light.png'
+import themeForestMorning from '@/assets/theme-previews/theme-forest-morning.png'
+import themeOceanDark from '@/assets/theme-previews/theme-ocean-dark.png'
+import themeForestNight from '@/assets/theme-previews/theme-forest-night.png'
+import themeMorandiNight from '@/assets/theme-previews/theme-morandi-night.png'
+
 /** 主题选项 */
 const THEME_OPTIONS = [
   { value: 'light', label: '浅色' },
@@ -55,11 +63,12 @@ interface SpecialStyle {
   id: ThemeStyle
   name: string
   variant: 'light' | 'dark'
-  /** 预览色 */
-  preview: {
-    left: string   // 左侧色块（侧边栏）
-    right: string  // 右侧色块（主背景）
-  }
+  /** 主题预览图 */
+  image: string
+  /** 图片裁剪位置（默认居中） */
+  objectPosition?: string
+  /** 图片缩放比例（默认 1） */
+  imageScale?: number
 }
 
 const SPECIAL_STYLES: SpecialStyle[] = [
@@ -67,37 +76,39 @@ const SPECIAL_STYLES: SpecialStyle[] = [
     id: 'slate-light',
     name: '云朵舞者',
     variant: 'light',
-    preview: { left: '#e8e6e2', right: '#f0efec' },
+    image: themeCloudDancer,
+    imageScale: 1.2,
   },
   {
     id: 'ocean-light',
     name: '晴空碧海',
     variant: 'light',
-    preview: { left: '#c9dded', right: '#e2edf5' },
+    image: themeOceanLight,
   },
   {
     id: 'forest-light',
     name: '森息晨光',
     variant: 'light',
-    preview: { left: '#e2e9e4', right: '#3f8361' },
+    image: themeForestMorning,
   },
   {
     id: 'ocean-dark',
     name: '苍穹暮色',
     variant: 'dark',
-    preview: { left: '#1a2535', right: '#3a6a9b' },
+    image: themeOceanDark,
   },
   {
     id: 'forest-dark',
     name: '森息夜语',
     variant: 'dark',
-    preview: { left: '#1b2721', right: '#185337' },
+    image: themeForestNight,
   },
   {
     id: 'slate-dark',
     name: '莫兰迪夜',
     variant: 'dark',
-    preview: { left: '#272429', right: '#c9a89e' },
+    image: themeMorandiNight,
+    objectPosition: '60% center',
   },
 ]
 
@@ -325,7 +336,7 @@ function IconCard({
   )
 }
 
-/** 特殊风格卡片 - 交叠圆圈预览 */
+/** 特殊风格卡片 - 竖长条图片预览 */
 function StyleCard({
   style,
   isSelected,
@@ -336,35 +347,40 @@ function StyleCard({
   onSelect: () => void
 }): React.ReactElement {
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      className={cn(
-        'relative flex flex-col items-center gap-2 rounded-lg p-3 transition-all',
-        isSelected && 'shadow-lg shadow-primary/20 bg-card'
-      )}
-    >
-      {/* 交叠圆圈预览 */}
-      <div className="relative w-14 h-10">
-        {/* 左圆 */}
-        <div
-          className="absolute left-0 top-1/2 -translate-y-1/2 size-10 rounded-full"
-          style={{ backgroundColor: style.preview.left }}
+    <div className="flex flex-col items-center gap-1.5">
+      <button
+        type="button"
+        onClick={onSelect}
+        className={cn(
+          'relative rounded-lg transition-all overflow-hidden',
+          'w-[90px] h-[260px]',
+          isSelected
+            ? 'ring-2 ring-primary shadow-lg shadow-primary/20'
+            : 'ring-1 ring-border/50 hover:ring-border'
+        )}
+      >
+        <img
+          src={style.image}
+          alt={style.name}
+          className="w-full h-full object-cover"
+          style={{
+            ...(style.objectPosition ? { objectPosition: style.objectPosition } : {}),
+            ...(style.imageScale ? { transform: `scale(${style.imageScale})` } : {}),
+          }}
+          draggable={false}
         />
-        {/* 右圆（叠在上面） */}
-        <div
-          className="absolute right-0 top-1/2 -translate-y-1/2 size-10 rounded-full"
-          style={{ backgroundColor: style.preview.right }}
-        />
-      </div>
-      {/* 名称 */}
-      <span className="text-xs font-medium">{style.name}</span>
-      {/* 选中标记 */}
-      {isSelected && (
-        <div className="absolute top-1 right-1 size-4 rounded-full bg-primary flex items-center justify-center">
-          <Check className="size-2.5 text-primary-foreground" />
-        </div>
-      )}
-    </button>
+        {isSelected && (
+          <div className="absolute top-1 right-1 size-4 rounded-full bg-primary flex items-center justify-center">
+            <Check className="size-2.5 text-primary-foreground" />
+          </div>
+        )}
+      </button>
+      <span className={cn(
+        'text-sm font-medium',
+        style.variant === 'dark' ? 'text-white' : 'text-foreground'
+      )}>
+        {style.name}
+      </span>
+    </div>
   )
 }

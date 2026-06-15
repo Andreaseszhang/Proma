@@ -33,7 +33,7 @@ import {
   automationToDraft,
   type AutomationDraft,
 } from '@/atoms/automation-atoms'
-import { agentWorkspacesAtom, agentSessionsAtom, agentChannelIdsAtom } from '@/atoms/agent-atoms'
+import { agentWorkspacesAtom, agentSessionsAtom, agentChannelIdsAtom, currentAgentWorkspaceIdAtom } from '@/atoms/agent-atoms'
 import { activeSessionIdAtom } from '@/atoms/tab-atoms'
 import { activeViewAtom } from '@/atoms/active-view'
 import { settingsOpenAtom, settingsTabAtom } from '@/atoms/settings-tab'
@@ -49,7 +49,6 @@ import type {
   UpdateAutomationInput,
 } from '@proma/shared'
 
-const NO_WORKSPACE = '__none__'
 const NO_FEISHU_BINDING = '__none__'
 
 function formatTime(ts?: number): string {
@@ -198,6 +197,7 @@ export function AutomationFormView(): React.ReactElement | null {
   const agentChannelIds = useAtomValue(agentChannelIdsAtom)
   const [agentSessions, setAgentSessions] = useAtom(agentSessionsAtom)
   const activeSessionId = useAtomValue(activeSessionIdAtom)
+  const currentAgentWorkspaceId = useAtomValue(currentAgentWorkspaceIdAtom)
   const setActiveView = useSetAtom(activeViewAtom)
   const setSettingsOpen = useSetAtom(settingsOpenAtom)
   const setSettingsTab = useSetAtom(settingsTabAtom)
@@ -229,6 +229,18 @@ export function AutomationFormView(): React.ReactElement | null {
         : ''
     }
   }, [formState.open, formState.draft])
+
+  // 新建模式下若 workspaceId 为空，按优先级填入默认值：
+  // 1. 当前 Agent 模式选中的工作区（≈ 当前会话所在工作区）
+  // 2. 第一个工作区（fallback）
+  // 编辑模式不动；用户已显式选过的也不覆盖。
+  React.useEffect(() => {
+    if (!formState.open || !form || form.id || form.workspaceId) return
+    const fallback = currentAgentWorkspaceId ?? workspaces[0]?.id
+    if (fallback) {
+      setForm((prev) => (prev && !prev.id && !prev.workspaceId ? { ...prev, workspaceId: fallback } : prev))
+    }
+  }, [formState.open, form?.id, form?.workspaceId, currentAgentWorkspaceId, workspaces])
 
   React.useEffect(() => {
     if (!formState.open) return
@@ -767,21 +779,37 @@ export function AutomationFormView(): React.ReactElement | null {
             )}
           </div>
 
-          {/* 工作区 */}
+          {/* 工作区（必选，默认填入当前会话所在工作区） */}
           <div className="flex flex-col gap-2">
             <Label>工作区</Label>
-            <Select
-              value={form.workspaceId ?? NO_WORKSPACE}
-              onValueChange={(v) => update({ workspaceId: v === NO_WORKSPACE ? undefined : v })}
-            >
-              <SelectTrigger><SelectValue placeholder="选择工作区" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NO_WORKSPACE}>无工作区</SelectItem>
-                {workspaces.map((ws) => (
-                  <SelectItem key={ws.id} value={ws.id}>{ws.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {workspaces.length === 0 ? (
+              <div className="flex items-center gap-2 rounded-md border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-sm text-amber-700 dark:text-amber-400">
+                <Settings size={14} className="shrink-0" />
+                <span>尚未创建任何工作区</span>
+                <button
+                  type="button"
+                  className="ml-auto text-xs underline underline-offset-2 hover:text-foreground transition-colors"
+                  onClick={() => {
+                    setSettingsTab('agent')
+                    setSettingsOpen(true)
+                  }}
+                >
+                  前往 Agent 设置
+                </button>
+              </div>
+            ) : (
+              <Select
+                value={form.workspaceId ?? ''}
+                onValueChange={(v) => update({ workspaceId: v })}
+              >
+                <SelectTrigger><SelectValue placeholder="选择工作区" /></SelectTrigger>
+                <SelectContent>
+                  {workspaces.map((ws) => (
+                    <SelectItem key={ws.id} value={ws.id}>{ws.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
 
           {/* 飞书通知 */}

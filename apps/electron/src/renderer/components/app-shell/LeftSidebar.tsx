@@ -11,7 +11,8 @@
 import * as React from 'react'
 import { useAtom, useSetAtom, useAtomValue, useStore } from 'jotai'
 import { toast } from 'sonner'
-import { Pin, PinOff, Settings, Plus, Trash2, Pencil, Plug, Zap, PanelLeftClose, PanelLeftOpen, ArrowRightLeft, Search, Archive, ArchiveRestore, ArrowLeft, Bot, MessageSquare, MoreHorizontal, FolderOpen, GripVertical, Clock, AlarmClock, ChevronRight } from 'lucide-react'
+import { Pin, PinOff, Settings, Plus, Trash2, Pencil, Plug, Zap, PanelLeftClose, PanelLeftOpen, ArrowRightLeft, Search, Archive, ArchiveRestore, ArrowLeft, Bot, MessageSquare, MoreHorizontal, FolderOpen, GripVertical, Clock, AlarmClock, ChevronRight, CheckCircle2, MessageCircleQuestion } from 'lucide-react'
+import { Spinner } from '@/components/ui/spinner'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { ModeSwitcher } from './ModeSwitcher'
@@ -1805,7 +1806,6 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
                         active={session.id === activeSessionId}
                         indicatorStatus={agentIndicatorMap.get(session.id) ?? 'idle'}
                         showPinIcon={false}
-                        leftAccent={getSessionLeftAccent(agentIndicatorMap.get(session.id) ?? 'idle')}
                         workspaceName={session.workspaceId ? workspaceNameMap.get(session.workspaceId) : undefined}
                         relativeTimeNow={relativeTimeNow}
                         onSelect={handleSelectAgentSession}
@@ -1957,7 +1957,6 @@ export function LeftSidebar({ width }: LeftSidebarProps): React.ReactElement {
                         active={session.id === activeSessionId}
                         indicatorStatus={agentIndicatorMap.get(session.id) ?? 'idle'}
                         showPinIcon={!!session.pinned}
-                        leftAccent={getSessionLeftAccent(agentIndicatorMap.get(session.id) ?? 'idle')}
                         workspaceName={session.workspaceId ? workspaceNameMap.get(session.workspaceId) : undefined}
                         relativeTimeNow={relativeTimeNow}
                         onSelect={handleSelectAgentSession}
@@ -2415,25 +2414,23 @@ const ConversationItem = React.memo(function ConversationItem({
 
 // ===== Agent 会话列表项 =====
 
-/** 会话行左侧状态条的颜色 — 与 SessionIndicatorStatus 呼应 */
-type SessionLeftAccent = 'orange' | 'blue' | 'green'
-const SESSION_ACCENT_ROW_CLASS: Record<SessionLeftAccent, string> = {
-  orange: 'bg-orange-500/[0.08] text-foreground font-medium',
-  blue: 'text-foreground font-medium hover:bg-foreground/[0.03]',
-  green: 'text-foreground font-medium hover:bg-foreground/[0.03]',
-}
-
-const SESSION_ACCENT_INDICATOR_CLASS: Record<SessionLeftAccent, string> = {
-  orange: 'bg-orange-500',
-  blue: 'bg-blue-500',
-  green: 'bg-green-500',
-}
-
-function getSessionLeftAccent(status: SessionIndicatorStatus): SessionLeftAccent | undefined {
-  if (status === 'blocked') return 'orange'
-  if (status === 'running') return 'blue'
-  if (status === 'completed') return 'green'
-  return undefined
+/**
+ * 会话行左侧状态图标 — 用图标替代颜色编码
+ * - running:   3x3 网格 Spinner（与主界面 Agent Running 一致）
+ * - completed: 圆圈对勾
+ * - blocked:   带问号的会话气泡（AskUserQuestion 提示）
+ */
+function renderSessionStatusIcon(status: SessionIndicatorStatus): React.ReactElement | null {
+  if (status === 'running') {
+    return <Spinner className="text-[12px] text-muted-foreground" aria-label="运行中" />
+  }
+  if (status === 'completed') {
+    return <CheckCircle2 size={15} className="text-muted-foreground" aria-label="已完成" />
+  }
+  if (status === 'blocked') {
+    return <MessageCircleQuestion size={15} className="text-muted-foreground" aria-label="等待回应" />
+  }
+  return null
 }
 
 interface AgentSessionItemProps {
@@ -2441,8 +2438,6 @@ interface AgentSessionItemProps {
   active: boolean
   indicatorStatus: SessionIndicatorStatus
   showPinIcon?: boolean
-  /** 行左侧状态色块；未传则不显示 */
-  leftAccent?: SessionLeftAccent
   /** 是否禁用悬浮 Mini 地图 */
   disableMiniMap?: boolean
   /** 项目名称 Badge（跨项目列表时显示） */
@@ -2462,7 +2457,6 @@ const AgentSessionItem = React.memo(function AgentSessionItem({
   active,
   indicatorStatus,
   showPinIcon,
-  leftAccent,
   disableMiniMap,
   workspaceName,
   relativeTimeNow,
@@ -2513,6 +2507,7 @@ const AgentSessionItem = React.memo(function AgentSessionItem({
   }
 
   const canMove = indicatorStatus === 'idle' || indicatorStatus === 'completed'
+  const statusIcon = renderSessionStatusIcon(indicatorStatus)
 
   const menuItems = (
     MenuItem: typeof ContextMenuItem | typeof DropdownMenuItem,
@@ -2560,23 +2555,16 @@ const AgentSessionItem = React.memo(function AgentSessionItem({
             startEdit()
           }}
           className={cn(
-            'group relative w-full flex items-center gap-1.5 rounded-md py-1 pl-2.5 pr-1.5 transition-colors duration-100 titlebar-no-drag text-left',
+            'group relative flex items-center gap-1.5 rounded-md py-1 pl-2.5 pr-1.5 mx-1 transition-colors duration-100 titlebar-no-drag text-left',
             active && 'agent-session-item-active',
-            leftAccent
-              ? SESSION_ACCENT_ROW_CLASS[leftAccent]
-              : 'hover:bg-foreground/[0.03]',
-            // 选中态背景：浅色叠加深色变深、深色叠加浅色变浅，自动适配主题。
-            // orange accent 自带橙色底色，不再叠加，避免视觉过重。
-            active && leftAccent !== 'orange' && 'bg-foreground/[0.08]',
+            'hover:bg-foreground/[0.03]',
+            active && 'bg-foreground/[0.08] text-foreground font-medium',
           )}
         >
-          {(leftAccent || active) && (
-            <span
-              className={cn(
-                'absolute inset-y-0 left-0 w-[3px] rounded-l-md pointer-events-none',
-                leftAccent ? SESSION_ACCENT_INDICATOR_CLASS[leftAccent] : 'bg-primary',
-              )}
-            />
+          {statusIcon && (
+            <span className="absolute inset-y-0 -left-5 flex items-center justify-center w-5 pointer-events-none">
+              {statusIcon}
+            </span>
           )}
           <div className="flex-1 min-w-0">
             {editing ? (
@@ -2929,7 +2917,6 @@ const AgentProjectGroupItem = React.memo(function AgentProjectGroupItem({
                   active={session.id === activeSessionId}
                   indicatorStatus={agentIndicatorMap.get(session.id) ?? 'idle'}
                   showPinIcon={!!session.pinned}
-                  leftAccent={getSessionLeftAccent(agentIndicatorMap.get(session.id) ?? 'idle')}
                   relativeTimeNow={relativeTimeNow}
                   onSelect={onSelectSession}
                   onRequestDelete={onRequestDelete}

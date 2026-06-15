@@ -95,15 +95,6 @@ export function TabBarItem({
   }
 
   const isScratch = type === 'scratch'
-  const indicatorColor = isScratch
-    ? undefined
-    : isStreaming !== 'idle'
-    ? isStreaming === 'completed'
-      ? 'border-green-500'
-      : isStreaming === 'blocked'
-        ? 'border-orange-500'
-        : 'border-blue-500'
-    : undefined
   const previewItems = minimapCache.get(id) ?? []
   // 当前 active Tab 不显示预览面板
   const showPreview = isHovered && !isActive
@@ -197,17 +188,6 @@ export function TabBarItem({
         >
           <X className="size-2.5" />
         </span>
-        )}
-
-        {/* 状态包边 */}
-        {indicatorColor && (
-          <span
-            className={cn(
-              'absolute inset-0 rounded-t-lg border-t-2 border-l-2 border-r-2 border-b-0 pointer-events-none',
-              indicatorColor,
-            )}
-            aria-hidden="true"
-          />
         )}
       </button>
 

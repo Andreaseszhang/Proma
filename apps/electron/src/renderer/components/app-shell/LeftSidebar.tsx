@@ -11,7 +11,7 @@
 import * as React from 'react'
 import { useAtom, useSetAtom, useAtomValue, useStore } from 'jotai'
 import { toast } from 'sonner'
-import { Pin, PinOff, Settings, Plus, Trash2, Pencil, Plug, Zap, PanelLeftClose, PanelLeftOpen, ArrowRightLeft, Search, Archive, ArchiveRestore, ArrowLeft, Bot, MessageSquare, MoreHorizontal, FolderOpen, GripVertical, Clock, AlarmClock, ChevronRight, CheckCircle2, MessageCircleQuestion } from 'lucide-react'
+import { Pin, PinOff, Settings, Plus, Trash2, Pencil, Plug, Zap, PanelLeftClose, PanelLeftOpen, ArrowRightLeft, Search, Archive, ArchiveRestore, ArrowLeft, Bot, MessageSquare, MoreHorizontal, FolderOpen, GripVertical, Clock, AlarmClock, ChevronRight, Circle, Check } from 'lucide-react'
 import { Spinner } from '@/components/ui/spinner'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
@@ -2417,18 +2417,25 @@ const ConversationItem = React.memo(function ConversationItem({
 /**
  * 会话行左侧状态图标 — 用图标替代颜色编码
  * - running:   3x3 网格 Spinner（与主界面 Agent Running 一致）
- * - completed: 圆圈对勾
- * - blocked:   带问号的会话气泡（AskUserQuestion 提示）
+ * - completed: 反色填充圆 + 背景色对勾
+ * - blocked:   反色填充会话气泡 + 背景色问号
  */
 function renderSessionStatusIcon(status: SessionIndicatorStatus): React.ReactElement | null {
   if (status === 'running') {
-    return <Spinner className="text-[12px] text-muted-foreground" aria-label="运行中" />
+    return <Spinner className="text-[14px] text-muted-foreground" aria-label="运行中" />
   }
   if (status === 'completed') {
-    return <CheckCircle2 size={15} className="text-muted-foreground" aria-label="已完成" />
+    return (
+      <span className="relative inline-flex items-center justify-center text-muted-foreground" aria-label="已完成">
+        <Circle size={17} fill="currentColor" strokeWidth={0} />
+        <Check size={11} strokeWidth={4} className="absolute text-background" aria-hidden />
+      </span>
+    )
   }
   if (status === 'blocked') {
-    return <MessageCircleQuestion size={15} className="text-muted-foreground" aria-label="等待回应" />
+    return (
+      <span className="inline-flex items-center justify-center font-bold text-muted-foreground text-[17px] leading-none" aria-label="等待回应">?</span>
+    )
   }
   return null
 }
@@ -2508,6 +2515,8 @@ const AgentSessionItem = React.memo(function AgentSessionItem({
 
   const canMove = indicatorStatus === 'idle' || indicatorStatus === 'completed'
   const statusIcon = renderSessionStatusIcon(indicatorStatus)
+  // 加粗 + 全 foreground：选中态、completed、blocked 三种情况下视觉权重提升
+  const emphasized = active || indicatorStatus === 'completed' || indicatorStatus === 'blocked'
 
   const menuItems = (
     MenuItem: typeof ContextMenuItem | typeof DropdownMenuItem,
@@ -2558,7 +2567,8 @@ const AgentSessionItem = React.memo(function AgentSessionItem({
             'group relative flex items-center gap-1.5 rounded-md py-1 pl-2.5 pr-1.5 mx-1 transition-colors duration-100 titlebar-no-drag text-left',
             active && 'agent-session-item-active',
             'hover:bg-foreground/[0.03]',
-            active && 'bg-foreground/[0.08] text-foreground font-medium',
+            emphasized && 'text-foreground font-medium',
+            active && 'bg-foreground/[0.08]',
           )}
         >
           {statusIcon && (
@@ -2581,7 +2591,7 @@ const AgentSessionItem = React.memo(function AgentSessionItem({
             ) : (
               <div className={cn(
                 'truncate text-[13px] leading-[18px] flex items-center gap-1.5',
-                active ? 'text-foreground' : 'text-foreground/80'
+                emphasized ? 'text-foreground' : 'text-foreground/80'
               )}>
                 {showPinIcon && (
                   <Pin size={11} className="flex-shrink-0 text-primary/60" />

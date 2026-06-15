@@ -40,7 +40,7 @@
 .theme-forest-dark ::selection,
 .theme-forest-dark ::-moz-selection {
   background-color: hsl(var(--accent-foreground) / 0.75);
-  color: hsl(var(--background));
+  color: hsl(var(--primary));
 }
 
 .theme-slate-dark ::selection,
@@ -66,7 +66,7 @@
     --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05), 0 1px 1px 0 rgb(0 0 0 / 0.04);
     --shadow-md: 0 4px 8px -2px rgb(0 0 0 / 0.08), 0 2px 4px -1px rgb(0 0 0 / 0.05), 0 0 0 1px rgb(0 0 0 / 0.04);
     --shadow-lg: 0 12px 24px -6px rgb(0 0 0 / 0.12), 0 4px 8px -2px rgb(0 0 0 / 0.06), 0 0 0 1px rgb(0 0 0 / 0.04);
-    --shadow-xl: 0 24px 48px -12px rgb(0 0 0 / 0.18), 0 12px 24px -6px rgb(0 0 0 / 0.08), 0 0 0 1px rgb(0 0 0 / 0.05);
+    --shadow-xl: 0 16px 32px -10px rgb(0 0 0 / 0.12), 0 8px 16px -4px rgb(0 0 0 / 0.05), 0 0 0 1px rgb(0 0 0 / 0.04);
   }
 
   .dark {
@@ -74,7 +74,7 @@
     --shadow-sm: 0 1px 3px 0 rgb(0 0 0 / 0.5), inset 0 1px 0 0 hsl(0 0% 100% / 0.03);
     --shadow-md: 0 6px 16px -4px rgb(0 0 0 / 0.55), 0 2px 4px 0 rgb(0 0 0 / 0.35), inset 0 1px 0 0 hsl(0 0% 100% / 0.04);
     --shadow-lg: 0 16px 32px -8px rgb(0 0 0 / 0.6), 0 6px 12px -2px rgb(0 0 0 / 0.4), inset 0 1px 0 0 hsl(0 0% 100% / 0.05);
-    --shadow-xl: 0 32px 64px -16px rgb(0 0 0 / 0.7), 0 16px 32px -8px rgb(0 0 0 / 0.5), inset 0 1px 0 0 hsl(0 0% 100% / 0.06);
+    --shadow-xl: 0 22px 44px -14px rgb(0 0 0 / 0.5), 0 10px 20px -6px rgb(0 0 0 / 0.32), inset 0 1px 0 0 hsl(0 0% 100% / 0.05);
   }
 
   :root {

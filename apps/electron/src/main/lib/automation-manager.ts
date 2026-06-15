@@ -109,12 +109,15 @@ export function computeNextRunAt(
       const targetDom = Number.isFinite(a.dayOfMonth) && a.dayOfMonth! >= 1 && a.dayOfMonth! <= 31
         ? a.dayOfMonth!
         : 1
-      const resolvedDom = Math.min(targetDom, daysInMonth(next.getFullYear(), next.getMonth()))
-      next.setDate(resolvedDom)
+      // 先重置到当月 1 号再设日，避免当前日期为 31 时进入短月自动溢出（如 3/31 setMonth(3) 会变 5/1）
+      next.setDate(1)
+      next.setDate(Math.min(targetDom, daysInMonth(next.getFullYear(), next.getMonth())))
       if (next.getTime() <= from) {
+        // 关键：先回到当月 1 号再 +1 月，否则若当前 getDate() 已落在该月最后一天（targetDom 被钳到 30/28），
+        // setMonth 仍会越过短月（如 1/31 → 3/3）。setDate(1) 后再前进月份才是稳定的。
+        next.setDate(1)
         next.setMonth(next.getMonth() + 1)
-        const nextLast = daysInMonth(next.getFullYear(), next.getMonth())
-        next.setDate(Math.min(targetDom, nextLast))
+        next.setDate(Math.min(targetDom, daysInMonth(next.getFullYear(), next.getMonth())))
       }
       result = next.getTime()
     } else {

@@ -591,7 +591,7 @@ export function AutomationFormView(): React.ReactElement | null {
             <div className="flex flex-col gap-0.5">
               <Label htmlFor="auto-active">启用</Label>
               <span className="text-xs text-muted-foreground">
-                {isReadyToRun(form) ? '关闭后任务暂停调度' : '补全模型与工作区后方可启用'}
+                {isReadyToRun(form) ? '关闭后任务暂停调度' : `补全${listMissingFields(form).join('、')}后方可启用`}
               </span>
             </div>
             <Switch

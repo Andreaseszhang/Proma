@@ -2422,19 +2422,19 @@ const ConversationItem = React.memo(function ConversationItem({
  */
 function renderSessionStatusIcon(status: SessionIndicatorStatus): React.ReactElement | null {
   if (status === 'running') {
-    return <Spinner className="text-[14px] text-accent-foreground" aria-label="运行中" />
+    return <Spinner className="text-[16px] text-primary" aria-label="运行中" />
   }
   if (status === 'completed') {
     return (
-      <span className="relative inline-flex items-center justify-center text-accent-foreground" aria-label="已完成">
-        <Circle size={17} fill="currentColor" strokeWidth={0} />
-        <Check size={11} strokeWidth={4} className="absolute text-background" aria-hidden />
+      <span className="relative inline-flex items-center justify-center text-primary" aria-label="已完成">
+        <Circle size={19} fill="currentColor" strokeWidth={0} />
+        <Check size={13} strokeWidth={4} className="absolute text-background" aria-hidden />
       </span>
     )
   }
   if (status === 'blocked') {
     return (
-      <span className="inline-flex items-center justify-center font-bold text-accent-foreground text-[17px] leading-none animate-pulse" aria-label="等待回应">?</span>
+      <span className="inline-flex items-center justify-center font-bold text-primary text-[19px] leading-none animate-pulse" aria-label="等待回应">?</span>
     )
   }
   return null
@@ -2567,7 +2567,6 @@ const AgentSessionItem = React.memo(function AgentSessionItem({
             'group relative flex items-center gap-1.5 rounded-md py-1 pl-2.5 pr-1.5 mx-1 transition-colors duration-100 titlebar-no-drag text-left',
             active && 'agent-session-item-active',
             'hover:bg-foreground/[0.03]',
-            emphasized && !active && 'bg-foreground/[0.04]',
             emphasized && 'text-foreground font-medium',
             active && 'bg-foreground/[0.08]',
           )}

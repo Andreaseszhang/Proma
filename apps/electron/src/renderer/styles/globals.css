@@ -40,7 +40,7 @@
 .theme-forest-dark ::selection,
 .theme-forest-dark ::-moz-selection {
   background-color: hsl(var(--accent-foreground) / 0.75);
-  color: hsl(var(--primary));
+  color: hsl(var(--foreground));
 }
 
 .theme-slate-dark ::selection,

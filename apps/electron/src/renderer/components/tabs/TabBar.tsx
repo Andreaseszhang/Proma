@@ -31,9 +31,9 @@ import {
 import { appModeAtom } from '@/atoms/app-mode'
 import { automationFormAtom } from '@/atoms/automation-atoms'
 import { tearOffPreviewToSplit } from '@/components/diff/preview-opener'
-import { TabBarItem } from './TabBarItem'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { TabBarItem } from './TabBarItem'
 import { useCloseTab } from '@/hooks/useCloseTab'
 import { detectIsWindows } from '@/lib/platform'
 import { registerShortcut } from '@/lib/shortcut-registry'
@@ -208,19 +208,21 @@ function TabBarInner({
   const fadeTimerRef = React.useRef<ReturnType<typeof setTimeout>>()
   const isWindows = React.useMemo(() => detectIsWindows(), [])
 
-  // 文件面板切换（全局共享）：活动 Tab 是 Agent 且面板关闭时，在 TabBar 右上角展示"打开"按钮，
-  // 与文件面板打开时的关闭按钮（DiffPanelTabBar.PanelRightClose）位置完全对齐，避免跳变。
+  // 文件面板切换（全局共享）：活动 Tab 是 Agent 且面板关闭时，在 TabBar 右上角展示"打开"按钮。
+  // 该按钮的 absolute 定位与 DiffPanelTabBar.PanelRightClose 的 mr-1 mb-[3px] 坐标耦合，
+  // 若右侧关闭按钮样式变化，这里需同步调整。
   const [isPanelOpen, setSidePanelOpen] = useAtom(agentSidePanelOpenAtom)
-  const filesVersion = useAtomValue(workspaceFilesVersionAtom)
-  const hasFileChanges = filesVersion > 0
+  const activeTab = React.useMemo(() => tabs.find((t) => t.id === activeTabId), [tabs, activeTabId])
+  const showOpenPanelButton = !isPanelOpen && activeTab?.type === 'agent'
+
   const togglePanel = React.useCallback(() => {
+    if (activeTab?.type !== 'agent') return
     setSidePanelOpen((v) => !v)
-  }, [setSidePanelOpen])
+  }, [setSidePanelOpen, activeTab])
+
   React.useEffect(() => {
     return registerShortcut('toggle-right-panel', togglePanel)
   }, [togglePanel])
-  const activeTab = tabs.find((t) => t.id === activeTabId)
-  const showOpenPanelButton = !isPanelOpen && activeTab?.type === 'agent'
 
   // 滚动容器 ref
   const scrollRef = React.useRef<HTMLDivElement>(null)
@@ -399,33 +401,49 @@ function TabBarInner({
       {/* 打开文件面板按钮：与文件面板打开时的 PanelRightClose 同坐标，避免开/关之间按钮位置跳变。
           Windows 上需让出右上角 WindowControls 区域（126px）。 */}
       {showOpenPanelButton && (
-        <div
-          className={cn(
-            "absolute inset-y-0 z-10 flex items-end pb-[3px] titlebar-no-drag",
-            isWindows ? "right-[132px]" : "right-[9px]",
-          )}
-        >
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="relative h-7 w-7"
-                onClick={togglePanel}
-              >
-                <PanelRight className="size-3.5" />
-                {hasFileChanges && (
-                  <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-primary animate-pulse" />
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">
-              <p>打开文件面板 ({navigator.platform.includes('Mac') ? '⌘⇧B' : 'Ctrl+Shift+B'})</p>
-            </TooltipContent>
-          </Tooltip>
-        </div>
+        <AgentPanelOpenButton isWindows={isWindows} onToggle={togglePanel} />
       )}
+    </div>
+  )
+}
+
+/** 打开 Agent 文件面板按钮：独立订阅 workspaceFilesVersionAtom，避免文件变更时重渲染整个 TabBar。 */
+function AgentPanelOpenButton({
+  isWindows,
+  onToggle,
+}: {
+  isWindows: boolean
+  onToggle: () => void
+}): React.ReactElement {
+  const filesVersion = useAtomValue(workspaceFilesVersionAtom)
+  const hasFileChanges = filesVersion > 0
+
+  return (
+    <div
+      className={cn(
+        "absolute inset-y-0 z-10 flex items-end pb-[3px] titlebar-no-drag",
+        isWindows ? "right-[132px]" : "right-[9px]",
+      )}
+    >
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="relative h-7 w-7"
+            onClick={onToggle}
+          >
+            <PanelRight className="size-3.5" />
+            {hasFileChanges && (
+              <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-primary animate-pulse" />
+            )}
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom">
+          <p>打开文件面板 ({navigator.platform.includes('Mac') ? '⌘⇧B' : 'Ctrl+Shift+B'})</p>
+        </TooltipContent>
+      </Tooltip>
     </div>
   )
 }

@@ -2564,7 +2564,7 @@ const AgentSessionItem = React.memo(function AgentSessionItem({
             startEdit()
           }}
           className={cn(
-            'group relative flex items-center gap-1.5 rounded-md py-1 pl-2.5 pr-1.5 mx-1 transition-colors duration-100 titlebar-no-drag text-left',
+            'group relative w-full flex items-center gap-1.5 rounded-md py-1 pl-4 pr-1.5 mx-1 transition-colors duration-100 titlebar-no-drag text-left',
             active && 'agent-session-item-active',
             emphasized && 'text-foreground font-medium',
           )}

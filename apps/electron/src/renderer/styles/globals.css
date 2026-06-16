@@ -697,8 +697,11 @@
   border: 1px solid hsl(var(--border)) !important;
 }
 
-/* 滑块：点亮灯珠面板 — 密集双层灯珠 + 磷光外溢 + 电磁闪烁 */
-.theme-terminal-dark .mode-slider {
+/* 滑块：点亮灯珠面板 — 密集双层灯珠 + 磷光外溢 + 电磁闪烁
+ * 使用 .mode-switcher-track .mode-slider 提升特异性到 (0,3,0)，
+ * 防止文件末尾 [class*="rounded"] catch-all 同特异性后置覆盖 border-radius。
+ */
+.theme-terminal-dark .mode-switcher-track .mode-slider {
   background-color: hsl(100 40% 52%) !important;
   background-image:
     radial-gradient(circle, rgba(0,0,0,0.06) 1px, transparent 1px),
@@ -728,7 +731,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .theme-terminal-dark .mode-slider {
+  .theme-terminal-dark .mode-switcher-track .mode-slider {
     animation: none;
   }
 }
@@ -1780,13 +1783,14 @@
 /* 扫描线 — body::before 全屏 overlay
  * 1px 周期紧密排布 + 磷光暖色调暗线（非纯黑），纹理感远强于 2px 稀疏版；
  * 不透明度提到 0.18，颜色收敛后扫描线做纹理主力。
- * z-index: 9999 覆盖所有弹窗/预览/设置面板，全 app 统一 CRT 纹理。
+ * z-index: 100 高于主 UI 区（侧边栏 z-[60]），低于 portal 弹窗（z-[9999]），
+ * 让 DropdownMenu/ContextMenu/Dialog 内部文字保持清晰可读。
  */
 .theme-terminal-dark body::before {
   content: '';
   position: fixed;
   inset: 0;
-  z-index: 9999;
+  z-index: 100;
   pointer-events: none;
   background-image: repeating-linear-gradient(
     0deg,
@@ -1802,12 +1806,13 @@
 
 /* 屏幕暗角 — body::after
  * radial-gradient 从中心透明到边缘变暗，增加 CRT 纵深。
+ * 同样置于主 UI 之上、portal 之下，弹窗不被暗角拉低对比。
  */
 .theme-terminal-dark body::after {
   content: '';
   position: fixed;
   inset: 0;
-  z-index: 9999;
+  z-index: 100;
   pointer-events: none;
   background: radial-gradient(
     ellipse at center,
@@ -1835,32 +1840,25 @@
   100% { opacity: 0.98; }
 }
 
-/* 禁用动画时关闭屏闪 */
+/* 禁用动画时关闭屏闪、辉光、暗角
+ * prefers-reduced-motion 不只对应"动画"，也对应"视觉敏感"用户的整体诉求：
+ * 持续的辉光阴影、暗角 vignette 会让畏光/光敏感用户不适，一并移除。
+ */
 @media (prefers-reduced-motion: reduce) {
   .theme-terminal-dark body::before {
     animation: none;
   }
-}
-
-/* ===== CRT 水平同步抖动 =====
- * 全屏施加极微水平位偏（±0.4px），模拟 CRT 行同步不稳。
- */
-@keyframes crt-hsync-jitter {
-  0%, 100% { transform: translateX(0); }
-  20% { transform: translateX(0.3px); }
-  40% { transform: translateX(-0.2px); }
-  60% { transform: translateX(0.4px); }
-  80% { transform: translateX(-0.3px); }
-}
-
-.theme-terminal-dark #root {
-  animation: none;
-  will-change: transform;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .theme-terminal-dark #root {
-    animation: none;
+  .theme-terminal-dark body::after {
+    background: none;
+  }
+  .theme-terminal-dark .text-foreground,
+  .theme-terminal-dark [class*="text-foreground"],
+  .theme-terminal-dark .crt-sidebar .text-foreground,
+  .theme-terminal-dark .crt-sidebar [class*="text-foreground"],
+  .theme-terminal-dark .model-selector-trigger,
+  .theme-terminal-dark .text-primary,
+  .theme-terminal-dark [class*="text-primary"] {
+    text-shadow: none;
   }
 }
 
@@ -1901,11 +1899,9 @@
   backdrop-filter: none !important;
 }
 
-/* 全局：干掉所有 rounded-full 圆角（icon 按钮、send 按钮等） */
-.theme-terminal-dark .rounded-full,
-.theme-terminal-dark [class*="rounded-full"] {
-  border-radius: 0 !important;
-}
+/* 全局：所有圆角统一直角化由文件末尾 [class*="rounded"] catch-all 兜底，
+ * 此处无需单独为 rounded-full 重复一条规则。
+ */
 
 /* 设置卡片：去掉背景和阴影，用纯边框 */
 .theme-terminal-dark .settings-card {
@@ -1914,12 +1910,12 @@
   border: 1px solid hsl(var(--border)) !important;
 }
 
-/* 按钮：去掉阴影，disabled 按钮更有指示性 */
+/* 按钮：去掉阴影 */
 .theme-terminal-dark button {
   box-shadow: none !important;
 }
 
-/* 默认（primary）按钮：变边框风格 */
+/* default variant 按钮（编译后 className 含 bg-primary）：变边框风格 */
 .theme-terminal-dark button.bg-primary {
   background: transparent !important;
   border: 1px solid hsl(var(--primary)) !important;
@@ -1931,18 +1927,13 @@
   color: hsl(var(--primary)) !important;
 }
 
-/* secondary 按钮：边框 + 微弱填充 */
+/* secondary variant 按钮：边框 + 微弱填充 */
 .theme-terminal-dark button.bg-secondary {
   background: transparent !important;
   border: 1px solid hsl(var(--border)) !important;
   color: hsl(var(--foreground)) !important;
 }
 .theme-terminal-dark button.bg-secondary:hover {
-  background: hsl(var(--muted)) !important;
-}
-
-/* ghost 按钮 hover 态减弱 */
-.theme-terminal-dark button[class*="ghost"]:hover {
   background: hsl(var(--muted)) !important;
 }
 
@@ -1985,10 +1976,10 @@
   }
 }
 
-/* InputToolbar 按钮强制直角 */
-.theme-terminal-dark [class*="InputToolbar"] button {
-  border-radius: 0 !important;
-}
+/* InputToolbar 按钮强制直角 — 由文件末尾 [class*="rounded"] catch-all 处理，
+ * 旧的 [class*="InputToolbar"] 选择器在 DOM 上无任何匹配（InputToolbarOverflow
+ * 组件不会把 "InputToolbar" 作为 className 输出），已移除。
+ */
 
 /* ===== CRT 终端：消息去气泡化 =====
  * 消息无圆角、无背景、紧凑间距，像终端 stdout 滚动记录。
@@ -2035,25 +2026,23 @@
 
 /* 设置分隔线 — 终端主题保持单线，不动 */
 
-/* ===== CRT 终端：空态终端欢迎屏 ===== */
-.theme-terminal-dark .welcome-empty-state > * {
-  display: none !important;
-}
-.theme-terminal-dark .welcome-empty-state::before {
-  content: 'PROMA — type a message to begin.';
-  white-space: pre;
-  color: hsl(var(--foreground));
-  font-family: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, monospace;
-  font-size: 15px;
-  line-height: 1.8;
-  text-align: center;
-  opacity: 0.85;
+/* ===== CRT 终端：空态欢迎屏 =====
+ * 不隐藏现有子元素（保留中文问候、Tip、Chat/Agent 切换 Tab 等核心功能），
+ * 仅通过 ::before 前缀和直角化让它显得像终端 prompt。
+ * 之前的「display: none 全部子元素 + 硬编码英文」会破坏 i18n 和功能可达性。
+ */
+.theme-terminal-dark .welcome-empty-state h1::before {
+  content: '> ';
+  color: hsl(var(--primary));
+  font-weight: 600;
 }
 
 /* ===== CRT 终端：全局直角化 =====
  * 匹配所有 Tailwind rounded- 类（rounded-xl、rounded-[Npx]、rounded-full 等），
- * 强制 border-radius: 0。catch-all 保证不遗漏任何圆角。
- * 模式切换器指示灯保留 2px 圆角（.mode-slider 选择器优先级更高）。
+ * 强制 border-radius: 0。Tailwind utility 的字面拼写决定了只能用 [class*="rounded"]
+ * 才能覆盖任意值变体，这是有意为之的脆弱性，可接受。
+ * 模式切换器指示灯需要保留 2px 圆角 —— 由 .mode-switcher-track .mode-slider
+ * (特异性 0,3,0) 显式覆盖本规则 (特异性 0,2,0)，避免同特异性后置覆盖。
  */
 .theme-terminal-dark [class*="rounded"] {
   border-radius: 0 !important;

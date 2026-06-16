@@ -2566,13 +2566,18 @@ const AgentSessionItem = React.memo(function AgentSessionItem({
           className={cn(
             'group relative flex items-center gap-1.5 rounded-md py-1 pl-2.5 pr-1.5 mx-1 transition-colors duration-100 titlebar-no-drag text-left',
             active && 'agent-session-item-active',
-            'hover:bg-foreground/[0.03]',
             emphasized && 'text-foreground font-medium',
-            active && 'bg-foreground/[0.08]',
           )}
         >
+          <span
+            className={cn(
+              'absolute inset-y-0 left-1.5 right-0 rounded-md pointer-events-none transition-colors',
+              active ? 'bg-foreground/[0.08]' : 'bg-transparent group-hover:bg-foreground/[0.03]',
+            )}
+            aria-hidden
+          />
           {statusIcon && (
-            <span className="absolute inset-y-0 -left-5 flex items-center justify-center w-5 pointer-events-none">
+            <span className="absolute inset-y-0 -left-3.5 flex items-center justify-center w-5 pointer-events-none">
               {statusIcon}
             </span>
           )}

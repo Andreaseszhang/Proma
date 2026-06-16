@@ -29,6 +29,12 @@ interface MentionSuggestionConfig<T> {
   renderItem: (item: T) => React.ReactNode
   /** 选中后传给 command 的 id 和 label */
   toCommand: (item: T) => { id: string; label: string }
+  /**
+   * 可选：根据当前 items 和 query 决定是否隐藏 popup。
+   * 返回 true 时 popup 仅 display:none，不销毁；query 变化后会重新评估，可恢复显示。
+   * 同时 mentionActiveRef/mentionItemCountRef 会被置 0，避免 Enter 键被 Mention 拦截。
+   */
+  shouldHidePopup?: (items: T[], query: string) => boolean
 }
 
 function createMentionSuggestion<T>(
@@ -72,14 +78,27 @@ function createMentionSuggestion<T>(
         renderer = null
       }
 
+      // 根据 shouldHidePopup 切换 popup 可见性，不销毁；同步 active/count ref 让 Enter 键路由正确
+      function applyVisibility(items: T[], query: string) {
+        if (!popup) return
+        const hide = config.shouldHidePopup?.(items, query) ?? false
+        if (hide) {
+          popup.style.display = 'none'
+          mentionActiveRef.current = false
+          mentionItemCountRef.current = 0
+        } else {
+          popup.style.display = ''
+          mentionActiveRef.current = true
+          mentionItemCountRef.current = items.length
+        }
+      }
+
       return {
         onStart(props) {
           if (popup || renderer) {
             cleanup()
           }
 
-          mentionActiveRef.current = true
-          mentionItemCountRef.current = props.items.length
           editorDom = props.editor.view.dom
           renderer = new ReactRenderer(MentionList, {
             props: {
@@ -96,6 +115,7 @@ function createMentionSuggestion<T>(
           })
           popup = createMentionPopup(renderer.element)
           positionPopup(popup, props.clientRect?.())
+          applyVisibility(props.items, props.query ?? '')
 
           blurHandler = () => {
             setTimeout(() => {
@@ -108,7 +128,6 @@ function createMentionSuggestion<T>(
         },
 
         onUpdate(props) {
-          mentionItemCountRef.current = props.items.length
           renderer?.updateProps({
             items: props.items,
             onSelect: (item: T) => {
@@ -117,9 +136,12 @@ function createMentionSuggestion<T>(
             },
           })
           positionPopup(popup, props.clientRect?.())
+          applyVisibility(props.items, props.query ?? '')
         },
 
         onKeyDown(props) {
+          // popup 被隐藏时让按键透传给编辑器（用户其实在打字而非选命令）
+          if (popup?.style.display === 'none') return false
           return renderer?.ref?.onKeyDown({ event: props.event }) ?? false
         },
 
@@ -138,6 +160,11 @@ export interface SkillMentionItem {
   name: string
   description?: string
 }
+
+/** Skill query 中 CJK 字符数超过此值就隐藏 popup（≤ 此值仍显示，没匹配时显示「无匹配 Skill」占位）。 */
+const SKILL_QUERY_CJK_VISIBLE_LIMIT = 8
+/** CJK：汉字（中日韩统一表意） + 日文平假名/片假名。韩文谚文暂不算（实际场景少且 skill 名通常英文）。 */
+const CJK_RANGE_REGEX = /[一-鿿぀-ゟ゠-ヿ]/g
 
 export function createSkillMentionSuggestion(
   workspaceSlugRef: React.RefObject<string | null>,
@@ -166,6 +193,12 @@ export function createSkillMentionSuggestion(
         </>
       ),
       toCommand: (item) => ({ id: item.id, label: item.name }),
+      // 中文 IME 输入正文时不应一直挡着：query 里 CJK 字符数 > 阈值 就隐藏 popup。
+      // ≤ 阈值时保持原行为（有匹配显示列表，无匹配显示"无匹配 Skill"占位）。
+      shouldHidePopup: (_items, query) => {
+        const cjkCount = query.match(CJK_RANGE_REGEX)?.length ?? 0
+        return cjkCount > SKILL_QUERY_CJK_VISIBLE_LIMIT
+      },
     },
     workspaceSlugRef,
     mentionActiveRef,

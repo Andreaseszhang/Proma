@@ -1937,27 +1937,7 @@
   background: hsl(var(--muted)) !important;
 }
 
-/* 终端提示符 — 在输入框左侧显示绿色 $ */
-.theme-terminal-dark .rich-text-input {
-  position: relative;
-}
-.theme-terminal-dark .rich-text-input::before {
-  content: '$';
-  position: absolute;
-  left: 12px;
-  top: 12px;
-  z-index: 1;
-  pointer-events: none;
-  color: hsl(var(--primary));
-  font-family: inherit;
-  font-size: 15px;
-  line-height: 1.6;
-  font-weight: 600;
-}
-/* 为 $ 提示符腾出空间 */
-.theme-terminal-dark .rich-text-input .ProseMirror {
-  padding-left: 28px !important;
-}
+/* 终端提示符 $ — 已移除，输入框保持默认 padding */
 
 /* 闪烁光标 — 暖磷光色块状光标，1s step-end 硬闪 */
 @keyframes terminal-cursor-blink {

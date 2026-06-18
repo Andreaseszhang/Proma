@@ -14,6 +14,7 @@
  */
 
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { useAtomValue } from 'jotai'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
@@ -26,6 +27,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils'
 import { lowlight } from '@/lib/lowlight'
 import { htmlToMarkdown } from '@/lib/markdown-rich-text'
+import { richTextInputRenderingEnabledAtom } from '@/atoms/ui-preferences'
 import { createFileMentionSuggestion } from '@/components/file-browser/file-mention-suggestion'
 import { createSkillMentionSuggestion, createMcpMentionSuggestion, createSessionMentionSuggestion } from '@/components/agent/mention-suggestions'
 import {
@@ -174,6 +176,10 @@ export function RichTextInput({
   // 发送模式引用
   const sendWithCmdEnterRef = useRef(sendWithCmdEnter)
   sendWithCmdEnterRef.current = sendWithCmdEnter
+  // 输入框 Markdown 渲染开关（用户偏好）：关闭后粘贴保留纯文本、禁用 TipTap input/paste rules
+  const markdownRenderingEnabled = useAtomValue(richTextInputRenderingEnabledAtom)
+  const markdownRenderingEnabledRef = useRef(markdownRenderingEnabled)
+  markdownRenderingEnabledRef.current = markdownRenderingEnabled
   // Mention 活跃状态（阻止 Enter 发送消息）
   const mentionActiveRef = useRef(false)
   // Mention 弹窗中的可选项数量（0 时 Enter 不阻塞发送）
@@ -225,6 +231,9 @@ export function RichTextInput({
   )
 
   const editor = useEditor({
+    // 关闭 Markdown 渲染时，禁用输入/粘贴的格式自动识别规则
+    enableInputRules: markdownRenderingEnabled,
+    enablePasteRules: markdownRenderingEnabled,
     extensions: [
       StarterKit.configure({
         codeBlock: false, // 使用 CodeBlockLowlight 替代
@@ -351,6 +360,33 @@ export function RichTextInput({
 
         const threshold = longTextPasteThresholdRef.current
         const plainText = event.clipboardData?.getData('text/plain') ?? ''
+
+        // 关闭 Markdown 渲染：直接插入原始纯文本，不做 HTML → Markdown 转换
+        if (!markdownRenderingEnabledRef.current) {
+          // 超长文本附件路径仍然生效（按纯文本长度判断）
+          if (
+            threshold &&
+            threshold > 0 &&
+            plainText.length >= threshold &&
+            onPasteLongTextRef.current
+          ) {
+            event.preventDefault()
+            onPasteLongTextRef.current(plainText)
+            return true
+          }
+          event.preventDefault()
+          // 按行拆分为多个 paragraph 节点（JSON 形式直接构造，绕开 HTML 解析的空白规范化）。
+          // 空行 → 空 paragraph，连续空格、缩进、空行全部保留。
+          const lines = plainText.replace(/\r\n?/g, '\n').split('\n')
+          const paragraphs = lines.map((line) => (
+            line.length > 0
+              ? { type: 'paragraph', content: [{ type: 'text', text: line }] }
+              : { type: 'paragraph' }
+          ))
+          editor?.chain().focus().insertContent(paragraphs).run()
+          return true
+        }
+
         const html = event.clipboardData?.getData('text/html') ?? ''
         // 预处理 HTML：将 <div> 替换为 <p>，避免 htmlToMarkdown 对 <div> 不分段导致换行丢失
         const text = html
@@ -502,7 +538,7 @@ export function RichTextInput({
         })
       }
     },
-  })
+  }, [markdownRenderingEnabled])
 
   // 卸载时取消未触发的 rAF 行数检查，避免泄漏 / 在卸载组件上 setState
   useEffect(() => {

@@ -226,6 +226,8 @@ export interface AppSettings {
   shortcutOverrides?: ShortcutOverrides
   /** 是否显示用户消息悬浮置顶条（默认 true） */
   stickyUserMessageEnabled?: boolean
+  /** 输入框是否渲染 Markdown（默认 true；关闭后粘贴保留纯文本、禁用输入快捷格式） */
+  richTextInputRenderingEnabled?: boolean
   /** Markdown 预览字号档位（默认 'medium'，对应 15px） */
   markdownFontSize?: MarkdownFontSize
   /** 上次是否在 Scratch Pad 页（用于重启恢复） */

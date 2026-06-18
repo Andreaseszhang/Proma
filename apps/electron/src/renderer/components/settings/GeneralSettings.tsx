@@ -40,6 +40,8 @@ import {
 import {
   stickyUserMessageEnabledAtom,
   updateStickyUserMessageEnabled,
+  richTextInputRenderingEnabledAtom,
+  updateRichTextInputRenderingEnabled,
 } from '@/atoms/ui-preferences'
 import { cn } from '@/lib/utils'
 import { Button } from '../ui/button'
@@ -61,6 +63,7 @@ export function GeneralSettings(): React.ReactElement {
   const [notificationSoundEnabled, setNotificationSoundEnabled] = useAtom(notificationSoundEnabledAtom)
   const [notificationSounds, setNotificationSounds] = useAtom(notificationSoundsAtom)
   const [stickyUserMessageEnabled, setStickyUserMessageEnabled] = useAtom(stickyUserMessageEnabledAtom)
+  const [richTextInputRenderingEnabled, setRichTextInputRenderingEnabled] = useAtom(richTextInputRenderingEnabledAtom)
   const [isEditingName, setIsEditingName] = React.useState(false)
   const [nameInput, setNameInput] = React.useState(userProfile.userName)
   const [showEmojiPicker, setShowEmojiPicker] = React.useState(false)
@@ -317,6 +320,15 @@ export function GeneralSettings(): React.ReactElement {
             onCheckedChange={(checked) => {
               setStickyUserMessageEnabled(checked)
               updateStickyUserMessageEnabled(checked)
+            }}
+          />
+          <SettingsToggle
+            label="输入框 Markdown 渲染"
+            description="关闭后，粘贴文本保留原始 Markdown 字符（如 **、# 等），不再实时渲染为富文本"
+            checked={richTextInputRenderingEnabled}
+            onCheckedChange={(checked) => {
+              setRichTextInputRenderingEnabled(checked)
+              updateRichTextInputRenderingEnabled(checked)
             }}
           />
         </SettingsCard>

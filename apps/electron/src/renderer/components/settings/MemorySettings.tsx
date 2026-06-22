@@ -261,7 +261,7 @@ function NowledgeMemSection(): React.ReactElement {
           <div className="space-y-2">
             <p className="text-xs font-medium text-foreground">第 2 步：执行第三步的配置提示词前请确认</p>
             <ul className="text-xs text-muted-foreground list-disc list-inside space-y-1">
-              <li>已下载并安装 Nowledge Mem 桌面客户端</li>
+              <li>已下载并安装 Nowledge Mem 桌面客户端（配置时无需登录或注册账号）</li>
               <li>已启动 Nowledge Mem，托盘 / Dock 中能看到运行图标</li>
               <li>Proma 已切换到 <span className="font-medium text-foreground">Agent 模式</span>（此提示词只能在 Agent 中执行）</li>
             </ul>

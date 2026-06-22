@@ -191,7 +191,8 @@ function NowledgeMemSection(): React.ReactElement {
           try {
             const caps = await window.electronAPI.getWorkspaceCapabilities(ws.slug)
             return caps.mcpServers.some((m) => m.name === 'nowledge-mem') ? ws.slug : null
-          } catch {
+          } catch (err) {
+            console.error('[Nowledge Mem] 检查工作区能力失败:', ws.slug, err)
             return null
           }
         }),

@@ -302,7 +302,7 @@ function NowledgeMemSection(): React.ReactElement {
               💡 平台支持：macOS、Linux 主流支持；Windows 用户需在 Git Bash + uv 环境中尝试（实验性，未经 Nowledge 官方验证）
             </p>
             <p className="text-xs text-muted-foreground">
-              配置过程遇到问题？查看{' '}
+              📖 配置过程遇到问题？查看{' '}
               <a
                 href="https://mem.nowledge.co/zh/docs/integrations/proma"
                 target="_blank"

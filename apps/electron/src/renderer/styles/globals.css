@@ -202,7 +202,7 @@
     --dialog-foreground: 210 30% 15%;     /* #1b2632 弹窗前景 */
     --sidebar-surface: 205 35% 94%;
     --tabbar-surface: 205 35% 94%;
-    --input-surface: 60 14.3% 98.6%;
+    --input-surface: 205 32% 96%;
     --tab-surface: 205 30% 97%;
     --destructive: 0 84.2% 60.2%;         /* #ef4444 危险色 */
     --destructive-foreground: 0 0% 98%;   /* #fafafa 危险前景 */
@@ -284,7 +284,7 @@
     --dialog-foreground: 150 25% 15%;     /* #1d3026 弹窗前景 */
     --sidebar-surface: 140 25% 95%;
     --tabbar-surface: 140 25% 95%;
-    --input-surface: 60 14.3% 98.6%;
+    --input-surface: 140 20% 96%;
     --tab-surface: 140 20% 97%;
     --destructive: 0 72% 51%;             /* #dc2828 危险色 */
     --destructive-foreground: 0 0% 100%;  /* #ffffff 危险前景 */
@@ -370,7 +370,7 @@
     --dialog-foreground: 40 8% 18%;       /* #312f2a 弹窗前景 */
     --sidebar-surface: 40 6% 88%;
     --tabbar-surface: 40 6% 88%;
-    --input-surface: 60 14.3% 98.6%;
+    --input-surface: 40 8% 95%;
     --tab-surface: 40 8% 94%;
     /* 功能色 */
     --destructive: 0 65% 50%;             /* #d43c3c 危险色 */

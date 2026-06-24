@@ -45,8 +45,9 @@ import {
 import { useSmoothStream } from '@proma/ui'
 import { ScrollPositionManager } from '@/hooks/useScrollPositionMemory'
 import { useConversationParallelMode } from '@/hooks/useConversationSettings'
-import { getModelLogo, resolveModelProvider } from '@/lib/model-logo'
-import { userProfileAtom } from '@/atoms/user-profile'
+import { ModelMark, modelMarkReadableToneClass } from './ModelMark'
+import { getModelLineLogo } from '@/lib/model-line-logo'
+import { resolveModelProvider } from '@/lib/model-logo'
 import { channelsAtom } from '@/atoms/chat-atoms'
 import { tabMinimapCacheAtom } from '@/atoms/tab-atoms'
 import type { ChatMessage, ChatToolActivity } from '@proma/shared'
@@ -186,7 +187,6 @@ export function ChatMessages({
   onLoadMore,
   onImageEditComplete,
 }: ChatMessagesProps): React.ReactElement {
-  const userProfile = useAtomValue(userProfileAtom)
   const channels = useAtomValue(channelsAtom)
   const setMinimapCache = useSetAtom(tabMinimapCacheAtom)
 
@@ -244,10 +244,9 @@ export function ChatMessages({
   )
   const streamingLogo = React.useMemo(
     () => (
-      <img
-        src={getModelLogo(streamingModel ?? '', resolveModelProvider(streamingModel ?? '', channels))}
-        alt="AI"
-        className="size-[35px] rounded-[25%] object-cover"
+      <ModelMark
+        src={getModelLineLogo(streamingModel ?? '', resolveModelProvider(streamingModel ?? '', channels))}
+        className={`size-[35px] ${modelMarkReadableToneClass}`}
       />
     ),
     [streamingModel, channels]
@@ -317,10 +316,9 @@ export function ChatMessages({
       id: m.id,
       role: m.role as MinimapItem['role'],
       preview: m.content.slice(0, 200),
-      avatar: m.role === 'user' ? userProfile.avatar : undefined,
       model: m.model,
     })),
-    [messages, userProfile.avatar]
+    [messages]
   )
 
   // 同步 minimap 缓存到 Tab 级别（供 Tab hover 预览使用）

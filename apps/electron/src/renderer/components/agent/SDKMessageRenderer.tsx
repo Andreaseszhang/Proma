@@ -32,13 +32,11 @@ import {
   MessageResponse,
   UserMessageContent,
 } from '@/components/ai-elements/message'
-import { UserAvatar } from '@/components/chat/UserAvatar'
 import { CopyButton } from '@/components/chat/CopyButton'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { formatMessageTime } from '@/components/chat/ChatMessageItem'
 import { getModelLogo, resolveModelDisplayName, resolveModelProvider } from '@/lib/model-logo'
-import { userProfileAtom } from '@/atoms/user-profile'
 import { channelsAtom } from '@/atoms/chat-atoms'
 import { agentProcessGroupsKeepExpandedAtom, agentSessionPendingFilesAtom } from '@/atoms/agent-atoms'
 import { agentSessionsAtom } from '@/atoms/agent-atoms'
@@ -1070,7 +1068,6 @@ function ScheduledRunBadge(): React.ReactElement {
 }
 
 function UserInputMessage({ message }: { message: SDKUserMessage }): React.ReactElement {
-  const userProfile = useAtomValue(userProfileAtom)
   const rawText = extractUserText(message) ?? ''
   const isScheduledRun = rawText.includes(SCHEDULED_RUN_MARKER)
   const { files: attachedFiles, quotes, text } = parseAttachedFiles(stripScheduledRunMarker(rawText))
@@ -1108,23 +1105,17 @@ function UserInputMessage({ message }: { message: SDKUserMessage }): React.React
 
   return (
     <Message from="user">
-      <div className="flex items-start gap-2.5 mb-2.5">
-        <UserAvatar avatar={userProfile.avatar} size={35} />
-        <div className="flex flex-col justify-between h-[35px]">
-          <span className="text-sm font-semibold text-foreground/60 leading-none">{userProfile.userName}</span>
-          {(meta.createdAt || isScheduledRun) && (
-            <span className="flex items-center gap-2 leading-none">
-              {meta.createdAt && (
-                <span className="message-time text-[10px] text-foreground/[0.38]">{formatMessageTime(meta.createdAt)}</span>
-              )}
-              {isScheduledRun && (
-                <ScheduledRunBadge />
-              )}
-            </span>
-          )}
-        </div>
-      </div>
-      <MessageContent>
+      <MessageContent className="group/user-bubble">
+        {(meta.createdAt || isScheduledRun) && (
+          <div className="absolute -top-4 right-0 flex items-center gap-2 leading-none opacity-0 transition-opacity duration-150 group-hover/user-bubble:opacity-100">
+            {meta.createdAt && (
+              <span className="message-time text-[10px] text-foreground/[0.38]">{formatMessageTime(meta.createdAt)}</span>
+            )}
+            {isScheduledRun && (
+              <ScheduledRunBadge />
+            )}
+          </div>
+        )}
         {/* 引用文件 Chip */}
         {quotes.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-2">
@@ -1152,7 +1143,7 @@ function UserInputMessage({ message }: { message: SDKUserMessage }): React.React
         {text && <UserMessageContent>{text}</UserMessageContent>}
       </MessageContent>
       {text && (
-        <MessageActions className="pl-[46px] mt-0.5">
+        <MessageActions className="mt-0.5 self-end justify-end">
           <CopyButton content={text} />
         </MessageActions>
       )}

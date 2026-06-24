@@ -14,7 +14,6 @@ import remarkGfm from 'remark-gfm'
 import { AlertTriangle, Search } from 'lucide-react'
 import { useStickToBottomContext } from 'use-stick-to-bottom'
 import { Input } from '@/components/ui/input'
-import { UserAvatar } from '@/components/chat/UserAvatar'
 import { getModelLogo, resolveModelProvider } from '@/lib/model-logo'
 import { channelsAtom } from '@/atoms/chat-atoms'
 import { useShortcut } from '@/hooks/useShortcut'
@@ -486,9 +485,6 @@ export function ScrollMinimap({ items }: ScrollMinimapProps): React.ReactElement
 
 function ItemIcon({ item }: { item: MinimapItem }): React.ReactElement {
   const channels = useAtomValue(channelsAtom)
-  if (item.role === 'user' && item.avatar) {
-    return <UserAvatar avatar={item.avatar} size={16} className="mt-0.5" />
-  }
   if ((item.role === 'assistant') && item.model) {
     return (
       <img

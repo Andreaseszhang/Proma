@@ -33,10 +33,10 @@ import { CopyButton } from './CopyButton'
 import { MigrateToAgentButton } from './MigrateToAgentButton'
 import { DeleteMessageDialog } from './DeleteMessageDialog'
 import { InlineEditForm } from './InlineEditForm'
-import { UserAvatar } from './UserAvatar'
-import { getModelLogo, resolveModelDisplayName, resolveModelProvider } from '@/lib/model-logo'
-import { userProfileAtom } from '@/atoms/user-profile'
+import { AssistantModelAvatar } from './AssistantModelAvatar'
+import { resolveModelDisplayName } from '@/lib/model-logo'
 import { channelsAtom } from '@/atoms/chat-atoms'
+import { cn } from '@/lib/utils'
 import type { ChatMessage } from '@proma/shared'
 import type { InlineEditSubmitPayload } from './InlineEditForm'
 import { ChatToolActivityIndicator } from './ChatToolActivityIndicator'
@@ -113,7 +113,6 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
 }: ChatMessageItemProps): React.ReactElement {
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
   const [isDeleting, setIsDeleting] = React.useState(false)
-  const userProfile = useAtomValue(userProfileAtom)
   const channels = useAtomValue(channelsAtom)
 
   /** 确认删除消息 */
@@ -145,28 +144,17 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
           <MessageHeader
             model={message.model ? resolveModelDisplayName(message.model, channels) : undefined}
             time={formatMessageTime(message.createdAt)}
-            logo={
-              <img
-                src={getModelLogo(message.model ?? '', resolveModelProvider(message.model ?? '', channels))}
-                alt={message.model ?? 'AI'}
-                className="size-[35px] rounded-[25%] object-cover"
-              />
-            }
+            logo={<AssistantModelAvatar />}
           />
         )}
 
-        {/* user 头像 + 用户名 + 时间 */}
-        {message.role === 'user' && (
-          <div className="flex items-start gap-2.5 mb-2.5">
-            <UserAvatar avatar={userProfile.avatar} size={35} />
-            <div className="flex flex-col justify-between h-[35px]">
-              <span className="text-sm font-semibold text-foreground/60 leading-none">{userProfile.userName}</span>
-              <span className="message-time text-[10px] text-foreground/[0.38] leading-none">{formatMessageTime(message.createdAt)}</span>
-            </div>
-          </div>
-        )}
-
-        <MessageContent className={isInlineEditing ? 'w-full' : undefined}>
+        <MessageContent
+          className={cn(
+            message.role === 'user' && !isParallelMode && 'group/user-bubble',
+            isInlineEditing &&
+              'w-full max-w-full group-[.is-user]:max-w-full group-[.is-user]:self-stretch group-[.is-user]:items-stretch'
+          )}
+        >
           {message.role === 'assistant' ? (
             <>
               {/* 工具活动记录（历史消息） */}
@@ -216,6 +204,11 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
           ) : (
             /* 用户消息 - 附件 + 可折叠文本 / 原地编辑 */
             <>
+              {!isParallelMode && (
+                <div className="message-time absolute -top-4 right-0 text-[10px] leading-none text-foreground/[0.38] opacity-0 transition-opacity duration-150 group-hover/user-bubble:opacity-100">
+                  {formatMessageTime(message.createdAt)}
+                </div>
+              )}
               {!isInlineEditing && message.attachments && message.attachments.length > 0 && (
                 <MessageAttachments attachments={message.attachments} onImageEditComplete={onImageEditComplete} />
               )}
@@ -234,7 +227,14 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
 
         {/* 操作按钮（非 streaming 时显示，hover 时可见） */}
         {(message.content || message.error || (message.attachments && message.attachments.length > 0)) && !isStreaming && !isInlineEditing && (
-          <MessageActions className="pl-[46px] mt-0.5 min-h-[28px]">
+          <MessageActions
+            className={cn(
+              'mt-0.5 min-h-[28px]',
+              message.role === 'user' && !isParallelMode
+                ? 'self-end justify-end'
+                : 'pl-[46px]'
+            )}
+          >
             <CopyButton content={message.content} />
             {message.role === 'assistant' && conversationId && (
               <MigrateToAgentButton conversationId={conversationId} />

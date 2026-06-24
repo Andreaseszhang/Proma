@@ -11,9 +11,7 @@ import { useAtom, useAtomValue } from 'jotai'
 import Markdown, { type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { AlertTriangle, Bot, Loader2, MessageSquare } from 'lucide-react'
-import { UserAvatar } from '@/components/chat/UserAvatar'
 import { tabMinimapCacheAtom, type TabMinimapItem } from '@/atoms/tab-atoms'
-import { userProfileAtom } from '@/atoms/user-profile'
 import { getModelLogo, resolveModelProvider } from '@/lib/model-logo'
 import { channelsAtom } from '@/atoms/chat-atoms'
 import { cn } from '@/lib/utils'
@@ -178,19 +176,18 @@ function sdkBlockText(block: SDKContentBlock | SDKUserContentBlock): string {
   return ''
 }
 
-function buildChatMinimapItems(messages: ChatMessage[], userAvatar?: string): TabMinimapItem[] {
+function buildChatMinimapItems(messages: ChatMessage[]): TabMinimapItem[] {
   return messages
     .map((message) => ({
       id: message.id,
       role: message.role === 'user' ? 'user' as const : message.role === 'assistant' ? 'assistant' as const : 'status' as const,
       preview: normalizePreviewText(message.content).slice(0, 220),
-      avatar: message.role === 'user' ? userAvatar : undefined,
       model: message.model,
     }))
     .filter((item) => item.preview.length > 0)
 }
 
-function buildAgentMinimapItems(messages: SDKMessage[], userAvatar?: string): TabMinimapItem[] {
+function buildAgentMinimapItems(messages: SDKMessage[]): TabMinimapItem[] {
   const items: TabMinimapItem[] = []
 
   for (const message of messages) {
@@ -217,7 +214,6 @@ function buildAgentMinimapItems(messages: SDKMessage[], userAvatar?: string): Ta
         id: user.uuid ?? `user-${items.length}`,
         role: 'user',
         preview,
-        avatar: userAvatar,
       })
       continue
     }
@@ -326,9 +322,6 @@ function PreviewText({ text }: { text: string }): React.ReactElement {
 
 function ItemIcon({ item, type }: { item: TabMinimapItem; type: SessionMiniMapType }): React.ReactElement {
   const channels = useAtomValue(channelsAtom)
-  if (item.role === 'user' && item.avatar) {
-    return <UserAvatar avatar={item.avatar} size={16} className="mt-0.5" />
-  }
   if (item.role === 'assistant' && item.model) {
     return (
       <img
@@ -362,7 +355,6 @@ function SessionMiniMapPopoverContent({
   onMouseEnter,
   onMouseLeave,
 }: SessionMiniMapPopoverProps): React.ReactElement | null {
-  const userProfile = useAtomValue(userProfileAtom)
   const [cache, setCache] = useAtom(tabMinimapCacheAtom)
   const cachedItems = cache.get(target.sessionId)
   const [items, setItems] = React.useState<TabMinimapItem[]>(cachedItems ?? [])
@@ -392,8 +384,8 @@ function SessionMiniMapPopoverContent({
     const load = async (): Promise<void> => {
       try {
         const nextItems = target.type === 'chat'
-          ? buildChatMinimapItems(await window.electronAPI.getConversationMessages(target.sessionId), userProfile.avatar)
-          : buildAgentMinimapItems(await window.electronAPI.getAgentSessionSDKMessages(target.sessionId), userProfile.avatar)
+          ? buildChatMinimapItems(await window.electronAPI.getConversationMessages(target.sessionId))
+          : buildAgentMinimapItems(await window.electronAPI.getAgentSessionSDKMessages(target.sessionId))
         if (cancelled) return
         setItems(nextItems)
         setCache((prev) => {
@@ -413,7 +405,7 @@ function SessionMiniMapPopoverContent({
     return () => {
       cancelled = true
     }
-  }, [cachedItems, open, setCache, target.sessionId, target.type, userProfile.avatar])
+  }, [cachedItems, open, setCache, target.sessionId, target.type])
 
   if (!open || !position) return null
 

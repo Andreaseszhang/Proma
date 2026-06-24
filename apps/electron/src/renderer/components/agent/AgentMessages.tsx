@@ -26,7 +26,6 @@ import { StickyUserMessage } from '@/components/ai-elements/sticky-user-message'
 import { useSmoothStream } from '@proma/ui'
 import { formatMessageTime } from '@/components/chat/ChatMessageItem'
 import { getModelLogo, resolveModelDisplayName, resolveModelProvider } from '@/lib/model-logo'
-import { userProfileAtom } from '@/atoms/user-profile'
 import { tabMinimapCacheAtom } from '@/atoms/tab-atoms'
 import { channelsAtom } from '@/atoms/chat-atoms'
 import { ScrollPositionManager } from '@/hooks/useScrollPositionMemory'
@@ -395,7 +394,6 @@ function AgentRunningIndicator({ startedAt }: { startedAt?: number }): React.Rea
 }
 
 export function AgentMessages({ sessionId, sessionModelId, messagesLoaded, persistedSDKMessages, streaming, streamState, liveMessages, sessionPath, attachedDirs, stoppedByUser, onRetry, onRetryInNewSession, onFork, onRewind, onCompact }: AgentMessagesProps): React.ReactElement {
-  const userProfile = useAtomValue(userProfileAtom)
   const setMinimapCache = useSetAtom(tabMinimapCacheAtom)
   const channels = useAtomValue(channelsAtom)
   /** 淡入控制：切换会话时先隐藏，等布局完成后再显示。 */
@@ -568,10 +566,9 @@ export function AgentMessages({ sessionId, sessionModelId, messagesLoaded, persi
         : group.type === 'system' ? 'status' as const
         : 'assistant' as const,
       preview: getGroupPreview(group),
-      avatar: group.type === 'user' ? userProfile.avatar : undefined,
       model: group.type === 'assistant-turn' ? group.model : undefined,
     })),
-    [allGroups, userProfile.avatar]
+    [allGroups]
   )
 
   // 同步 minimap 缓存到 Tab 级别（供 Tab hover 预览使用）

@@ -113,7 +113,7 @@ type MessageContentProps = HTMLAttributes<HTMLDivElement>
 
 /**
  * 消息内容区域
- * - user 消息：pl-[46px] 与头像对齐 + 浅色气泡背景
+ * - user 消息：右对齐气泡
  * - assistant 消息：pl-[46px] 与头像对齐
  */
 export function MessageContent({
@@ -125,7 +125,7 @@ export function MessageContent({
     <div
       className={cn(
         'flex max-w-full min-w-0 flex-col gap-2 overflow-hidden pl-[46px]',
-        'group-[.is-user]:text-foreground group-[.is-user]:items-start',
+        'group-[.is-user]:relative group-[.is-user]:max-w-[calc(100%_-_4rem)] group-[.is-user]:self-end group-[.is-user]:items-end group-[.is-user]:overflow-visible group-[.is-user]:pl-0 group-[.is-user]:text-foreground',
         'group-[.is-assistant]:w-full group-[.is-assistant]:text-foreground',
         className
       )}

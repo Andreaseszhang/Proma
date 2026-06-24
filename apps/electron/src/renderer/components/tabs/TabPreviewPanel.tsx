@@ -12,7 +12,6 @@ import { useAtomValue } from 'jotai'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { AlertTriangle } from 'lucide-react'
-import { UserAvatar } from '@/components/chat/UserAvatar'
 import { getModelLogo, resolveModelProvider } from '@/lib/model-logo'
 import { channelsAtom } from '@/atoms/chat-atoms'
 import { cn } from '@/lib/utils'
@@ -41,9 +40,6 @@ const PREVIEW_MD_COMPONENTS = {
 
 function ItemIcon({ item }: { item: TabMinimapItem }): React.ReactElement {
   const channels = useAtomValue(channelsAtom)
-  if (item.role === 'user' && item.avatar) {
-    return <UserAvatar avatar={item.avatar} size={16} className="mt-0.5" />
-  }
   if (item.role === 'assistant' && item.model) {
     return (
       <img

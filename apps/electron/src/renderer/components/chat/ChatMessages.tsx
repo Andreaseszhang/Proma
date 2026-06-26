@@ -48,6 +48,7 @@ import { useConversationParallelMode } from '@/hooks/useConversationSettings'
 import { AssistantModelAvatar } from './AssistantModelAvatar'
 import { tabMinimapCacheAtom } from '@/atoms/tab-atoms'
 import { channelsAtom } from '@/atoms/chat-atoms'
+import { userProfileAtom } from '@/atoms/user-profile'
 import { chatBubbleStyleAtom } from '@/atoms/ui-preferences'
 import { getModelLogo, resolveModelProvider } from '@/lib/model-logo'
 import type { ChatMessage, ChatToolActivity } from '@proma/shared'
@@ -189,6 +190,7 @@ export function ChatMessages({
 }: ChatMessagesProps): React.ReactElement {
   const setMinimapCache = useSetAtom(tabMinimapCacheAtom)
   const channels = useAtomValue(channelsAtom)
+  const userProfile = useAtomValue(userProfileAtom)
   const chatBubbleStyle = useAtomValue(chatBubbleStyleAtom)
 
   // 平滑流式输出：将高频更新转为逐字渲染
@@ -321,9 +323,10 @@ export function ChatMessages({
       id: m.id,
       role: m.role as MinimapItem['role'],
       preview: m.content.slice(0, 200),
+      avatar: m.role === 'user' && chatBubbleStyle === 'upstream' ? userProfile.avatar : undefined,
       model: m.model,
     })),
-    [messages]
+    [chatBubbleStyle, messages, userProfile.avatar]
   )
 
   // 同步 minimap 缓存到 Tab 级别（供 Tab hover 预览使用）

@@ -12,8 +12,11 @@ import { useAtomValue } from 'jotai'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { AlertTriangle } from 'lucide-react'
+import { UserAvatar } from '@/components/chat/UserAvatar'
 import { getModelLogo, resolveModelProvider } from '@/lib/model-logo'
 import { channelsAtom } from '@/atoms/chat-atoms'
+import { userProfileAtom } from '@/atoms/user-profile'
+import { chatBubbleStyleAtom } from '@/atoms/ui-preferences'
 import { cn } from '@/lib/utils'
 import type { TabMinimapItem } from '@/atoms/tab-atoms'
 
@@ -40,6 +43,8 @@ const PREVIEW_MD_COMPONENTS = {
 
 function ItemIcon({ item }: { item: TabMinimapItem }): React.ReactElement {
   const channels = useAtomValue(channelsAtom)
+  const userProfile = useAtomValue(userProfileAtom)
+  const chatBubbleStyle = useAtomValue(chatBubbleStyleAtom)
   if (item.role === 'assistant' && item.model) {
     return (
       <img
@@ -51,6 +56,9 @@ function ItemIcon({ item }: { item: TabMinimapItem }): React.ReactElement {
   }
   if (item.role === 'status') {
     return <AlertTriangle className="size-4 shrink-0 mt-0.5 text-destructive" />
+  }
+  if (item.role === 'user' && chatBubbleStyle === 'upstream') {
+    return <UserAvatar avatar={item.avatar ?? userProfile.avatar} size={16} className="mt-0.5 shrink-0" />
   }
   return <div className="size-4 shrink-0 mt-0.5 rounded-[20%] bg-muted" />
 }

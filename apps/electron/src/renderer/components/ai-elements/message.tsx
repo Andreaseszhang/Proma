@@ -50,7 +50,7 @@ interface MessageProps extends HTMLAttributes<HTMLDivElement> {
   from: MessageRole
 }
 
-/** 消息根容器，user 自动右对齐 */
+/** 消息根容器，现代 user 样式由调用方额外标记 */
 export function Message({ className, from, ...props }: MessageProps): React.ReactElement {
   return (
     <div
@@ -113,7 +113,8 @@ type MessageContentProps = HTMLAttributes<HTMLDivElement>
 
 /**
  * 消息内容区域
- * - user 消息：右对齐气泡
+ * - modern user 消息：右对齐气泡
+ * - classic user 消息：保留上游左侧内容宽度
  * - assistant 消息：pl-[46px] 与头像对齐
  */
 export function MessageContent({
@@ -125,7 +126,8 @@ export function MessageContent({
     <div
       className={cn(
         'flex max-w-full min-w-0 flex-col gap-2 overflow-hidden pl-[46px]',
-        'group-[.is-user]:relative group-[.is-user]:max-w-[calc(100%_-_4rem)] group-[.is-user]:self-end group-[.is-user]:items-end group-[.is-user]:overflow-visible group-[.is-user]:pl-0 group-[.is-user]:text-foreground',
+        'group-[.is-user]:text-foreground',
+        'group-[.is-modern-user]:relative group-[.is-modern-user]:max-w-[calc(100%_-_4rem)] group-[.is-modern-user]:self-end group-[.is-modern-user]:items-end group-[.is-modern-user]:overflow-visible group-[.is-modern-user]:pl-0',
         'group-[.is-assistant]:w-full group-[.is-assistant]:text-foreground',
         className
       )}

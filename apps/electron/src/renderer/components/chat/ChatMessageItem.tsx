@@ -139,14 +139,14 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
     void onSubmitInlineEdit(message, payload)
   }, [message, onSubmitInlineEdit])
 
-  // 并排模式和经典样式下，user 消息不使用 from="user" 以避免右对齐。
-  const messageFrom = isParallelMode || (message.role === 'user' && !useModernBubbleStyle) ? 'assistant' : message.role
+  // 并排模式沿用 assistant 布局；经典样式保留 user 语义以匹配上游内容宽度。
+  const messageFrom = isParallelMode ? 'assistant' : message.role
   const isModernUserMessage = message.role === 'user' && !isParallelMode && useModernBubbleStyle
   const isClassicUserMessage = message.role === 'user' && !isParallelMode && !useModernBubbleStyle
 
   return (
     <>
-      <Message from={messageFrom} className={isModernUserMessage ? 'group/user-message' : undefined}>
+      <Message from={messageFrom} className={isModernUserMessage ? 'group/user-message is-modern-user' : undefined}>
         {/* assistant 头像 + 模型名 + 时间 */}
         {message.role === 'assistant' && (
           <MessageHeader
@@ -177,6 +177,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
         <MessageContent
           className={cn(
             isModernUserMessage && 'group/user-bubble',
+            isClassicUserMessage && 'items-start',
             isInlineEditing &&
               'w-full max-w-full group-[.is-user]:max-w-full group-[.is-user]:self-stretch group-[.is-user]:items-stretch'
           )}

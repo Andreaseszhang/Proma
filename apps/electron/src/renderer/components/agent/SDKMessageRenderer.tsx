@@ -1111,7 +1111,7 @@ function UserInputMessage({ message }: { message: SDKUserMessage }): React.React
   const useModernBubbleStyle = chatBubbleStyle === 'modern'
 
   return (
-    <Message from={useModernBubbleStyle ? 'user' : 'assistant'} className={useModernBubbleStyle ? 'group/user-message' : undefined}>
+    <Message from="user" className={useModernBubbleStyle ? 'group/user-message is-modern-user' : undefined}>
       {!useModernBubbleStyle && (
         <div className="flex items-start gap-2.5 mb-2.5">
           <UserAvatar avatar={userProfile.avatar} size={35} />
@@ -1130,7 +1130,7 @@ function UserInputMessage({ message }: { message: SDKUserMessage }): React.React
           </div>
         </div>
       )}
-      <MessageContent className={useModernBubbleStyle ? 'group/user-bubble' : undefined}>
+      <MessageContent className={useModernBubbleStyle ? 'group/user-bubble' : 'items-start'}>
         {/* 引用文件 Chip */}
         {quotes.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-2">

@@ -303,7 +303,7 @@ export function AppearanceSettings(): React.ReactElement {
 
           <SettingsSegmentedControl
             label="会话气泡"
-            description="经典风保留旧版视觉，现代样式使用右对齐用户气泡，取消用户头像，简洁清爽"
+            description="经典风保留旧版视觉，现代样式使用右对齐用户气泡，取消了用户头像，简洁清爽"
             value={chatBubbleStyle}
             onValueChange={handleChatBubbleStyleChange}
             options={CHAT_BUBBLE_STYLE_OPTIONS}

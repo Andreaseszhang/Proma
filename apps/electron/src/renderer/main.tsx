@@ -51,6 +51,7 @@ import {
   initializeNotifications,
 } from './atoms/notifications'
 import {
+  chatBubbleStyleAtom,
   stickyUserMessageEnabledAtom,
   initializeUiPreferences,
 } from './atoms/ui-preferences'
@@ -430,10 +431,11 @@ function DockBadgeInitializer(): null {
  */
 function UiPreferencesInitializer(): null {
   const setStickyUserMessageEnabled = useSetAtom(stickyUserMessageEnabledAtom)
+  const setChatBubbleStyle = useSetAtom(chatBubbleStyleAtom)
 
   useEffect(() => {
-    initializeUiPreferences(setStickyUserMessageEnabled)
-  }, [setStickyUserMessageEnabled])
+    initializeUiPreferences(setStickyUserMessageEnabled, setChatBubbleStyle)
+  }, [setStickyUserMessageEnabled, setChatBubbleStyle])
 
   return null
 }

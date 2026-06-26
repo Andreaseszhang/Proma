@@ -47,6 +47,9 @@ import { ScrollPositionManager } from '@/hooks/useScrollPositionMemory'
 import { useConversationParallelMode } from '@/hooks/useConversationSettings'
 import { AssistantModelAvatar } from './AssistantModelAvatar'
 import { tabMinimapCacheAtom } from '@/atoms/tab-atoms'
+import { channelsAtom } from '@/atoms/chat-atoms'
+import { chatBubbleStyleAtom } from '@/atoms/ui-preferences'
+import { getModelLogo, resolveModelProvider } from '@/lib/model-logo'
 import type { ChatMessage, ChatToolActivity } from '@proma/shared'
 
 // ===== 滚动到顶部加载更多 =====
@@ -185,6 +188,8 @@ export function ChatMessages({
   onImageEditComplete,
 }: ChatMessagesProps): React.ReactElement {
   const setMinimapCache = useSetAtom(tabMinimapCacheAtom)
+  const channels = useAtomValue(channelsAtom)
+  const chatBubbleStyle = useAtomValue(chatBubbleStyleAtom)
 
   // 平滑流式输出：将高频更新转为逐字渲染
   const { displayedContent: rawSmoothContent } = useSmoothStream({
@@ -239,8 +244,17 @@ export function ChatMessages({
     [startedAt]
   )
   const streamingLogo = React.useMemo(
-    () => <AssistantModelAvatar />,
-    []
+    () => {
+      if (chatBubbleStyle === 'modern') return <AssistantModelAvatar />
+      return (
+        <img
+          src={getModelLogo(streamingModel ?? '', resolveModelProvider(streamingModel ?? '', channels))}
+          alt={streamingModel ?? 'AI'}
+          className="size-[35px] rounded-[25%] object-cover"
+        />
+      )
+    },
+    [channels, chatBubbleStyle, streamingModel]
   )
 
   /**

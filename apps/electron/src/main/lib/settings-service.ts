@@ -7,7 +7,7 @@
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { getSettingsPath } from './config-paths'
-import { DEFAULT_INTERFACE_VARIANT, DEFAULT_THEME_MODE } from '../../types'
+import { DEFAULT_CHAT_BUBBLE_STYLE, DEFAULT_INTERFACE_VARIANT, DEFAULT_THEME_MODE } from '../../types'
 import type { AppSettings } from '../../types'
 
 /**
@@ -25,6 +25,7 @@ export function getSettings(): AppSettings {
       onboardingCompleted: false,
       environmentCheckSkipped: false,
       notificationsEnabled: true,
+      chatBubbleStyle: DEFAULT_CHAT_BUBBLE_STYLE,
       feishuSessionMirror: { mode: 'off' },
       builtinMcpDisabledIds: [],
     }
@@ -40,6 +41,7 @@ export function getSettings(): AppSettings {
       onboardingCompleted: data.onboardingCompleted ?? false,
       environmentCheckSkipped: data.environmentCheckSkipped ?? false,
       notificationsEnabled: data.notificationsEnabled ?? true,
+      chatBubbleStyle: data.chatBubbleStyle ?? DEFAULT_CHAT_BUBBLE_STYLE,
       feishuSessionMirror: data.feishuSessionMirror ?? { mode: 'off' },
       builtinMcpDisabledIds: data.builtinMcpDisabledIds ?? [],
     }
@@ -51,6 +53,7 @@ export function getSettings(): AppSettings {
       onboardingCompleted: false,
       environmentCheckSkipped: false,
       notificationsEnabled: true,
+      chatBubbleStyle: DEFAULT_CHAT_BUBBLE_STYLE,
       feishuSessionMirror: { mode: 'off' },
       builtinMcpDisabledIds: [],
     }

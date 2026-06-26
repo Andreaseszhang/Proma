@@ -33,9 +33,12 @@ import { CopyButton } from './CopyButton'
 import { MigrateToAgentButton } from './MigrateToAgentButton'
 import { DeleteMessageDialog } from './DeleteMessageDialog'
 import { InlineEditForm } from './InlineEditForm'
+import { UserAvatar } from './UserAvatar'
 import { AssistantModelAvatar } from './AssistantModelAvatar'
-import { resolveModelDisplayName } from '@/lib/model-logo'
+import { getModelLogo, resolveModelDisplayName, resolveModelProvider } from '@/lib/model-logo'
 import { channelsAtom } from '@/atoms/chat-atoms'
+import { userProfileAtom } from '@/atoms/user-profile'
+import { chatBubbleStyleAtom } from '@/atoms/ui-preferences'
 import { cn } from '@/lib/utils'
 import type { ChatMessage } from '@proma/shared'
 import type { InlineEditSubmitPayload } from './InlineEditForm'
@@ -113,7 +116,10 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
 }: ChatMessageItemProps): React.ReactElement {
   const [deleteDialogOpen, setDeleteDialogOpen] = React.useState(false)
   const [isDeleting, setIsDeleting] = React.useState(false)
+  const userProfile = useAtomValue(userProfileAtom)
   const channels = useAtomValue(channelsAtom)
+  const chatBubbleStyle = useAtomValue(chatBubbleStyleAtom)
+  const useModernBubbleStyle = chatBubbleStyle === 'modern'
 
   /** 确认删除消息 */
   const handleDeleteConfirm = async (): Promise<void> => {
@@ -133,24 +139,44 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
     void onSubmitInlineEdit(message, payload)
   }, [message, onSubmitInlineEdit])
 
-  // 并排模式下，user 消息不使用 from="user" 以避免右对齐
-  const messageFrom = isParallelMode ? 'assistant' : message.role
+  // 并排模式和经典样式下，user 消息不使用 from="user" 以避免右对齐。
+  const messageFrom = isParallelMode || (message.role === 'user' && !useModernBubbleStyle) ? 'assistant' : message.role
+  const isModernUserMessage = message.role === 'user' && !isParallelMode && useModernBubbleStyle
+  const isClassicUserMessage = message.role === 'user' && !isParallelMode && !useModernBubbleStyle
 
   return (
     <>
-      <Message from={messageFrom}>
+      <Message from={messageFrom} className={isModernUserMessage ? 'group/user-message' : undefined}>
         {/* assistant 头像 + 模型名 + 时间 */}
         {message.role === 'assistant' && (
           <MessageHeader
             model={message.model ? resolveModelDisplayName(message.model, channels) : undefined}
             time={formatMessageTime(message.createdAt)}
-            logo={<AssistantModelAvatar />}
+            logo={useModernBubbleStyle
+              ? <AssistantModelAvatar />
+              : (
+                <img
+                  src={getModelLogo(message.model ?? '', resolveModelProvider(message.model ?? '', channels))}
+                  alt={message.model ?? 'AI'}
+                  className="size-[35px] rounded-[25%] object-cover"
+                />
+              )}
           />
+        )}
+
+        {isClassicUserMessage && (
+          <div className="flex items-start gap-2.5 mb-2.5">
+            <UserAvatar avatar={userProfile.avatar} size={35} />
+            <div className="flex flex-col justify-between h-[35px]">
+              <span className="text-sm font-semibold text-foreground/60 leading-none">{userProfile.userName}</span>
+              <span className="message-time text-[10px] text-foreground/[0.38] leading-none">{formatMessageTime(message.createdAt)}</span>
+            </div>
+          </div>
         )}
 
         <MessageContent
           className={cn(
-            message.role === 'user' && !isParallelMode && 'group/user-bubble',
+            isModernUserMessage && 'group/user-bubble',
             isInlineEditing &&
               'w-full max-w-full group-[.is-user]:max-w-full group-[.is-user]:self-stretch group-[.is-user]:items-stretch'
           )}
@@ -204,11 +230,6 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
           ) : (
             /* 用户消息 - 附件 + 可折叠文本 / 原地编辑 */
             <>
-              {!isParallelMode && (
-                <div className="message-time absolute -top-4 right-0 text-[10px] leading-none text-foreground/[0.38] opacity-0 transition-opacity duration-150 group-hover/user-bubble:opacity-100">
-                  {formatMessageTime(message.createdAt)}
-                </div>
-              )}
               {!isInlineEditing && message.attachments && message.attachments.length > 0 && (
                 <MessageAttachments attachments={message.attachments} onImageEditComplete={onImageEditComplete} />
               )}
@@ -230,11 +251,16 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
           <MessageActions
             className={cn(
               'mt-0.5 min-h-[28px]',
-              message.role === 'user' && !isParallelMode
+              isModernUserMessage
                 ? 'self-end justify-end'
                 : 'pl-[46px]'
             )}
           >
+            {isModernUserMessage && (
+              <span className="message-time text-[10px] leading-none text-foreground/[0.38] opacity-0 transition-opacity duration-150 group-hover/user-message:opacity-100">
+                {formatMessageTime(message.createdAt)}
+              </span>
+            )}
             <CopyButton content={message.content} />
             {message.role === 'assistant' && conversationId && (
               <MigrateToAgentButton conversationId={conversationId} />

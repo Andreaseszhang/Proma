@@ -28,8 +28,10 @@ import {
   ReasoningTrigger,
   ReasoningContent,
 } from '@/components/ai-elements/reasoning'
-import { streamingModelAtom } from '@/atoms/chat-atoms'
+import { channelsAtom, streamingModelAtom } from '@/atoms/chat-atoms'
+import { chatBubbleStyleAtom } from '@/atoms/ui-preferences'
 import { AssistantModelAvatar } from './AssistantModelAvatar'
+import { getModelLogo, resolveModelProvider } from '@/lib/model-logo'
 import type { ChatMessage } from '@proma/shared'
 
 /** 消息段落（按分隔线分割） */
@@ -159,7 +161,18 @@ function MessageColumn({
   startedAt,
 }: MessageColumnProps): React.ReactElement {
   const streamingModel = useAtomValue(streamingModelAtom)
+  const channels = useAtomValue(channelsAtom)
+  const chatBubbleStyle = useAtomValue(chatBubbleStyleAtom)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const streamingLogo = chatBubbleStyle === 'modern'
+    ? <AssistantModelAvatar />
+    : (
+      <img
+        src={getModelLogo(streamingModel ?? '', resolveModelProvider(streamingModel ?? '', channels))}
+        alt={streamingModel ?? 'AI'}
+        className="size-[35px] rounded-[25%] object-cover"
+      />
+    )
 
   // 消息加载后自动滚动到底部（两列都滚到最新消息）
   useEffect(() => {
@@ -206,7 +219,7 @@ function MessageColumn({
             <MessageHeader
               model={streamingModel ?? undefined}
               time={formatMessageTime(Date.now())}
-              logo={<AssistantModelAvatar />}
+              logo={streamingLogo}
             />
             <MessageContent>
               {streamingReasoning && (

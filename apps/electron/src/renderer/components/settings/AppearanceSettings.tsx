@@ -30,10 +30,14 @@ import {
   markdownFontSizeAtom,
   updateMarkdownFontSize,
 } from '@/atoms/markdown-font-size'
+import {
+  chatBubbleStyleAtom,
+  updateChatBubbleStyle,
+} from '@/atoms/ui-preferences'
 import { previewModePreferenceAtom, type PreviewModePreference } from '@/atoms/preview-atoms'
 import { cn } from '@/lib/utils'
 import { detectIsWindows } from '@/lib/platform'
-import type { InterfaceVariant, ThemeMode, ThemeStyle, MarkdownFontSize } from '../../../types'
+import type { ChatBubbleStyle, InterfaceVariant, ThemeMode, ThemeStyle, MarkdownFontSize } from '../../../types'
 
 // ===== Logo 资源导入（用于图标选择器） =====
 import promaBlackLogo from '@/assets/bots/proma-logos/proma-black.png'
@@ -84,6 +88,12 @@ const MARKDOWN_FONT_SIZE_OPTIONS = [
 const PREVIEW_MODE_OPTIONS: { value: PreviewModePreference; label: string }[] = [
   { value: 'tab', label: '标签页' },
   { value: 'split', label: '侧边分屏' },
+]
+
+/** 会话气泡样式选项 */
+const CHAT_BUBBLE_STYLE_OPTIONS: { value: ChatBubbleStyle; label: string }[] = [
+  { value: 'modern', label: '现代' },
+  { value: 'upstream', label: '经典' },
 ]
 
 /** 特殊风格 ID（排除 default） */
@@ -192,6 +202,7 @@ export function AppearanceSettings(): React.ReactElement {
   const systemIsDark = useAtomValue(systemIsDarkAtom)
   const [markdownFontSize, setMarkdownFontSize] = useAtom(markdownFontSizeAtom)
   const [previewModePref, setPreviewModePref] = useAtom(previewModePreferenceAtom)
+  const [chatBubbleStyle, setChatBubbleStyle] = useAtom(chatBubbleStyleAtom)
 
   /** 切换主题模式 */
   const handleThemeChange = React.useCallback((value: string) => {
@@ -230,6 +241,13 @@ export function AppearanceSettings(): React.ReactElement {
     setMarkdownFontSize(size)
     updateMarkdownFontSize(size)
   }, [setMarkdownFontSize])
+
+  /** 切换会话气泡样式 */
+  const handleChatBubbleStyleChange = React.useCallback((value: string) => {
+    const style = value as ChatBubbleStyle
+    setChatBubbleStyle(style)
+    updateChatBubbleStyle(style)
+  }, [setChatBubbleStyle])
 
   return (
     <div className="space-y-6">
@@ -281,6 +299,14 @@ export function AppearanceSettings(): React.ReactElement {
             value={markdownFontSize}
             onValueChange={handleMarkdownFontSizeChange}
             options={MARKDOWN_FONT_SIZE_OPTIONS}
+          />
+
+          <SettingsSegmentedControl
+            label="会话气泡"
+            description="现代样式使用右对齐用户气泡与统一模型头像；经典样式恢复上游的头像、用户名与左侧排布"
+            value={chatBubbleStyle}
+            onValueChange={handleChatBubbleStyleChange}
+            options={CHAT_BUBBLE_STYLE_OPTIONS}
           />
 
           <SettingsSegmentedControl

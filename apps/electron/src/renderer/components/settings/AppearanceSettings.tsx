@@ -92,8 +92,8 @@ const PREVIEW_MODE_OPTIONS: { value: PreviewModePreference; label: string }[] = 
 
 /** 会话气泡样式选项 */
 const CHAT_BUBBLE_STYLE_OPTIONS: { value: ChatBubbleStyle; label: string }[] = [
-  { value: 'modern', label: '现代' },
   { value: 'upstream', label: '经典' },
+  { value: 'modern', label: '现代' },
 ]
 
 /** 特殊风格 ID（排除 default） */
@@ -303,7 +303,7 @@ export function AppearanceSettings(): React.ReactElement {
 
           <SettingsSegmentedControl
             label="会话气泡"
-            description="现代样式使用右对齐用户气泡与统一模型头像；经典样式恢复上游的头像、用户名与左侧排布"
+            description="经典风保留旧版视觉，现代样式使用右对齐用户气泡，取消用户头像，简洁清爽"
             value={chatBubbleStyle}
             onValueChange={handleChatBubbleStyleChange}
             options={CHAT_BUBBLE_STYLE_OPTIONS}

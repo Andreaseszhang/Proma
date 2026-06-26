@@ -179,7 +179,7 @@ export const ChatMessageItem = React.memo(function ChatMessageItem({
             isModernUserMessage && 'group/user-bubble',
             isClassicUserMessage && 'items-start',
             isInlineEditing &&
-              'w-full max-w-full group-[.is-user]:max-w-full group-[.is-user]:self-stretch group-[.is-user]:items-stretch'
+              'w-full max-w-full group-[.is-user]:max-w-full group-[.is-user]:self-stretch group-[.is-user]:items-stretch group-[.is-modern-user]:max-w-full group-[.is-modern-user]:self-stretch group-[.is-modern-user]:items-stretch'
           )}
         >
           {message.role === 'assistant' ? (

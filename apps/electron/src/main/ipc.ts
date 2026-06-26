@@ -9,7 +9,7 @@ import { join, resolve, sep, dirname } from 'node:path'
 import { existsSync, realpathSync, rmSync, readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, MEMORY_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, isPromaPermissionMode, normalizePathForCompare } from '@proma/shared'
+import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, MEMORY_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, TERMINAL_IPC_CHANNELS, isPromaPermissionMode, normalizePathForCompare } from '@proma/shared'
 import { USER_PROFILE_IPC_CHANNELS, SETTINGS_IPC_CHANNELS, SCRATCH_PAD_IPC_CHANNELS, QUICK_TASK_IPC_CHANNELS, VOICE_DICTATION_IPC_CHANNELS, APP_ICON_IPC_CHANNELS, DOCK_BADGE_IPC_CHANNELS, STORAGE_IPC_CHANNELS } from '../types'
 import type {
   QuickTaskSubmitInput,
@@ -110,6 +110,16 @@ import type {
   Automation,
   CreateAutomationInput,
   UpdateAutomationInput,
+  TerminalSession,
+  TerminalStartInput,
+  TerminalListInput,
+  TerminalListResult,
+  TerminalWriteInput,
+  TerminalStopInput,
+  TerminalResizeInput,
+  TerminalSetActiveSessionInput,
+  TerminalBusyInput,
+  TerminalBusyResult,
 } from '@proma/shared'
 import type { UserProfile, AppSettings } from '../types'
 import { getRuntimeStatus, getGitRepoStatus, reinitializeRuntime } from './lib/runtime-init'
@@ -261,6 +271,7 @@ import { getDingTalkConfig, saveDingTalkConfig, getDecryptedClientSecret, getDin
 import { dingtalkBridgeManager } from './lib/dingtalk-bridge-manager'
 import { getWeChatConfig } from './lib/wechat-config'
 import { wechatBridge } from './lib/wechat-bridge'
+import { getTerminalBusyState, listTerminalsForSession, resizeTerminal, setActiveTerminalSession, startTerminal, stopAllTerminals, stopTerminal, writeTerminal } from './lib/terminal-service'
 
 /** 文件浏览器中需要隐藏的系统文件 */
 const HIDDEN_FS_ENTRIES = new Set(['.DS_Store', 'Thumbs.db'])
@@ -798,6 +809,7 @@ export function resolveAppIconPath(variantId: string): string | null {
 
 export function registerIpcHandlers(): void {
   console.log('[IPC] 正在注册 IPC 处理器...')
+  app.once('before-quit', () => stopAllTerminals())
 
   // ===== 运行时相关 =====
 
@@ -827,6 +839,79 @@ export function registerIpcHandlers(): void {
       }
 
       return getGitRepoStatus(dirPath)
+    }
+  )
+
+  // ===== 终端相关 =====
+
+  ipcMain.handle(
+    TERMINAL_IPC_CHANNELS.START,
+    async (event, input: TerminalStartInput): Promise<TerminalSession> => {
+      if (!input || typeof input !== 'object') throw new Error('input 必须是对象')
+      if (!input.sessionId || typeof input.sessionId !== 'string') throw new Error('sessionId 必填')
+      if (!input.cwd || typeof input.cwd !== 'string') throw new Error('cwd 必填')
+      const cwd = resolve(input.cwd)
+      if (!ensurePathAllowed(cwd, { sessionId: input.sessionId })) {
+        throw new Error('终端工作目录不在当前会话允许范围内')
+      }
+      setActiveTerminalSession(event.sender.id, input.sessionId)
+      return startTerminal({ sessionId: input.sessionId, cwd, cols: input.cols, rows: input.rows }, event.sender)
+    }
+  )
+
+  ipcMain.handle(
+    TERMINAL_IPC_CHANNELS.LIST,
+    async (event, input: TerminalListInput): Promise<TerminalListResult> => {
+      if (!input || typeof input !== 'object') throw new Error('input 必须是对象')
+      if (!input.sessionId || typeof input.sessionId !== 'string') throw new Error('sessionId 必填')
+      return listTerminalsForSession(input.sessionId, event.sender.id)
+    }
+  )
+
+  ipcMain.handle(
+    TERMINAL_IPC_CHANNELS.WRITE,
+    async (event, input: TerminalWriteInput): Promise<void> => {
+      if (!input || typeof input !== 'object') throw new Error('input 必须是对象')
+      if (!input.terminalId || typeof input.terminalId !== 'string') throw new Error('terminalId 必填')
+      if (typeof input.data !== 'string') throw new Error('data 必须是字符串')
+      writeTerminal(input.terminalId, input.data, event.sender.id)
+    }
+  )
+
+  ipcMain.handle(
+    TERMINAL_IPC_CHANNELS.RESIZE,
+    async (event, input: TerminalResizeInput): Promise<void> => {
+      if (!input || typeof input !== 'object') throw new Error('input 必须是对象')
+      if (!input.terminalId || typeof input.terminalId !== 'string') throw new Error('terminalId 必填')
+      if (!Number.isFinite(input.cols) || !Number.isFinite(input.rows)) throw new Error('cols/rows 必须是数字')
+      resizeTerminal(input, event.sender.id)
+    }
+  )
+
+  ipcMain.handle(
+    TERMINAL_IPC_CHANNELS.STOP,
+    async (event, input: TerminalStopInput): Promise<void> => {
+      if (!input || typeof input !== 'object') throw new Error('input 必须是对象')
+      if (!input.terminalId || typeof input.terminalId !== 'string') throw new Error('terminalId 必填')
+      stopTerminal(input.terminalId, event.sender.id)
+    }
+  )
+
+  ipcMain.handle(
+    TERMINAL_IPC_CHANNELS.SET_ACTIVE_SESSION,
+    async (event, input: TerminalSetActiveSessionInput): Promise<void> => {
+      if (!input || typeof input !== 'object') throw new Error('input 必须是对象')
+      if (input.sessionId !== null && typeof input.sessionId !== 'string') throw new Error('sessionId 必须是字符串或 null')
+      setActiveTerminalSession(event.sender.id, input.sessionId)
+    }
+  )
+
+  ipcMain.handle(
+    TERMINAL_IPC_CHANNELS.IS_BUSY,
+    async (event, input: TerminalBusyInput): Promise<TerminalBusyResult> => {
+      if (!input || typeof input !== 'object') throw new Error('input 必须是对象')
+      if (!input.terminalId || typeof input.terminalId !== 'string') throw new Error('terminalId 必填')
+      return getTerminalBusyState(input.terminalId, event.sender.id)
     }
   )
 

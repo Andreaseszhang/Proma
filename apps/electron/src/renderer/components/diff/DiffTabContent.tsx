@@ -438,8 +438,9 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
   const contentCacheScope = React.useMemo(() => JSON.stringify({
     dirPath,
     gitRoot: gitRoot ?? '',
+    baseRef: baseRef ?? '',
     basePaths: basePaths ?? [],
-  }), [basePaths, dirPath, gitRoot])
+  }), [basePaths, baseRef, dirPath, gitRoot])
 
   const getContentCacheKey = React.useCallback((mode: 'preview' | 'diff', version: number) => (
     `${sessionId}:${mode}:${filePath}@v${version}:${contentCacheScope}`
@@ -655,7 +656,7 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
     load()
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filePath, dirPath, gitRoot, previewOnly, previewContentVersion, fileAccess, isPdf, isDocx, isOfficePreview, isLegacyOffice, isImage, sessionId, ext, getContentCacheKey])
+  }, [filePath, dirPath, gitRoot, previewOnly, previewContentVersion, fileAccess, isPdf, isDocx, isOfficePreview, isLegacyOffice, isImage, sessionId, ext, getContentCacheKey, baseRef])
 
   // refreshVersion 触发的静默刷新：仅 diff 模式、内容有变化时才更新 state
   const prevRefreshRef = React.useRef(-1)
@@ -672,7 +673,7 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
     let cancelled = false
     async function refresh() {
       try {
-        const result = await window.electronAPI.getDiffContents({ dirPath, filePath, gitRoot, sessionId })
+        const result = await window.electronAPI.getDiffContents({ dirPath, filePath, gitRoot, sessionId, baseRef })
         if (cancelled || !result) return
         const newC = result.newContent ?? ''
         const oldC = result.oldContent ?? ''
@@ -689,7 +690,7 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
     }
     refresh()
     return () => { cancelled = true }
-  }, [refreshVersion, previewOnly, filePath, dirPath, gitRoot, sessionId, getContentCacheKey])
+  }, [refreshVersion, previewOnly, filePath, dirPath, gitRoot, sessionId, getContentCacheKey, baseRef])
 
   // diff 模式：内容加载完成后若新旧一致（无差异），通知父组件关闭预览面板
   const emptyDiffFiredRef = React.useRef(false)

@@ -22,6 +22,7 @@ import {
   getSdkConfigDir,
 } from './config-paths'
 import { getAgentWorkspace } from './agent-workspace-manager'
+import { stopTerminalsForSession } from './terminal-service'
 
 // 在模块加载时一次性设置 SDK 配置目录，避免在 forkSession 等异步调用中临时修改/恢复
 // process.env 导致的并发安全问题（异步操作的 await 间隙其他代码可能读到错误值）
@@ -392,6 +393,9 @@ export function deleteAgentSession(id: string): void {
 
   // 清理 Nano Banana 生图历史
   clearNanoBananaAgentHistory(id)
+
+  // 停止该会话的全部终端，避免后台 PTY 进程泄漏（覆盖单会话删除与删工作区批量删除两条路径）
+  stopTerminalsForSession(id)
 
   // 清理 SDK 关联数据（file-history 和 projects 下的 session JSONL）
   const sdkSessionIds = [removed.sdkSessionId, removed.forkSourceSdkSessionId].filter(Boolean) as string[]

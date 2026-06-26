@@ -6,7 +6,7 @@
  */
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, MEMORY_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS } from '@proma/shared'
+import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, MEMORY_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, TERMINAL_IPC_CHANNELS } from '@proma/shared'
 import { USER_PROFILE_IPC_CHANNELS, SETTINGS_IPC_CHANNELS, SCRATCH_PAD_IPC_CHANNELS, APP_ICON_IPC_CHANNELS, DOCK_BADGE_IPC_CHANNELS, STORAGE_IPC_CHANNELS } from '../types'
 import type {
   RuntimeStatus,
@@ -104,6 +104,18 @@ import type {
   Automation,
   CreateAutomationInput,
   UpdateAutomationInput,
+  TerminalDataEvent,
+  TerminalExitEvent,
+  TerminalListInput,
+  TerminalListResult,
+  TerminalSession,
+  TerminalStartInput,
+  TerminalWriteInput,
+  TerminalStopInput,
+  TerminalResizeInput,
+  TerminalSetActiveSessionInput,
+  TerminalBusyInput,
+  TerminalBusyResult,
 } from '@proma/shared'
 import type {
   UserProfile,
@@ -758,6 +770,35 @@ export interface ElectronAPI {
 
   /** 搜索工作区文件（用于 @ 引用，支持附加目录） */
   searchWorkspaceFiles: (rootPath: string, query: string, limit?: number, additionalPaths?: string[], sessionPaths?: string[]) => Promise<FileSearchResult>
+
+  // ===== 终端 =====
+
+  /** 启动会话终端 */
+  startTerminal: (input: TerminalStartInput) => Promise<TerminalSession>
+
+  /** 列出当前会话已存在的终端 */
+  listTerminals: (input: TerminalListInput) => Promise<TerminalListResult>
+
+  /** 写入终端 stdin */
+  writeTerminal: (input: TerminalWriteInput) => Promise<void>
+
+  /** 停止终端 */
+  stopTerminal: (input: TerminalStopInput) => Promise<void>
+
+  /** 调整终端尺寸 */
+  resizeTerminal: (input: TerminalResizeInput) => Promise<void>
+
+  /** 设置当前可见的终端会话 */
+  setActiveTerminalSession: (input: TerminalSetActiveSessionInput) => Promise<void>
+
+  /** 查询终端是否有前台进程在运行 */
+  isTerminalBusy: (input: TerminalBusyInput) => Promise<TerminalBusyResult>
+
+  /** 订阅终端输出 */
+  onTerminalData: (callback: (event: TerminalDataEvent) => void) => () => void
+
+  /** 订阅终端退出 */
+  onTerminalExit: (callback: (event: TerminalExitEvent) => void) => () => void
 
   // ===== 系统提示词管理 =====
 
@@ -1897,6 +1938,46 @@ const electronAPI: ElectronAPI = {
 
   searchWorkspaceFiles: (rootPath: string, query: string, limit = 20, additionalPaths?: string[], sessionPaths?: string[]) => {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.SEARCH_WORKSPACE_FILES, rootPath, query, limit, additionalPaths, sessionPaths)
+  },
+
+  startTerminal: (input: TerminalStartInput) => {
+    return ipcRenderer.invoke(TERMINAL_IPC_CHANNELS.START, input)
+  },
+
+  listTerminals: (input: TerminalListInput) => {
+    return ipcRenderer.invoke(TERMINAL_IPC_CHANNELS.LIST, input)
+  },
+
+  writeTerminal: (input: TerminalWriteInput) => {
+    return ipcRenderer.invoke(TERMINAL_IPC_CHANNELS.WRITE, input)
+  },
+
+  stopTerminal: (input: TerminalStopInput) => {
+    return ipcRenderer.invoke(TERMINAL_IPC_CHANNELS.STOP, input)
+  },
+
+  resizeTerminal: (input: TerminalResizeInput) => {
+    return ipcRenderer.invoke(TERMINAL_IPC_CHANNELS.RESIZE, input)
+  },
+
+  setActiveTerminalSession: (input: TerminalSetActiveSessionInput) => {
+    return ipcRenderer.invoke(TERMINAL_IPC_CHANNELS.SET_ACTIVE_SESSION, input)
+  },
+
+  isTerminalBusy: (input: TerminalBusyInput) => {
+    return ipcRenderer.invoke(TERMINAL_IPC_CHANNELS.IS_BUSY, input)
+  },
+
+  onTerminalData: (callback: (event: TerminalDataEvent) => void) => {
+    const listener = (_: unknown, event: TerminalDataEvent): void => callback(event)
+    ipcRenderer.on(TERMINAL_IPC_CHANNELS.DATA, listener)
+    return () => { ipcRenderer.removeListener(TERMINAL_IPC_CHANNELS.DATA, listener) }
+  },
+
+  onTerminalExit: (callback: (event: TerminalExitEvent) => void) => {
+    const listener = (_: unknown, event: TerminalExitEvent): void => callback(event)
+    ipcRenderer.on(TERMINAL_IPC_CHANNELS.EXIT, listener)
+    return () => { ipcRenderer.removeListener(TERMINAL_IPC_CHANNELS.EXIT, listener) }
   },
 
   // 系统提示词管理

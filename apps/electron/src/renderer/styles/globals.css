@@ -975,6 +975,30 @@
   background-color: hsl(var(--tab-surface) / 0.42);
 }
 
+.terminal-tabbar .terminal-tab-active {
+  background-color: transparent;
+}
+
+.terminal-tabbar .terminal-tab-active::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  right: auto;
+  bottom: 0;
+  width: var(--terminal-tab-indicator-width, 200px);
+  max-width: calc(100% - 10px);
+  height: 3px;
+  border-radius: 0;
+  background-color: hsl(var(--primary));
+  box-shadow: 0 0 10px hsl(var(--primary) / 0.28);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.terminal-tabbar .terminal-tab-inactive:hover {
+  background-color: hsl(var(--tab-surface) / 0.42);
+}
+
 [data-input-mode] > div:first-child {
   background-color: hsl(var(--input-surface)) !important;
 }

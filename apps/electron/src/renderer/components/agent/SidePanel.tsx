@@ -20,6 +20,7 @@ import { cn } from '@/lib/utils'
 import { FileBrowser, FileDropZone, FileTypeIcon, FileSearchBar, computeRevealAncestors, isPathUnderRoot, computeTreeRowLayout, AncestorGuides, STICKY_ROW_BASE_CLASS, canBeSticky } from '@/components/file-browser'
 import { DiffPanelTabBar } from '@/components/diff/DiffPanelTabBar'
 import { DiffChangesList } from '@/components/diff/DiffChangesList'
+import { TerminalPanel } from './TerminalPanel'
 import {
   agentSidePanelOpenAtom,
   workspaceFilesVersionAtom,
@@ -61,6 +62,15 @@ interface SidePanelProps {
 }
 
 const filePanelActionButtonClass = 'h-6 w-6 flex-shrink-0 rounded-md text-muted-foreground/75 hover:bg-accent/70 hover:text-foreground [&_svg]:size-3.5'
+const MIN_TERMINAL_HEIGHT = 180
+const MIN_FILE_PANEL_HEIGHT = 180
+const TERMINAL_RESIZE_HANDLE_HEIGHT = 6
+const terminalHeightBySession = new Map<string, number>()
+
+function clampTerminalHeight(height: number, availableHeight: number): number {
+  const maxHeight = Math.max(MIN_TERMINAL_HEIGHT, availableHeight - MIN_FILE_PANEL_HEIGHT - TERMINAL_RESIZE_HANDLE_HEIGHT)
+  return Math.max(MIN_TERMINAL_HEIGHT, Math.min(maxHeight, Math.round(height)))
+}
 
 export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, width = 280 }: SidePanelProps): React.ReactElement {
   // per-session 侧面板状态（默认打开）
@@ -396,6 +406,77 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
   const hasWorkspaceAttachedItems = wsAttachedDirs.length > 0 || wsAttachedFiles.length > 0
   const interfaceVariant = useAtomValue(interfaceVariantAtom)
   const isClassic = interfaceVariant === 'classic'
+  const splitContainerRef = React.useRef<HTMLDivElement>(null)
+  const terminalPanelRef = React.useRef<HTMLDivElement>(null)
+  const [terminalHeight, setTerminalHeight] = React.useState<number | null>(null)
+  const [terminalCollapsed, setTerminalCollapsed] = React.useState(false)
+  const [terminalResizing, setTerminalResizing] = React.useState(false)
+  const showTerminal = activeTab === 'changes'
+
+  React.useEffect(() => {
+    setTerminalHeight(terminalHeightBySession.get(sessionId) ?? null)
+    setTerminalResizing(false)
+  }, [sessionId])
+
+  React.useEffect(() => {
+    const container = splitContainerRef.current
+    if (!container) return
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0]
+      if (!entry) return
+      const availableHeight = entry.contentRect.height
+      setTerminalHeight((height) => {
+        if (height == null) return height
+        const nextHeight = clampTerminalHeight(height, availableHeight)
+        terminalHeightBySession.set(sessionId, nextHeight)
+        return nextHeight
+      })
+    })
+    observer.observe(container)
+    return () => observer.disconnect()
+  }, [sessionId])
+
+  const handleTerminalResizeStart = React.useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (terminalCollapsed) return
+    event.preventDefault()
+
+    const container = splitContainerRef.current
+    if (!container) return
+    const availableHeight = container.getBoundingClientRect().height
+    const currentHeight = terminalHeight
+      ?? terminalPanelRef.current?.getBoundingClientRect().height
+      ?? availableHeight / 2
+    const startY = event.clientY
+    const startHeight = clampTerminalHeight(currentHeight, availableHeight)
+    const targetSessionId = sessionId
+    const previousCursor = document.body.style.cursor
+    const previousUserSelect = document.body.style.userSelect
+
+    document.body.style.cursor = 'row-resize'
+    document.body.style.userSelect = 'none'
+    setTerminalResizing(true)
+
+    const handlePointerMove = (moveEvent: PointerEvent): void => {
+      moveEvent.preventDefault()
+      const delta = startY - moveEvent.clientY
+      const nextHeight = clampTerminalHeight(startHeight + delta, availableHeight)
+      terminalHeightBySession.set(targetSessionId, nextHeight)
+      setTerminalHeight(nextHeight)
+    }
+
+    const stopResize = (): void => {
+      document.body.style.cursor = previousCursor
+      document.body.style.userSelect = previousUserSelect
+      setTerminalResizing(false)
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', stopResize)
+      window.removeEventListener('pointercancel', stopResize)
+    }
+
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', stopResize)
+    window.addEventListener('pointercancel', stopResize)
+  }, [sessionId, terminalCollapsed, terminalHeight])
 
   return (
     <div
@@ -418,6 +499,11 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
         >
           <DiffPanelTabBar activeTab={activeTab} onTabChange={onTabChange} onClose={() => setIsOpen(false)} isWindows={isWindows} />
 
+          <div ref={splitContainerRef} className="flex-1 min-h-0 flex flex-col">
+            <div className={cn(
+              'flex-1 min-w-0 flex flex-col overflow-hidden',
+              showTerminal ? 'min-h-[180px]' : 'min-h-0',
+            )}>
           {activeTab === 'changes' ? (
             sessionPath ? (
               <DiffChangesList
@@ -608,6 +694,27 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
               </div>
             </div>
           )}
+            </div>
+            {showTerminal && !terminalCollapsed && (
+              <div
+                className="h-[6px] flex-none cursor-row-resize bg-content-area titlebar-no-drag"
+                onPointerDown={handleTerminalResizeStart}
+                role="separator"
+                aria-orientation="horizontal"
+                aria-label="调整终端高度"
+              />
+            )}
+            {showTerminal && (
+              <TerminalPanel
+                ref={terminalPanelRef}
+                sessionId={sessionId}
+                cwd={sessionPath}
+                height={terminalHeight}
+                isResizing={terminalResizing}
+                onCollapsedChange={setTerminalCollapsed}
+              />
+            )}
+          </div>
         </div>
     </div>
   )

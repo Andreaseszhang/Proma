@@ -3047,6 +3047,37 @@ const AgentSessionItem = React.memo(function AgentSessionItem({
 
   const canMove = indicatorStatus === 'idle' || indicatorStatus === 'completed'
 
+  const delegationToggleButton = !editing && delegationSummary ? (
+    <button
+      type="button"
+      aria-label={`${delegationSummary.expanded ? '收起' : '展开'}子会话`}
+      onMouseEnter={preview.closeNow}
+      onFocus={preview.closeNow}
+      onMouseDown={(event) => {
+        event.stopPropagation()
+        preview.closeNow()
+      }}
+      onClick={(event) => {
+        event.stopPropagation()
+        preview.closeNow()
+        delegationSummary.onToggle()
+      }}
+      onDoubleClick={(event) => {
+        event.stopPropagation()
+        preview.closeNow()
+      }}
+      className="flex-shrink-0 inline-flex size-5 -my-1 -ml-[5px] items-center justify-center rounded text-foreground/45 hover:bg-foreground/[0.055] hover:text-foreground/70 transition-colors"
+    >
+      <ChevronRight
+        size={11}
+        className={cn(
+          'transition-transform duration-150',
+          delegationSummary.expanded && 'rotate-90',
+        )}
+      />
+    </button>
+  ) : null
+
   const menuItems = (
     MenuItem: typeof ContextMenuItem | typeof DropdownMenuItem,
     MenuSeparator: typeof ContextMenuSeparator | typeof DropdownMenuSeparator,
@@ -3107,6 +3138,7 @@ const AgentSessionItem = React.memo(function AgentSessionItem({
               )}
             />
           )}
+          {delegationToggleButton}
           <div className="flex-1 min-w-0">
             {editing ? (
               <input
@@ -3158,36 +3190,6 @@ const AgentSessionItem = React.memo(function AgentSessionItem({
 
           {!editing && (
             <>
-              {delegationSummary && (
-                <button
-                  type="button"
-                  aria-label={`${delegationSummary.expanded ? '收起' : '展开'}子会话`}
-                  onMouseEnter={preview.closeNow}
-                  onFocus={preview.closeNow}
-                  onMouseDown={(event) => {
-                    event.stopPropagation()
-                    preview.closeNow()
-                  }}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    preview.closeNow()
-                    delegationSummary.onToggle()
-                  }}
-                  onDoubleClick={(event) => {
-                    event.stopPropagation()
-                    preview.closeNow()
-                  }}
-                  className="flex-shrink-0 inline-flex size-6 -my-1 items-center justify-center rounded text-foreground/45 hover:bg-foreground/[0.055] hover:text-foreground/70 transition-colors"
-                >
-                  <ChevronRight
-                    size={11}
-                    className={cn(
-                      'transition-transform duration-150',
-                      delegationSummary.expanded && 'rotate-90',
-                    )}
-                  />
-                </button>
-              )}
               <SessionItemActions
                 updatedAt={session.updatedAt}
                 relativeTimeNow={relativeTimeNow}

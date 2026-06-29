@@ -25,9 +25,7 @@ import {
 } from '@/atoms/chat-atoms'
 import { useConversationModelOptional } from '@/hooks/useConversationSettings'
 import { useConversationIdOptional } from '@/contexts/session-context'
-import { getModelLineLogo } from '@/lib/model-line-logo'
 import { getModelLogo, getChannelLogo, DefaultLogo } from '@/lib/model-logo'
-import { ModelMark } from './ModelMark'
 import { cn } from '@/lib/utils'
 import type { Channel, ModelOption } from '@proma/shared'
 
@@ -237,9 +235,10 @@ export function ModelSelector({
         className="model-selector-trigger flex h-[36px] items-center gap-1.5 rounded-md px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
       >
         {displayModelInfo ? (
-          <ModelMark
-            src={getModelLineLogo(displayModelInfo.modelId, displayModelInfo.provider)}
-            className="size-4 text-primary"
+          <img
+            src={getModelLogo(displayModelInfo.modelId, displayModelInfo.provider)}
+            alt={displayModelInfo.modelName}
+            className="size-4 rounded object-cover"
           />
         ) : (
           <Cpu className="size-3.5" />

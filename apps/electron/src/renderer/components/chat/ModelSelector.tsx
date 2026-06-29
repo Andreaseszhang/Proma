@@ -4,7 +4,7 @@
  * 现代化设计：
  * - 大尺寸 Dialog，宽敞易读
  * - 按渠道分组，灰色背景供应商标题行
- * - 选中项左侧主题色竖条高亮
+ * - 选中项左侧绿色竖条高亮
  * - 触发按钮：模型 logo + 模型名 + Chevron
  */
 
@@ -232,7 +232,7 @@ export function ModelSelector({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="model-selector-trigger flex h-[36px] items-center gap-1.5 rounded-md px-2.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+        className="model-selector-trigger flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
       >
         {displayModelInfo ? (
           <img
@@ -284,14 +284,16 @@ export function ModelSelector({
                 return Array.from(filteredGrouped.entries()).map(([channelId, options]) => {
                 const first = options[0]
                 if (!first) return null
-                const channel = channels.find((item) => item.id === channelId)
 
                 return (
                   <div key={channelId}>
                     {/* 供应商标题行 - 灰色背景 */}
                     <div className="flex items-center gap-2 px-4 py-2 bg-muted/50 border-b border-border/30">
                       <img
-                        src={channel ? getChannelLogo(channel) : DefaultLogo}
+                        src={(() => {
+                          const ch = channels.find((c) => c.id === channelId)
+                          return ch ? getChannelLogo(ch) : DefaultLogo
+                        })()}
                         alt={first.channelName}
                         className="size-5 rounded object-cover"
                       />

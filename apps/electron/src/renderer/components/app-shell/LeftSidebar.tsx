@@ -733,9 +733,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   const [expandedExtraCountMap, setExpandedExtraCountMap] = React.useState<Map<string, number>>(new Map())
   /** 记录被用户手动折叠的工作区 ID（点击当前工作区标题时折叠/展开）。刻意不持久化：折叠被视为临时查看行为，刷新/重启后恢复默认展开 */
   const [collapsedWorkspaceIds, setCollapsedWorkspaceIds] = React.useState<Set<string>>(new Set())
-  /** 记录已展开的委派母会话；默认收起，避免批量派遣后撑满侧栏 */
-  const [expandedDelegationParentIds, setExpandedDelegationParentIds] = React.useState<Set<string>>(new Set())
-  /** 记录用户手动收起的委派母会话；用于覆盖“当前子会话自动展开”的兜底可见性 */
+  /** 记录用户手动收起的委派母会话；协作子会话默认展开 */
   const [collapsedDelegationParentIds, setCollapsedDelegationParentIds] = React.useState<Set<string>>(new Set())
   /** 项目拖拽排序状态 */
   const [dragProjectId, setDragProjectId] = React.useState<string | null>(null)
@@ -1193,7 +1191,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
 
     // 清理 per-conversation/session Map atoms 条目
     cleanupMapAtoms(pendingDeleteId)
-    setExpandedDelegationParentIds((prev) => deleteSetEntry(prev, pendingDeleteId))
+    setCollapsedDelegationParentIds((prev) => deleteSetEntry(prev, pendingDeleteId))
 
     if (mode === 'agent') {
       // Agent 模式：删除 Agent 会话
@@ -1223,7 +1221,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
           }
           closeArchivedAgentTabs(childIds)
           for (const childId of childIds) {
-            setExpandedDelegationParentIds((prev) => deleteSetEntry(prev, childId))
+            setCollapsedDelegationParentIds((prev) => deleteSetEntry(prev, childId))
             setAgentMessagesCache((prev) => {
               if (!prev.has(childId)) return prev
               const next = new Map(prev)
@@ -1335,7 +1333,6 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
 
   const handleToggleDelegationParent = React.useCallback((sessionId: string, expanded: boolean): void => {
     if (expanded) {
-      setExpandedDelegationParentIds((prev) => deleteSetEntry(prev, sessionId))
       setCollapsedDelegationParentIds((prev) => {
         if (prev.has(sessionId)) return prev
         const next = new Set(prev)
@@ -1346,12 +1343,6 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     }
 
     setCollapsedDelegationParentIds((prev) => deleteSetEntry(prev, sessionId))
-    setExpandedDelegationParentIds((prev) => {
-      if (prev.has(sessionId)) return prev
-      const next = new Set(prev)
-      next.add(sessionId)
-      return next
-    })
   }, [])
 
   const canDeleteWorkspace = React.useCallback(
@@ -1439,7 +1430,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       })
 
       setCollapsedWorkspaceIds((prev) => deleteSetEntry(prev, workspaceId))
-      setExpandedDelegationParentIds((prev) => {
+      setCollapsedDelegationParentIds((prev) => {
         let changed = false
         const next = new Set(prev)
         for (const sessionId of deletedSessionIds) {
@@ -1773,7 +1764,6 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     conversationGroups,
     expandedExtraCountMap,
     collapsedWorkspaceIds,
-    expandedDelegationParentIds,
     collapsedDelegationParentIds,
     activeSessionId,
   ])
@@ -2754,9 +2744,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                       const childCount = item.childSessions.length
                       const rowStatus = getSessionTreeStatus(item, agentIndicatorMap)
                       const treeActive = treeContainsSessionId(item, activeSessionId)
-                      const activeChildVisible = item.childSessions.some((child) => child.id === activeSessionId)
-                      const expandedChildren = expandedDelegationParentIds.has(item.session.id)
-                        || (activeChildVisible && !collapsedDelegationParentIds.has(item.session.id))
+                      const expandedChildren = !collapsedDelegationParentIds.has(item.session.id)
 
                       return (
                         <div key={`pinned-${item.session.id}`} className="flex flex-col gap-0.5">
@@ -2867,7 +2855,6 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                     collapsed={collapsedWorkspaceIds.has(group.workspace.id)}
                     activeSessionId={activeSessionId}
                     agentIndicatorMap={agentIndicatorMap}
-                    expandedDelegationParentIds={expandedDelegationParentIds}
                     collapsedDelegationParentIds={collapsedDelegationParentIds}
                     relativeTimeNow={relativeTimeNow}
                     dragging={dragProjectId === group.workspace.id}
@@ -2952,9 +2939,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                       const childCount = item.childSessions.length
                       const rowStatus = getSessionTreeStatus(item, agentIndicatorMap)
                       const treeActive = treeContainsSessionId(item, activeSessionId)
-                      const activeChildVisible = item.childSessions.some((child) => child.id === activeSessionId)
-                      const expandedChildren = expandedDelegationParentIds.has(item.session.id)
-                        || (activeChildVisible && !collapsedDelegationParentIds.has(item.session.id))
+                      const expandedChildren = !collapsedDelegationParentIds.has(item.session.id)
 
                       return (
                         <div key={item.session.id} className="flex flex-col gap-0.5">
@@ -3898,7 +3883,6 @@ interface AgentProjectGroupItemProps {
   extraCount: number
   activeSessionId: string | null
   agentIndicatorMap: Map<string, SessionIndicatorStatus>
-  expandedDelegationParentIds: Set<string>
   collapsedDelegationParentIds: Set<string>
   relativeTimeNow: number
   dragging: boolean
@@ -3935,7 +3919,6 @@ const AgentProjectGroupItem = React.memo(function AgentProjectGroupItem({
   extraCount,
   activeSessionId,
   agentIndicatorMap,
-  expandedDelegationParentIds,
   collapsedDelegationParentIds,
   relativeTimeNow,
   dragging,
@@ -4211,9 +4194,7 @@ const AgentProjectGroupItem = React.memo(function AgentProjectGroupItem({
                 const childCount = item.childSessions.length
                 const rowStatus = getSessionTreeStatus(item, agentIndicatorMap)
                 const treeActive = treeContainsSessionId(item, activeSessionId)
-                const activeChildVisible = item.childSessions.some((child) => child.id === activeSessionId)
-                const expandedChildren = expandedDelegationParentIds.has(item.session.id)
-                  || (activeChildVisible && !collapsedDelegationParentIds.has(item.session.id))
+                const expandedChildren = !collapsedDelegationParentIds.has(item.session.id)
 
                 return (
                   <div key={item.session.id} className="flex flex-col gap-0.5">

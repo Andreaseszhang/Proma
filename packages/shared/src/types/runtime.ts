@@ -253,8 +253,8 @@ export interface DefaultAppInfo {
   name: string
   /** 应用绝对路径（macOS 为 .app bundle，Windows 为 .exe），用于点击打开/调试 */
   appPath: string
-  /** App 图标的 PNG dataURL；通过 Electron app.getFileIcon 抓取 */
-  iconDataUrl: string
+  /** App 图标的 PNG dataURL；通过 Electron app.getFileIcon 抓取。图标读取失败时可省略。 */
+  iconDataUrl?: string
 }
 
 /**

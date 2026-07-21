@@ -34,13 +34,18 @@ function normalizeEntry(value: unknown): DefaultAppCacheEntry | null {
   if (
     typeof name !== 'string' ||
     typeof appPath !== 'string' ||
-    typeof iconDataUrl !== 'string' ||
+    (iconDataUrl !== undefined && typeof iconDataUrl !== 'string') ||
     typeof updatedAt !== 'number'
   ) {
     return null
   }
-  if (!name || !appPath || !iconDataUrl) return null
-  return { name, appPath, iconDataUrl, updatedAt }
+  if (!name || !appPath) return null
+  return {
+    name,
+    appPath,
+    ...(iconDataUrl ? { iconDataUrl } : {}),
+    updatedAt,
+  }
 }
 
 function loadCache(): void {
@@ -92,7 +97,7 @@ export function getCachedDefaultAppInfo(cacheKey: string): DefaultAppInfo | null
   return {
     name: entry.name,
     appPath: entry.appPath,
-    iconDataUrl: entry.iconDataUrl,
+    ...(entry.iconDataUrl ? { iconDataUrl: entry.iconDataUrl } : {}),
   }
 }
 

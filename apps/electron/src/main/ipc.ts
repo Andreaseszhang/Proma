@@ -800,9 +800,12 @@ if let appUrl = NSWorkspace.shared.urlForApplication(toOpen: url) {
 
   const iconDataUrl = await getAppIconDataUrl(appPath).catch((e) => { console.warn('[DefaultApp] getAppIconDataUrl 失败:', e); return '' })
   console.log('[DefaultApp] iconDataUrl 长度:', iconDataUrl?.length)
-  if (!iconDataUrl) return cacheNull(cacheKey)
 
-  const info: import('@proma/shared').DefaultAppInfo = { name: appName, appPath, iconDataUrl }
+  const info: import('@proma/shared').DefaultAppInfo = {
+    name: appName,
+    appPath,
+    ...(iconDataUrl ? { iconDataUrl } : {}),
+  }
   defaultAppCache.set(cacheKey, info)
   defaultAppFailureCache.delete(cacheKey)
   saveCachedDefaultAppInfo(cacheKey, info)

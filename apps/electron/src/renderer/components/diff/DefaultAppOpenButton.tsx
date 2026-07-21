@@ -3,10 +3,11 @@
  *
  * 通过 useDefaultAppForFile 拿到本机为该文件类型注册的默认 App（含图标），
  * 渲染一个按钮；点击调用 systemOpenFile 让系统按默认 App 打开。
- * 探测失败或图标读取失败时不渲染。
+ * 探测失败时不渲染；图标读取失败时使用通用图标。
  */
 
 import * as React from 'react'
+import { ExternalLink } from 'lucide-react'
 import type { FileAccessOptions } from '@proma/shared'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useDefaultAppForFile } from '@/hooks/useDefaultAppForFile'
@@ -52,12 +53,16 @@ export function DefaultAppOpenButton({
           )}
           aria-label={`用 ${info.name} 打开`}
         >
-          <img
-            src={info.iconDataUrl}
-            alt=""
-            className={cn('shrink-0', labeled ? 'size-4' : 'size-3.5')}
-            draggable={false}
-          />
+          {info.iconDataUrl ? (
+            <img
+              src={info.iconDataUrl}
+              alt=""
+              className={cn('shrink-0', labeled ? 'size-4' : 'size-3.5')}
+              draggable={false}
+            />
+          ) : (
+            <ExternalLink className={cn('shrink-0', labeled ? 'size-4' : 'size-3.5')} />
+          )}
           {labeled && (
             <span className="text-[11px] leading-none truncate">{info.name}</span>
           )}

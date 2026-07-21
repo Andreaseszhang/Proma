@@ -170,6 +170,17 @@ describe('Agent 会话 runtime 元数据', () => {
     expect(updated.openAIThinkingLevel).toBe('xhigh')
     expect(manager.getAgentSessionMeta(session.id)).toMatchObject({ openAIThinkingLevel: 'xhigh' })
   })
+
+  test('Given a session When star state is updated Then it persists without changing freshness or archive state', () => {
+    const session = manager.createAgentSession('星标会话')
+    const archived = manager.updateAgentSessionMeta(session.id, { archived: true })
+
+    const updated = manager.updateAgentSessionMeta(session.id, { starred: true })
+
+    expect(updated).toMatchObject({ starred: true, archived: true })
+    expect(updated.updatedAt).toBe(archived.updatedAt)
+    expect(manager.getAgentSessionMeta(session.id)).toMatchObject({ starred: true, archived: true })
+  })
 })
 
 describe('Agent 会话引用搜索', () => {

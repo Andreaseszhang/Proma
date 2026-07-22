@@ -2660,7 +2660,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
           )}
 
           <div className="group/chat-section relative flex items-center px-2 pt-2 pb-1 flex-shrink-0">
-            <span className="px-1.5 text-[11px] font-medium text-foreground/40 select-none">对话</span>
+            <span className="ml-[4px] px-1.5 text-[13px] font-medium leading-[18px] text-foreground/40 select-none">对话</span>
             {newChatShortcutLabel && (
               <span
                 aria-hidden="true"

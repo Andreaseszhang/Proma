@@ -1,8 +1,8 @@
 /**
  * FileSearchBar — 文件搜索栏
  *
- * 位于侧面板工作区文件和会话文件之间，输入关键词搜索所有文件。
- * 分别搜索会话目录和工作区文件目录，确保两边都使用相对路径。
+ * 位于 Files 面板顶部，跨会话文件与项目文件搜索。
+ * 分别搜索会话目录和项目文件根，确保两边都使用相对路径。
  */
 
 import * as React from 'react'
@@ -96,7 +96,7 @@ export function FileSearchBar({
       try {
         const allResults: FileIndexEntry[] = []
 
-        // 分别搜索工作区文件和会话文件，确保两边都用相对路径
+        // 分别搜索项目文件和会话文件，确保两边都用相对路径
         const searches: Promise<FileIndexEntry[]>[] = []
 
         if (workspaceFilesPath) {
@@ -268,11 +268,11 @@ export function FileSearchBar({
               </>
             )}
 
-            {/* 工作区文件分组 */}
+            {/* 项目文件分组 */}
             {workspaceResults.length > 0 && (
               <>
                 <div className="flex items-center gap-1.5 px-3 py-1 text-[10px] font-medium text-muted-foreground bg-muted/30">
-                  <span>工作区文件</span>
+                  <span>项目文件</span>
                   <span className="text-muted-foreground/40">{workspaceResults.length}</span>
                 </div>
                 {workspaceResults.map((entry) => {

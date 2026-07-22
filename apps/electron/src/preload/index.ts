@@ -42,6 +42,7 @@ import type {
   AgentStreamEvent,
   AgentStreamCompletePayload,
   AgentWorkspace,
+  CreateAgentWorkspaceInput,
   AgentGenerateTitleInput,
   AgentSaveFilesInput,
   AgentSaveWorkspaceFilesInput,
@@ -514,7 +515,7 @@ export interface ElectronAPI {
   listAgentWorkspaces: () => Promise<AgentWorkspace[]>
 
   /** 创建 Agent 工作区 */
-  createAgentWorkspace: (name: string) => Promise<AgentWorkspace>
+  createAgentWorkspace: (input: CreateAgentWorkspaceInput) => Promise<AgentWorkspace>
 
   /** 更新 Agent 工作区 */
   updateAgentWorkspace: (id: string, updates: { name: string }) => Promise<AgentWorkspace>
@@ -723,13 +724,13 @@ export interface ElectronAPI {
   getAgentSessionPath: (workspaceId: string, sessionId: string) => Promise<string | null>
 
   /** 列出目录内容 */
-  listDirectory: (dirPath: string) => Promise<FileEntry[]>
+  listDirectory: (dirPath: string, access?: import('@proma/shared').FileAccessOptions) => Promise<FileEntry[]>
 
   /** 删除文件/目录 */
-  deleteFile: (filePath: string) => Promise<void>
+  deleteFile: (filePath: string, access?: import('@proma/shared').FileAccessOptions) => Promise<void>
 
   /** 用系统默认应用打开文件 */
-  openFile: (filePath: string) => Promise<void>
+  openFile: (filePath: string, access?: import('@proma/shared').FileAccessOptions) => Promise<void>
 
   /** 将剪贴板文本写入临时预览文件并返回绝对路径 */
   writeClipboardPreview: (filename: string, content: string) => Promise<string>
@@ -744,7 +745,7 @@ export interface ElectronAPI {
   getDefaultAppForFile: (filePath: string, access?: import('@proma/shared').FileAccessOptions) => Promise<import('@proma/shared').DefaultAppInfo | null>
 
   /** 在系统文件管理器中显示文件 */
-  showInFolder: (filePath: string) => Promise<void>
+  showInFolder: (filePath: string, access?: import('@proma/shared').FileAccessOptions) => Promise<void>
 
   /** 使用系统终端打开文件夹 */
   openFolderInTerminal: (folderPath: string) => Promise<void>
@@ -777,10 +778,10 @@ export interface ElectronAPI {
   screenshotCapture: (input: { html: string; isDark: boolean; width?: number; mode: 'clipboard' | 'file'; css?: string; themeClass?: string }) => Promise<{ success: boolean; message: string; filePath?: string }>
 
   /** 重命名文件/目录 */
-  renameFile: (filePath: string, newName: string) => Promise<void>
+  renameFile: (filePath: string, newName: string, access?: import('@proma/shared').FileAccessOptions) => Promise<void>
 
   /** 移动文件/目录到目标目录 */
-  moveFile: (filePath: string, targetDir: string) => Promise<void>
+  moveFile: (filePath: string, targetDir: string, access?: import('@proma/shared').FileAccessOptions) => Promise<void>
 
   /** 列出附加目录内容 */
   listAttachedDirectory: (dirPath: string, access?: import('@proma/shared').FileAccessOptions) => Promise<FileEntry[]>
@@ -1575,8 +1576,8 @@ const electronAPI: ElectronAPI = {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.LIST_WORKSPACES)
   },
 
-  createAgentWorkspace: (name: string) => {
-    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.CREATE_WORKSPACE, name)
+  createAgentWorkspace: (input: CreateAgentWorkspaceInput) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.CREATE_WORKSPACE, input)
   },
 
   updateAgentWorkspace: (id: string, updates: { name: string }) => {
@@ -1889,16 +1890,16 @@ const electronAPI: ElectronAPI = {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.GET_SESSION_PATH, workspaceId, sessionId)
   },
 
-  listDirectory: (dirPath: string) => {
-    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.LIST_DIRECTORY, dirPath)
+  listDirectory: (dirPath: string, access?: import('@proma/shared').FileAccessOptions) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.LIST_DIRECTORY, dirPath, access)
   },
 
-  deleteFile: (filePath: string) => {
-    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.DELETE_FILE, filePath)
+  deleteFile: (filePath: string, access?: import('@proma/shared').FileAccessOptions) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.DELETE_FILE, filePath, access)
   },
 
-  openFile: (filePath: string) => {
-    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.OPEN_FILE, filePath)
+  openFile: (filePath: string, access?: import('@proma/shared').FileAccessOptions) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.OPEN_FILE, filePath, access)
   },
 
   writeClipboardPreview: (filename: string, content: string) => {
@@ -1917,8 +1918,8 @@ const electronAPI: ElectronAPI = {
     return ipcRenderer.invoke(IPC_CHANNELS.GET_DEFAULT_APP_FOR_FILE, filePath, access) as Promise<import('@proma/shared').DefaultAppInfo | null>
   },
 
-  showInFolder: (filePath: string) => {
-    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.SHOW_IN_FOLDER, filePath)
+  showInFolder: (filePath: string, access?: import('@proma/shared').FileAccessOptions) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.SHOW_IN_FOLDER, filePath, access)
   },
 
   openFolderInTerminal: (folderPath: string) => {
@@ -1962,12 +1963,12 @@ const electronAPI: ElectronAPI = {
     return ipcRenderer.invoke(IPC_CHANNELS.SCREENSHOT_CAPTURE, input) as Promise<{ success: boolean; message: string; filePath?: string }>
   },
 
-  renameFile: (filePath: string, newName: string) => {
-    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.RENAME_FILE, filePath, newName)
+  renameFile: (filePath: string, newName: string, access?: import('@proma/shared').FileAccessOptions) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.RENAME_FILE, filePath, newName, access)
   },
 
-  moveFile: (filePath: string, targetDir: string) => {
-    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.MOVE_FILE, filePath, targetDir)
+  moveFile: (filePath: string, targetDir: string, access?: import('@proma/shared').FileAccessOptions) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.MOVE_FILE, filePath, targetDir, access)
   },
 
   listAttachedDirectory: (dirPath: string, access?: import('@proma/shared').FileAccessOptions) => {

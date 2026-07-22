@@ -13,7 +13,7 @@ import type { AgentRuntime, PromaPermissionMode } from '@proma/shared'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { getUserProfile } from './user-profile-service'
-import { getWorkspaceMcpConfig } from './agent-workspace-manager'
+import { getProjectFilesPath, getWorkspaceMcpConfig } from './agent-workspace-manager'
 import { getConfigDirName } from './config-paths'
 import { buildGitAttributionPromptSection, isGitAttributionEnabled } from './agent-git-attribution'
 import { getSettings } from './settings-service'
@@ -52,7 +52,7 @@ function buildWorkspacePromptPaths(workspaceSlug: string, sessionId: string) {
     sessionDir: join(workspaceRoot, sessionId),
     mcpConfig: join(workspaceRoot, 'mcp.json'),
     skillsDir: join(workspaceRoot, 'skills'),
-    workspaceContextDir: join(workspaceRoot, 'workspace-files', '.context'),
+    workspaceContextDir: join(getProjectFilesPath(workspaceSlug), '.context'),
     claudeMd: join(workspaceRoot, 'CLAUDE.md'),
     autoMemoryDir,
     autoMemoryIndex: join(autoMemoryDir, 'MEMORY.md'),

@@ -11,7 +11,7 @@
  */
 
 import * as React from 'react'
-import { FolderOpen, Plus } from 'lucide-react'
+import { FolderOpen, FolderInput, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useProjectActions } from '@/hooks/useProjectActions'
@@ -26,7 +26,7 @@ interface CollapsedWorkspacePopoverProps {
 export function CollapsedWorkspacePopover({
   children,
 }: CollapsedWorkspacePopoverProps): React.ReactElement {
-  const { workspaces, currentWorkspaceId, selectProject, createProject } = useProjectActions()
+  const { workspaces, currentWorkspaceId, selectProject, createProject, createProjectFromFolder } = useProjectActions()
 
   const [open, setOpen] = React.useState(false)
   const closeTimerRef = React.useRef<number | null>(null)
@@ -128,14 +128,24 @@ export function CollapsedWorkspacePopover({
           <span className="text-[11px] font-medium text-foreground/50 uppercase tracking-wide">
             Agent 模式 · 项目
           </span>
-          <button
-            type="button"
-            onClick={handleStartCreate}
-            className="p-1 rounded hover:bg-foreground/[0.06] text-foreground/35 hover:text-foreground/60 transition-colors"
-            title="新建项目"
-          >
-            <Plus size={13} />
-          </button>
+          <div className="flex items-center gap-0.5">
+            <button
+              type="button"
+              onClick={() => void createProjectFromFolder()}
+              className="p-1 rounded hover:bg-foreground/[0.06] text-foreground/35 hover:text-foreground/60 transition-colors"
+              title="从本地文件夹创建项目"
+            >
+              <FolderInput size={13} />
+            </button>
+            <button
+              type="button"
+              onClick={handleStartCreate}
+              className="p-1 rounded hover:bg-foreground/[0.06] text-foreground/35 hover:text-foreground/60 transition-colors"
+              title="新建空白项目"
+            >
+              <Plus size={13} />
+            </button>
+          </div>
         </div>
 
         {/* 项目列表 */}

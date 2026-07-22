@@ -11,7 +11,7 @@
 import * as React from 'react'
 import { useAtom, useSetAtom, useAtomValue, useStore } from 'jotai'
 import { toast } from 'sonner'
-import { Pin, PinOff, Star, Settings, Plus, Trash2, Pencil, PanelLeftClose, PanelLeftOpen, ArrowRightLeft, Search, Archive, ArchiveRestore, ArrowLeft, Bot, MessageSquare, MoreHorizontal, FolderOpen, GripVertical, Clock, AlarmClock, ChevronRight, Blocks, GitBranch, Download, Loader2, RotateCw } from 'lucide-react'
+import { Pin, PinOff, Star, Settings, Plus, Trash2, Pencil, PanelLeftClose, PanelLeftOpen, ArrowRightLeft, Search, Archive, ArchiveRestore, ArrowLeft, Bot, MessageSquare, MoreHorizontal, FolderOpen, FolderInput, GripVertical, Clock, AlarmClock, ChevronRight, Blocks, GitBranch, Download, Loader2, RotateCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { ModeSwitcher } from './ModeSwitcher'
@@ -1619,7 +1619,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     }
 
     try {
-      const workspace = await window.electronAPI.createAgentWorkspace(trimmed)
+      const workspace = await window.electronAPI.createAgentWorkspace({ name: trimmed })
       setWorkspaces((prev) => [workspace, ...prev])
       setCurrentWorkspaceId(workspace.id)
       window.electronAPI.updateSettings({ agentWorkspaceId: workspace.id }).catch(console.error)
@@ -1642,6 +1642,23 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       setNewProjectName('')
     }
   }, [handleCreateProject])
+
+  const handleCreateProjectFromFolder = React.useCallback(async (): Promise<void> => {
+    try {
+      const folder = await window.electronAPI.openFolderDialog()
+      if (!folder) return
+      const workspace = await window.electronAPI.createAgentWorkspace({
+        name: folder.name,
+        projectRootPath: folder.path,
+      })
+      setWorkspaces((prev) => [workspace, ...prev])
+      setCurrentWorkspaceId(workspace.id)
+      window.electronAPI.updateSettings({ agentWorkspaceId: workspace.id }).catch(console.error)
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : '从文件夹创建项目失败'
+      toast.error(msg)
+    }
+  }, [setCurrentWorkspaceId, setWorkspaces])
 
   /** 选择 Agent 会话（打开或聚焦标签页） */
   const handleSelectAgentSession = React.useCallback((id: string, title: string): void => {
@@ -2793,20 +2810,35 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
 
           {/* 下区标题：项目历史 */}
           <div className="px-2 pt-2 pb-1 flex items-center justify-between flex-shrink-0">
-            <span className="ml-[4px] px-1.5 text-[13px] font-medium leading-[18px] text-foreground/40 select-none">项目</span>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  onClick={handleStartCreateProject}
-                  className="size-6 flex items-center justify-center rounded-md text-foreground/40 hover:bg-foreground/[0.06] hover:text-foreground/60 transition-colors titlebar-no-drag"
-                  aria-label="新建项目"
-                >
-                  <Plus size={16} />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="top">新建项目</TooltipContent>
-            </Tooltip>
+            <span className="px-1.5 text-[11px] font-medium text-foreground/40 select-none">项目</span>
+            <div className="flex items-center gap-0.5">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={() => void handleCreateProjectFromFolder()}
+                    className="size-6 flex items-center justify-center rounded-md text-foreground/35 hover:bg-foreground/[0.06] hover:text-foreground/60 transition-colors titlebar-no-drag"
+                    aria-label="从本地文件夹创建项目"
+                  >
+                    <FolderInput size={13} />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top">从本地文件夹创建项目</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={handleStartCreateProject}
+                    className="size-6 flex items-center justify-center rounded-md text-foreground/35 hover:bg-foreground/[0.06] hover:text-foreground/60 transition-colors titlebar-no-drag"
+                    aria-label="新建空白项目"
+                  >
+                    <Plus size={13} />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top">新建空白项目</TooltipContent>
+              </Tooltip>
+            </div>
           </div>
 
           {/* 下区：项目分组历史 */}

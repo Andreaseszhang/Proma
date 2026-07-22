@@ -33,7 +33,8 @@ import { PiAgentAdapter, cleanupPiRuntimeResources } from './adapters/pi-agent-a
 import { RuntimeRoutingAgentAdapter } from './adapters/runtime-routing-agent-adapter'
 import { AgentEventBus } from './agent-event-bus'
 import { AgentOrchestrator } from './agent-orchestrator'
-import { getAgentSessionWorkspacePath, getWorkspaceFilesDir } from './config-paths'
+import { getAgentSessionWorkspacePath } from './config-paths'
+import { getProjectFilesPath } from './agent-workspace-manager'
 import { getAgentSessionMeta, updateAgentSessionMeta } from './agent-session-manager'
 import { setAgentStopper, setHeadlessAgentRunner } from './agent-headless-runner-registry'
 import { sendAgentStreamComplete } from './agent-completion-payload'
@@ -442,12 +443,12 @@ export function saveFilesToAgentSession(input: AgentSaveFilesInput): AgentSavedF
 }
 
 /**
- * 保存文件到工作区文件目录
+ * 保存文件到项目文件根目录
  *
- * 将 base64 编码的文件写入工作区 workspace-files/ 目录，所有会话均可访问。
+ * 空白项目写入 Proma 托管的 workspace-files/；本地目录项目直接写入用户选择的原始目录。
  */
 export function saveFilesToWorkspaceFiles(input: AgentSaveWorkspaceFilesInput): AgentSavedFile[] {
-  const wsFilesDir = getWorkspaceFilesDir(input.workspaceSlug)
+  const wsFilesDir = getProjectFilesPath(input.workspaceSlug)
   const results: AgentSavedFile[] = []
   const usedPaths = new Set<string>()
 

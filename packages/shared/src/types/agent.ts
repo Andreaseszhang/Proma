@@ -16,10 +16,23 @@ export interface AgentWorkspace {
   name: string
   /** URL-safe 目录名（创建后不可变） */
   slug: string
+  /**
+   * 用户选择的本地项目根目录。未设置时，项目文件使用 Proma 托管的
+   * workspace-files/ 目录；设置后，项目文件直接指向该原始目录。
+   */
+  projectRootPath?: string
   /** 创建时间戳 */
   createdAt: number
   /** 更新时间戳 */
   updatedAt: number
+}
+
+/** 新建项目的输入。 */
+export interface CreateAgentWorkspaceInput {
+  /** 项目显示名称 */
+  name: string
+  /** 可选的用户本地项目根目录 */
+  projectRootPath?: string
 }
 
 // ===== SDK 新增类型声明（0.2.52 ~ 0.2.63） =====

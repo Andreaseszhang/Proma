@@ -48,8 +48,8 @@ import pkg from '../../../package.json' with { type: 'json' }
 import { getFetchFn } from './proxy-fetch'
 import { getEffectiveProxyUrl } from './proxy-settings-service'
 import { appendSDKMessages, updateAgentSessionMeta, getAgentSessionMeta, getAgentSessionMessages, truncateSDKMessages, removeSDKErrorMessage, resolveUserUuidFromSDK, rewindFilesFromSnapshot, rewindPiAgentSession } from './agent-session-manager'
-import { getAgentWorkspace, getWorkspaceMcpConfig, ensurePluginManifest, getWorkspaceAutoMemoryDir, getWorkspaceAttachedDirectories, getWorkspaceAttachedFiles } from './agent-workspace-manager'
-import { getAgentWorkspacePath, getAgentSessionWorkspacePath, getSdkConfigDir, getWorkspaceFilesDir, getWorkspaceSkillsDir } from './config-paths'
+import { getAgentWorkspace, getProjectFilesPath, getWorkspaceMcpConfig, ensurePluginManifest, getWorkspaceAutoMemoryDir, getWorkspaceAttachedDirectories, getWorkspaceAttachedFiles } from './agent-workspace-manager'
+import { getAgentWorkspacePath, getAgentSessionWorkspacePath, getSdkConfigDir, getWorkspaceSkillsDir } from './config-paths'
 import { getRuntimeStatus } from './runtime-init'
 import { getSettings } from './settings-service'
 import { buildSystemPrompt, buildDynamicContext } from './agent-prompt-builder'
@@ -334,7 +334,7 @@ const DEFAULT_MODEL_ID = 'claude-sonnet-5'
  *   1. extraDirs：调用方传入的临时附加目录（例如 sendMessage 时用户当次提交的目录）
  *   2. 会话级 attachedDirectories + attachedFiles 的父目录
  *   3. 工作区级 attachedDirectories + attachedFiles 的父目录
- *   4. 工作区文件目录 workspace-files/
+ *   4. 项目文件根目录（本地项目为用户目录，空白项目为 workspace-files/）
  */
 function collectAttachedDirectories(params: {
   sessionMeta?: AgentSessionMeta
@@ -355,7 +355,7 @@ function collectAttachedDirectories(params: {
   if (workspaceSlug) {
     for (const d of getWorkspaceAttachedDirectories(workspaceSlug)) push(d)
     for (const f of getWorkspaceAttachedFiles(workspaceSlug)) push(dirname(f))
-    push(getWorkspaceFilesDir(workspaceSlug))
+    push(getProjectFilesPath(workspaceSlug))
   }
 
   return result
@@ -1176,10 +1176,10 @@ export class AgentOrchestrator {
       if (workspaceId) {
         const ws = getAgentWorkspace(workspaceId)
         if (ws) {
-          agentCwd = getAgentSessionWorkspacePath(ws.slug, sessionId)
+          agentCwd = ws.projectRootPath ?? getAgentSessionWorkspacePath(ws.slug, sessionId)
           workspaceSlug = ws.slug
           workspace = ws
-          console.log(`[Agent 编排] 使用 session 级别 cwd: ${agentCwd} (${ws.name}/${sessionId})`)
+          console.log(`[Agent 编排] 使用${ws.projectRootPath ? '项目根' : 'session 级别'} cwd: ${agentCwd} (${ws.name}/${sessionId})`)
 
           if (agentRuntime === 'claude') {
             ensurePluginManifest(ws.slug, ws.name)
@@ -2580,7 +2580,7 @@ export class AgentOrchestrator {
       const ws = getAgentWorkspace(sessionMeta.workspaceId)
       if (ws) {
         workspaceSlug = ws.slug
-        projectDir = getAgentSessionWorkspacePath(ws.slug, sessionMeta.id)
+        projectDir = ws.projectRootPath ?? getAgentSessionWorkspacePath(ws.slug, sessionMeta.id)
       }
     }
     const userMessageUuid = resolveUserUuidFromSDK(sessionMeta.sdkSessionId, assistantMessageUuid, projectDir, sessionMeta.forkSourceSdkSessionId)

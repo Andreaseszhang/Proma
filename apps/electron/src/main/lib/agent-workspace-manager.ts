@@ -18,6 +18,7 @@ import {
   getAgentWorkspacePath,
   getWorkspaceMcpPath,
   getWorkspaceSkillsDir,
+  getWorkspaceFilesDir,
   getInactiveSkillsDir,
   getDefaultSkillsDir,
   parseSkillVersion,
@@ -26,7 +27,7 @@ import { findAllGitRoots, normalizeGitRoot } from './git-diff-service'
 import { listBuiltinMcpServers } from './builtin-mcp/catalog'
 import { RESERVED_BUILTIN_KEYS } from './builtin-mcp/baseline'
 import { inferMcpTransportType, normalizeMcpTransportType } from '@proma/shared'
-import type { AgentWorkspace, WorkspaceMcpConfig, SkillMeta, SkillImportSource, OtherWorkspaceSkillsGroup, WorkspaceCapabilities, SkillFileNode, SkillFileContent, WorkspaceMemorySummary } from '@proma/shared'
+import type { AgentWorkspace, CreateAgentWorkspaceInput, WorkspaceMcpConfig, SkillMeta, SkillImportSource, OtherWorkspaceSkillsGroup, WorkspaceCapabilities, SkillFileNode, SkillFileContent, WorkspaceMemorySummary } from '@proma/shared'
 
 interface AgentWorkspacesIndex {
   version: number
@@ -182,6 +183,20 @@ export function getAgentWorkspace(id: string): AgentWorkspace | undefined {
   return index.workspaces.find((w) => w.id === id)
 }
 
+/** 按 slug 查找项目，供项目文件根解析使用。 */
+export function getAgentWorkspaceBySlug(slug: string): AgentWorkspace | undefined {
+  const index = readIndex()
+  return index.workspaces.find((w) => w.slug === slug)
+}
+
+/**
+ * 返回项目文件根。本地目录项目直接使用用户选择的目录；空白项目继续
+ * 使用 Proma 托管的 workspace-files/，以保持历史项目完全兼容。
+ */
+export function getProjectFilesPath(workspaceSlug: string): string {
+  return getAgentWorkspaceBySlug(workspaceSlug)?.projectRootPath ?? getWorkspaceFilesDir(workspaceSlug)
+}
+
 /** 将 ~/.proma/default-skills/ 的内容逐个复制到工作区 skills/ 目录 */
 function copyDefaultSkills(workspaceSlug: string, options: { throwOnError?: boolean } = {}): void {
   const defaultDir = getDefaultSkillsDir()
@@ -212,7 +227,10 @@ function copyDefaultSkills(workspaceSlug: string, options: { throwOnError?: bool
   }
 }
 
-export function createAgentWorkspace(name: string): AgentWorkspace {
+export function createAgentWorkspace(input: string | CreateAgentWorkspaceInput): AgentWorkspace {
+  const { name, projectRootPath } = typeof input === 'string'
+    ? { name: input, projectRootPath: undefined }
+    : input
   const index = readIndex()
 
   const duplicate = index.workspaces.find((w) => w.name === name)
@@ -223,11 +241,25 @@ export function createAgentWorkspace(name: string): AgentWorkspace {
   const existingSlugs = new Set(index.workspaces.map((w) => w.slug))
   const slug = slugify(name, existingSlugs)
   const now = Date.now()
+  let normalizedProjectRootPath: string | undefined
+
+  if (projectRootPath) {
+    try {
+      normalizedProjectRootPath = realpathSync(resolve(projectRootPath))
+      if (!statSync(normalizedProjectRootPath).isDirectory()) {
+        throw new Error('选择的路径不是文件夹')
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '无法访问选择的文件夹'
+      throw new Error(`项目文件夹无效: ${message}`)
+    }
+  }
 
   const workspace: AgentWorkspace = {
     id: randomUUID(),
     name,
     slug,
+    projectRootPath: normalizedProjectRootPath,
     createdAt: now,
     updatedAt: now,
   }

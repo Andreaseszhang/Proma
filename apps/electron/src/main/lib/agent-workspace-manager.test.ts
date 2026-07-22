@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import * as os from 'node:os'
 import { join } from 'node:path'
 
@@ -111,6 +111,19 @@ describe('Agent 工作区创建', () => {
     expect(existsSync(join(copiedSkillDir, 'SKILL.md'))).toBe(true)
     expect(existsSync(join(copiedSkillDir, '.git'))).toBe(false)
     expect(existsSync(join(copiedSkillDir, 'node_modules'))).toBe(false)
+  })
+
+  test('Given 用户选择本地目录 When 创建项目 Then 项目文件根直接引用原目录', () => {
+    const projectRoot = mkdtempSync(join(tempHome, 'local-project-'))
+    const workspace = manager.createAgentWorkspace({
+      name: 'Local Project',
+      projectRootPath: projectRoot,
+    })
+
+    const normalizedProjectRoot = realpathSync(projectRoot)
+    expect(workspace.projectRootPath).toBe(normalizedProjectRoot)
+    expect(manager.getProjectFilesPath(workspace.slug)).toBe(normalizedProjectRoot)
+    expect(existsSync(join(configPaths.getAgentWorkspacePath(workspace.slug), 'workspace-files'))).toBe(false)
   })
 })
 

@@ -21,9 +21,11 @@ interface FileDropZoneProps {
   onFilesAttached?: (filePaths: string[]) => Promise<void> | void
   onAttachFolder: () => void
   onFoldersDropped: (folderPaths: string[]) => void
+  /** 关联文件夹由外部标题栏承载时隐藏第二个卡片。 */
+  showFolderAction?: boolean
 }
 
-export function FileDropZone({ workspaceSlug, sessionId, target = 'session', onFilesUploaded, onFilesAttached, onAttachFolder, onFoldersDropped }: FileDropZoneProps): React.ReactElement {
+export function FileDropZone({ workspaceSlug, sessionId, target = 'session', onFilesUploaded, onFilesAttached, onAttachFolder, onFoldersDropped, showFolderAction = true }: FileDropZoneProps): React.ReactElement {
   const [isDragOver, setIsDragOver] = React.useState<'left' | 'right' | null>(null)
   const [isUploading, setIsUploading] = React.useState(false)
 
@@ -204,7 +206,7 @@ export function FileDropZone({ workspaceSlug, sessionId, target = 'session', onF
           await onFilesAttached(largeFiles.map((f) => f.path))
           toast.success(`已作为附加文件显示在右侧文件区：${formatFileNames(largeFiles.map((f) => f.filename))}`)
         } else {
-          toast.error(`以下文件超过 100MB，未复制到工作文件夹：${formatFileNames(largeFiles.map((f) => f.filename))}`, {
+          toast.error(`以下文件超过 100MB，未复制到目标文件夹：${formatFileNames(largeFiles.map((f) => f.filename))}`, {
             description: '可在输入框中直接发送为附加文件，或使用附加文件夹。',
           })
         }
@@ -223,7 +225,7 @@ export function FileDropZone({ workspaceSlug, sessionId, target = 'session', onF
       })
 
       if (oversized.length > 0) {
-        toast.error(`以下文件超过 100MB，未复制到工作文件夹：${formatFileNames(oversized)}`, {
+        toast.error(`以下文件超过 100MB，未复制到目标文件夹：${formatFileNames(oversized)}`, {
           description: '可在输入框中直接发送为附加文件，或使用附加文件夹。',
         })
       }
@@ -291,7 +293,7 @@ export function FileDropZone({ workspaceSlug, sessionId, target = 'session', onF
               <div
                 role="button"
                 tabIndex={0}
-                aria-label={isWorkspace ? '添加文件到工作区文件目录' : '添加文件到会话文件夹'}
+                aria-label={isWorkspace ? '添加文件到项目文件目录' : '添加文件到会话文件夹'}
                 className={zoneClass('left')}
                 onDragOver={(e) => handleDragOver(e, 'left')}
                 onDragLeave={handleDragLeave}
@@ -304,31 +306,32 @@ export function FileDropZone({ workspaceSlug, sessionId, target = 'session', onF
               </div>
             </TooltipTrigger>
             <TooltipContent side="bottom">
-              <p>{isWorkspace ? '添加文件到工作区文件目录' : '将文件放入 Agent 工作文件夹'}</p>
+              <p>{isWorkspace ? '添加文件到项目文件目录' : '将文件放入 Agent 工作文件夹'}</p>
             </TooltipContent>
           </Tooltip>
-          {/* 附加文件夹 */}
-          <Tooltip open={isDragOver === 'right' ? false : undefined}>
-            <TooltipTrigger asChild>
-              <div
-                role="button"
-                tabIndex={0}
-                aria-label={isWorkspace ? '附加文件夹到工作区' : '附加文件夹到会话'}
-                className={zoneClass('right')}
-                onDragOver={(e) => handleDragOver(e, 'right')}
-                onDragLeave={handleDragLeave}
-                onDrop={(e) => handleDrop(e, 'right')}
-                onClick={onAttachFolder}
-                onKeyDown={activateOnKey(onAttachFolder)}
-              >
-                <span className="text-[11px] text-muted-foreground/75">附加文件夹</span>
-                <FolderPlus className="size-4 text-muted-foreground/60" />
-              </div>
-            </TooltipTrigger>
-            <TooltipContent side="bottom">
-              <p>{isWorkspace ? '附加文件夹供工作区所有会话访问' : '告知 Agent 你想处理的文件夹'}</p>
-            </TooltipContent>
-          </Tooltip>
+          {showFolderAction && (
+            <Tooltip open={isDragOver === 'right' ? false : undefined}>
+              <TooltipTrigger asChild>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  aria-label={isWorkspace ? '关联文件夹到项目' : '附加文件夹到会话'}
+                  className={zoneClass('right')}
+                  onDragOver={(e) => handleDragOver(e, 'right')}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, 'right')}
+                  onClick={onAttachFolder}
+                  onKeyDown={activateOnKey(onAttachFolder)}
+                >
+                  <span className="text-[11px] text-muted-foreground/75">{isWorkspace ? '关联文件夹' : '附加文件夹'}</span>
+                  <FolderPlus className="size-4 text-muted-foreground/60" />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <p>{isWorkspace ? '关联文件夹供项目内所有会话访问' : '告知 Agent 你想处理的文件夹'}</p>
+              </TooltipContent>
+            </Tooltip>
+          )}
         </>
       )}
     </div>

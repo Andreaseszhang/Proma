@@ -82,6 +82,7 @@ import { draftSessionIdsAtom } from '@/atoms/draft-session-atoms'
 import { hasEnvironmentIssuesAtom } from '@/atoms/environment'
 import { conversationPromptIdAtom } from '@/atoms/system-prompt-atoms'
 import { interfaceVariantAtom } from '@/atoms/theme'
+import { useCreateSession } from '@/hooks/useCreateSession'
 import { useOpenSession } from '@/hooks/useOpenSession'
 import { useSyncActiveTabSideEffects } from '@/hooks/useSyncActiveTabSideEffects'
 import { CollapsedWorkspacePopover } from '@/components/agent/CollapsedWorkspacePopover'
@@ -780,6 +781,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   // 会话高亮按"激活 Tab 所属会话"判定：预览 Tab 激活时其 owner 会话仍保持高亮
   const activeSessionId = useAtomValue(activeSessionIdAtom)
   const [sidebarCollapsed, setSidebarCollapsed] = useAtom(sidebarCollapsedAtom)
+  const { createChat } = useCreateSession()
   const openSession = useOpenSession()
   const syncActiveTabSideEffects = useSyncActiveTabSideEffects()
   const store = useStore()
@@ -793,6 +795,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   const [viewMode, setViewMode] = useAtom(sidebarViewModeAtom)
   const searchDialogOpen = useAtomValue(searchDialogOpenAtom)
   const setSearchDialogOpen = useSetAtom(searchDialogOpenAtom)
+  const newChatShortcutLabel = getAcceleratorDisplay(getActiveAccelerator('new-session'))
 
   const handleOpenSettings = React.useCallback((): void => {
     setSettingsOpen(true)
@@ -2656,8 +2659,31 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
             </div>
           )}
 
-          <div className="px-2 pt-2 pb-1 flex-shrink-0">
+          <div className="group/chat-section relative flex items-center px-2 pt-2 pb-1 flex-shrink-0">
             <span className="px-1.5 text-[11px] font-medium text-foreground/40 select-none">对话</span>
+            {newChatShortcutLabel && (
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute right-9 top-1/2 -translate-y-1/2 whitespace-nowrap text-[10px] font-medium text-foreground/35 transition-opacity group-hover/chat-section:opacity-0"
+              >
+                {newChatShortcutLabel} 新建对话
+              </span>
+            )}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="新建对话"
+                  onClick={() => { void createChat() }}
+                  className="absolute right-2 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded-md text-foreground/30 transition-colors hover:bg-foreground/[0.055] hover:text-foreground/65 titlebar-no-drag"
+                >
+                  <Plus size={13} />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                {`新建对话${newChatShortcutLabel ? ` (${newChatShortcutLabel})` : ''}`}
+              </TooltipContent>
+            </Tooltip>
           </div>
 
           <div className="flex-1 overflow-y-auto px-2 pb-3 scrollbar-thin min-h-0 titlebar-no-drag">

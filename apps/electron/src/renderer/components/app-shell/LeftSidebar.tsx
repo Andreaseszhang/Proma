@@ -2689,7 +2689,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
           <div className="flex-1 overflow-y-auto px-2 pb-3 scrollbar-thin min-h-0 titlebar-no-drag">
             {conversationGroups.map((group) => (
               <div key={group.label} className="mb-1">
-                <div className="px-1.5 pt-2 pb-1 text-[11px] font-medium text-foreground/40 select-none">
+                <div className="ml-[4px] px-1.5 pt-2 pb-1 text-[11px] font-medium text-foreground/40 select-none">
                   {group.label}
                 </div>
                 <div className="flex flex-col gap-0.5">

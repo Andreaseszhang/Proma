@@ -21,11 +21,9 @@ interface FileDropZoneProps {
   onFilesAttached?: (filePaths: string[]) => Promise<void> | void
   onAttachFolder: () => void
   onFoldersDropped: (folderPaths: string[]) => void
-  /** 关联文件夹由外部标题栏承载时隐藏第二个卡片。 */
-  showFolderAction?: boolean
 }
 
-export function FileDropZone({ workspaceSlug, sessionId, target = 'session', onFilesUploaded, onFilesAttached, onAttachFolder, onFoldersDropped, showFolderAction = true }: FileDropZoneProps): React.ReactElement {
+export function FileDropZone({ workspaceSlug, sessionId, target = 'session', onFilesUploaded, onFilesAttached, onAttachFolder, onFoldersDropped }: FileDropZoneProps): React.ReactElement {
   const [isDragOver, setIsDragOver] = React.useState<'left' | 'right' | null>(null)
   const [isUploading, setIsUploading] = React.useState(false)
 
@@ -309,29 +307,27 @@ export function FileDropZone({ workspaceSlug, sessionId, target = 'session', onF
               <p>{isWorkspace ? '添加文件到项目文件目录' : '将文件放入 Agent 工作文件夹'}</p>
             </TooltipContent>
           </Tooltip>
-          {showFolderAction && (
-            <Tooltip open={isDragOver === 'right' ? false : undefined}>
-              <TooltipTrigger asChild>
-                <div
-                  role="button"
-                  tabIndex={0}
-                  aria-label={isWorkspace ? '关联文件夹到项目' : '附加文件夹到会话'}
-                  className={zoneClass('right')}
-                  onDragOver={(e) => handleDragOver(e, 'right')}
-                  onDragLeave={handleDragLeave}
-                  onDrop={(e) => handleDrop(e, 'right')}
-                  onClick={onAttachFolder}
-                  onKeyDown={activateOnKey(onAttachFolder)}
-                >
-                  <span className="text-[11px] text-muted-foreground/75">{isWorkspace ? '关联文件夹' : '附加文件夹'}</span>
-                  <FolderPlus className="size-4 text-muted-foreground/60" />
-                </div>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">
-                <p>{isWorkspace ? '关联文件夹供项目内所有会话访问' : '告知 Agent 你想处理的文件夹'}</p>
-              </TooltipContent>
-            </Tooltip>
-          )}
+          <Tooltip open={isDragOver === 'right' ? false : undefined}>
+            <TooltipTrigger asChild>
+              <div
+                role="button"
+                tabIndex={0}
+                aria-label="附加文件夹"
+                className={zoneClass('right')}
+                onDragOver={(e) => handleDragOver(e, 'right')}
+                onDragLeave={handleDragLeave}
+                onDrop={(e) => handleDrop(e, 'right')}
+                onClick={onAttachFolder}
+                onKeyDown={activateOnKey(onAttachFolder)}
+              >
+                <span className="text-[11px] text-muted-foreground/75">附加文件夹</span>
+                <FolderPlus className="size-4 text-muted-foreground/60" />
+              </div>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">
+              <p>告知 Agent 你想处理的文件夹</p>
+            </TooltipContent>
+          </Tooltip>
         </>
       )}
     </div>

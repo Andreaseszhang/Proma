@@ -7,7 +7,7 @@
 
 import * as React from 'react'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
-import { X, FolderOpen, FolderPlus, ExternalLink, ChevronRight, MoreHorizontal, FolderSearch, Pencil, FolderInput, Info, FolderHeart, MessageSquarePlus } from 'lucide-react'
+import { X, FolderOpen, ExternalLink, ChevronRight, MoreHorizontal, FolderSearch, Pencil, FolderInput, Info, FolderHeart, MessageSquarePlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import {
@@ -587,22 +587,6 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
                         <span className="text-[10px] text-muted-foreground/70 truncate flex-1 min-w-0" title={workspaceFilesPath ?? undefined}>
                           {workspaceFilesPath ? `${getPathBasename(workspaceFilesPath)} · ${projectRootSourceLabel}` : '等待项目初始化...'}
                         </span>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className={filePanelActionButtonClass}
-                              onClick={handleAttachWorkspaceFolder}
-                            >
-                              <FolderPlus />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent side="bottom">
-                            <p>关联文件夹</p>
-                          </TooltipContent>
-                        </Tooltip>
                         {workspaceFilesPath && (
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -624,7 +608,6 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
                       </div>
                       {wsAttachedFiles.length > 0 && (
                         <AttachedFilesSection
-                          title="关联文件"
                           attachedFiles={wsAttachedFiles}
                           onDetach={handleDetachWorkspaceFile}
                           onAddToChat={handleAddToChat}
@@ -635,7 +618,6 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
                       )}
                       {wsAttachedDirs.length > 0 && (
                         <AttachedDirsSection
-                          title="关联文件夹"
                           attachedDirs={wsAttachedDirs}
                           onDetach={handleDetachWorkspaceDirectory}
                           refreshVersion={filesVersion}
@@ -660,7 +642,6 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
                         onFilesAttached={handleWorkspaceFilesAttached}
                         onAttachFolder={handleAttachWorkspaceFolder}
                         onFoldersDropped={handleWorkspaceFoldersDropped}
-                        showFolderAction={false}
                       />
                     </div>
                   </div>

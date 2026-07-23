@@ -68,10 +68,24 @@ describe('项目根目录系统提示', () => {
 
     expect(prompt).toContain(`- 项目根目录: ${normalizedProjectRoot}`)
     expect(prompt).toContain(`- 会话工作台目录: ${sessionDir}`)
+    expect(prompt).toContain(`- Claude 会话 sidecar: ${join(sessionDir, '.claude', 'settings.json')}`)
+    expect(prompt).toContain('不是项目文件或记忆；不要修改')
+    expect(prompt).toContain('不要自动读取、创建或修改其中的 `.claude/`、`CLAUDE.md`、MCP 或 Skills 配置')
     expect(prompt).toContain(`- 实际工作目录（cwd）: ${normalizedProjectRoot}`)
     expect(prompt).toContain(`**会话级** \`${join(sessionDir, '.context')}\``)
     expect(prompt).toContain(`**工作区级** \`${join(normalizedProjectRoot, '.context')}\``)
     expect(prompt).toContain(`\`${join(sessionDir, '.context', 'plan')}/\``)
     expect(prompt).not.toContain('当前会话目录（cwd）')
+
+    const piPrompt = promptBuilder.buildSystemPrompt({
+      workspaceName: workspace.name,
+      workspaceSlug: workspace.slug,
+      sessionId,
+      permissionMode: 'plan',
+      agentRuntime: 'pi',
+    })
+    expect(piPrompt).not.toContain('Claude 会话 sidecar')
+    expect(piPrompt).not.toContain(join(sessionDir, '.claude', 'settings.json'))
+    expect(piPrompt).not.toContain('Proma 托管的 sidecar 配置')
   })
 })

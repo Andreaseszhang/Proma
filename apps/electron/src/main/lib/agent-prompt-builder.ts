@@ -54,6 +54,7 @@ function buildWorkspacePromptPaths(workspaceSlug: string, sessionId: string) {
     workspaceRoot,
     sessionDir,
     sessionContextDir: join(sessionDir, '.context'),
+    claudeSessionSettingsPath: join(sessionDir, '.claude', 'settings.json'),
     projectRoot,
     workspaceContextDir: join(projectRoot, '.context'),
     agentCwd: isLocalProject ? projectRoot : sessionDir,
@@ -152,8 +153,9 @@ Proma 提供内置 \`collaboration\` 工具，用来创建真实可见、可追�
 - 工作区名称: ${ctx.workspaceName}
 - Proma 工作区目录: ${workspacePaths?.workspaceRoot}（存放 MCP、Skills、Proma CLAUDE.md 与 Memory 等配置）
 - 项目根目录: ${workspacePaths?.projectRoot}（${workspacePaths?.isLocalProject ? '用户选择的本地原始文件夹' : 'Proma 托管的空白项目目录'}）
-- 会话工作台目录: ${workspacePaths?.sessionDir}（仅供当前会话的临时文件与会话级 Context 使用${workspacePaths?.isLocalProject ? '；本地项目时它不是 cwd' : ''}）
-- 实际工作目录（cwd）: ${workspacePaths?.agentCwd}（以每条消息的 \`<working_directory>\` 为准）
+- 会话工作台目录: ${workspacePaths?.sessionDir}（存放当前会话的临时文件与会话级 Context${workspacePaths?.isLocalProject ? '；本地项目时它不是 cwd' : ''}）
+${agentRuntime === 'claude' ? `- Claude 会话 sidecar: ${workspacePaths?.claudeSessionSettingsPath}（Proma 托管的运行时配置，不是项目文件或记忆；不要修改）
+` : ''}- 实际工作目录（cwd）: ${workspacePaths?.agentCwd}（以每条消息的 \`<working_directory>\` 为准）
 - 工作区 CLAUDE.md: ${workspacePaths?.claudeMd}
 - 工作区 Auto Memory 目录: ${workspacePaths?.autoMemoryDir}
 - 工作区 Auto Memory 索引: ${workspacePaths?.autoMemoryIndex}
@@ -219,7 +221,7 @@ Proma 提供内置 \`collaboration\` 工具，用来创建真实可见、可追�
 Claude Agent SDK 可能会维护工作区级 auto memory 文件，目录由 Proma 显式指向工作区根目录的 \`.claude/memory/\`${workspacePaths ? `（\`${workspacePaths.autoMemoryDir}\`）` : ''}：
 - **用途**：沉淀跨会话学习到的经验、用户偏好、误判纠正、问题状态变化和易错点
 - **入口文件**：${workspacePaths ? `\`${workspacePaths.autoMemoryIndex}\`` : '`.claude/memory/MEMORY.md`'} 只放主题索引和路由；详细内容拆到同目录或子目录下的主题文件
-- **路径边界**：会话工作台目录是 \`${workspacePaths?.sessionDir ?? '当前会话目录'}\`；本地项目时 cwd 会是用户项目根目录。无论哪种情况，\`./.claude/memory/\` 都不是工作区 Auto Memory；除非用户明确要求，不要在会话工作台或本地项目根目录下创建或更新 \`.claude/memory/\`
+- **路径边界**：会话工作台目录是 \`${workspacePaths?.sessionDir ?? '当前会话目录'}\`；${agentRuntime === 'claude' ? `Claude runtime 的 \`${workspacePaths?.claudeSessionSettingsPath ?? '.claude/settings.json'}\` 是 Proma 托管的 sidecar 配置，不是项目文件或记忆，绝不要修改。` : ''}项目根是本地目录时，cwd 会是用户项目根目录；不要自动读取、创建或修改其中的 \`.claude/\`、\`CLAUDE.md\`、MCP 或 Skills 配置。无论哪种情况，\`./.claude/memory/\` 都不是工作区 Auto Memory；除非用户明确要求，不要在会话工作台或本地项目根目录下创建或更新 \`.claude/memory/\`
 - **使用要求**：不要把它当聊天流水账；只有明确重复出现、用户明确要求记住，或删掉后未来 Agent 明显会犯错的稳定经验才写入
 - **会话内维护**：当用户确认问题已解决、否定先前判断、说明问题仍存在/加重，或明确表达长期偏好时，判断是否应更新 memory；纠正旧记忆时应修订或标注旧结论，而不是只追加冲突新结论
 - **弱信号处理**：一次性偏好、临时过程和证据不足的判断，不要直接写入 auto memory；可在最终回复中建议用户确认后再沉淀

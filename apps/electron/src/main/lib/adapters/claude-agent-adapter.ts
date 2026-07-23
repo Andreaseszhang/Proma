@@ -207,6 +207,8 @@ export interface ClaudeAgentQueryOptions extends AgentQueryInput {
   sdkSessionId?: string
   /** 附加的外部目录（SDK additionalDirectories） */
   additionalDirectories?: string[]
+  /** Proma 管理的会话级 settings.json；通过 SDK flag settings 显式加载。 */
+  settingsFilePath?: string
   /**
    * Claude SDK settings 来源。省略时兼容 Proma 托管项目（user + project）；
    * 本地项目必须传入 ['user']，避免读取用户项目自身的 .claude 配置与 CLAUDE.md。
@@ -785,6 +787,8 @@ export class ClaudeAgentAdapter implements AgentProviderAdapter {
         // 本地项目仅加载 Proma 隔离的 user 配置；Proma 托管项目仍可加载其会话级 project 配置。
         // 两种情形都排除 local 级别的 .claude/settings.local.json。
         settingSources: resolveClaudeSettingSources(options.settingSources),
+        // 外置会话配置作为 SDK flag settings 加载，优先级高于文件系统来源。
+        ...(options.settingsFilePath && { settings: options.settingsFilePath }),
 
         // 条件字段
         ...(options.canUseTool && { canUseTool: options.canUseTool }),

@@ -26,6 +26,7 @@ import { getAgentWorkspace, getWorkspaceAutoMemoryDir } from './agent-workspace-
 import { resolvePiThinkingLevel } from './agent-thinking-level'
 import { getSettings } from './settings-service'
 import { applyClaudeSdkAttributionSettings, isGitAttributionEnabled } from './agent-git-attribution'
+import { removePromaAutoCompactSettings } from './agent-auto-compact-settings'
 
 // 在模块加载时一次性设置 SDK 配置目录，避免在 forkSession 等异步调用中临时修改/恢复
 // process.env 导致的并发安全问题（异步操作的 await 间隙其他代码可能读到错误值）
@@ -216,6 +217,63 @@ export function getAgentSessionMeta(id: string): AgentSessionMeta | undefined {
 }
 
 /**
+ * 确保 Claude runtime 的 Proma 会话 sidecar 配置存在。
+ *
+ * 本地目录项目的 Claude cwd 是用户目录，不能依赖 project settings source；
+ * 此文件会由 adapter 通过 SDK `settings` 选项显式加载。空白项目仍可将计划存放在会话 `.context/`，
+ * 本地项目则不设置 plansDirectory，避免向用户项目根目录写入 `.context/`。
+ */
+export function ensureClaudeSessionSettings(workspaceId: string, sessionId: string): string | undefined {
+  const workspace = getAgentWorkspace(workspaceId)
+  if (!workspace) return undefined
+
+  const sessionDir = getAgentSessionWorkspacePath(workspace.slug, sessionId)
+  const claudeDir = join(sessionDir, '.claude')
+  if (!existsSync(claudeDir)) mkdirSync(claudeDir, { recursive: true })
+
+  const settingsPath = join(claudeDir, 'settings.json')
+  let sdkSettings: Record<string, unknown> = {}
+  try {
+    sdkSettings = JSON.parse(readFileSync(settingsPath, 'utf-8'))
+  } catch { /* 文件不存在或解析失败 */ }
+
+  let needsWrite = false
+  if (workspace.projectRootPath) {
+    // plansDirectory 相对于 Claude cwd；本地项目 cwd 是用户目录，不能写入其 .context/。
+    if ('plansDirectory' in sdkSettings) {
+      delete sdkSettings.plansDirectory
+      needsWrite = true
+    }
+  } else if (sdkSettings.plansDirectory !== '.context') {
+    sdkSettings.plansDirectory = '.context'
+    needsWrite = true
+  }
+  if (sdkSettings.skipWebFetchPreflight !== true) {
+    sdkSettings.skipWebFetchPreflight = true
+    needsWrite = true
+  }
+  const autoMemoryDirectory = getWorkspaceAutoMemoryDir(workspace.slug)
+  if (sdkSettings.autoMemoryDirectory !== autoMemoryDirectory) {
+    sdkSettings.autoMemoryDirectory = autoMemoryDirectory
+    needsWrite = true
+  }
+  if (removePromaAutoCompactSettings(sdkSettings)) {
+    needsWrite = true
+  }
+  if (applyClaudeSdkAttributionSettings(
+    sdkSettings,
+    isGitAttributionEnabled(getSettings().gitAttributionEnabled),
+  )) {
+    needsWrite = true
+  }
+  if (needsWrite) {
+    writeFileSync(settingsPath, JSON.stringify(sdkSettings, null, 2))
+  }
+
+  return settingsPath
+}
+
+/**
  * 创建新会话
  */
 export function createAgentSession(
@@ -256,39 +314,9 @@ export function createAgentSession(
     if (ws) {
       const sessionDir = getAgentSessionWorkspacePath(ws.slug, meta.id)
 
-      // 本地项目以用户选择的目录为 Claude cwd；只在 Proma 托管项目的 session sidecar 写入 SDK 配置。
-      if (!ws.projectRootPath) {
-        const claudeDir = join(sessionDir, '.claude')
-        if (!existsSync(claudeDir)) mkdirSync(claudeDir, { recursive: true })
-        const settingsPath = join(claudeDir, 'settings.json')
-        let sdkSettings: Record<string, unknown> = {}
-        try {
-          sdkSettings = JSON.parse(readFileSync(settingsPath, 'utf-8'))
-        } catch { /* 文件不存在或解析失败 */ }
-        let needsWrite = false
-        if (sdkSettings.plansDirectory !== '.context') {
-          sdkSettings.plansDirectory = '.context'
-          needsWrite = true
-        }
-        if (sdkSettings.skipWebFetchPreflight !== true) {
-          sdkSettings.skipWebFetchPreflight = true
-          needsWrite = true
-        }
-        const autoMemoryDirectory = getWorkspaceAutoMemoryDir(ws.slug)
-        if (sdkSettings.autoMemoryDirectory !== autoMemoryDirectory) {
-          sdkSettings.autoMemoryDirectory = autoMemoryDirectory
-          needsWrite = true
-        }
-        // Proma Git/PR 推广标识：覆盖 Claude SDK 默认 Co-Authored-By。
-        if (applyClaudeSdkAttributionSettings(
-          sdkSettings,
-          isGitAttributionEnabled(getSettings().gitAttributionEnabled),
-        )) {
-          needsWrite = true
-        }
-        if (needsWrite) {
-          writeFileSync(settingsPath, JSON.stringify(sdkSettings, null, 2))
-        }
+      // 仅 Claude runtime 需要此 SDK 配置；本地项目同样放在 Proma sidecar，避免污染用户项目根目录。
+      if (agentRuntime === 'claude') {
+        ensureClaudeSessionSettings(workspaceId, meta.id)
       }
 
       // .context 是 Proma 的会话工作台，本地项目同样需要。

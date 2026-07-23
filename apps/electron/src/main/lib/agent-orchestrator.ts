@@ -47,7 +47,7 @@ import { getAdapter, fetchTitle, normalizeAnthropicBaseUrlForSdk, getPromaUserAg
 import pkg from '../../../package.json' with { type: 'json' }
 import { getFetchFn } from './proxy-fetch'
 import { getEffectiveProxyUrl } from './proxy-settings-service'
-import { appendSDKMessages, updateAgentSessionMeta, getAgentSessionMeta, getAgentSessionMessages, truncateSDKMessages, removeSDKErrorMessage, resolveUserUuidFromSDK, rewindFilesFromSnapshot, rewindPiAgentSession } from './agent-session-manager'
+import { appendSDKMessages, updateAgentSessionMeta, getAgentSessionMeta, getAgentSessionMessages, truncateSDKMessages, removeSDKErrorMessage, resolveUserUuidFromSDK, rewindFilesFromSnapshot, rewindPiAgentSession, ensureClaudeSessionSettings } from './agent-session-manager'
 import { getAgentWorkspace, getProjectFilesPath, getWorkspaceMcpConfig, ensurePluginManifest, getWorkspaceAutoMemoryDir, getWorkspaceAttachedDirectories, getWorkspaceAttachedFiles } from './agent-workspace-manager'
 import { getAgentWorkspacePath, getAgentSessionWorkspacePath, getSdkConfigDir, getWorkspaceSkillsDir } from './config-paths'
 import { getRuntimeStatus } from './runtime-init'
@@ -1595,6 +1595,10 @@ export class AgentOrchestrator {
         })
       }
       const piCustomTools = [...piBuiltinTools, ...piMcpTools]
+      // 新旧 Claude 会话统一使用 Proma sidecar settings；本地项目不因此加载用户项目 .claude。
+      const claudeSettingsFilePath = agentRuntime === 'claude' && workspaceId
+        ? ensureClaudeSessionSettings(workspaceId, sessionId)
+        : undefined
       const queryOptions: ClaudeAgentQueryOptions | PiAgentQueryOptions = agentRuntime === 'pi' ? {
         agentRuntime: 'pi',
         sessionId,
@@ -1662,6 +1666,7 @@ export class AgentOrchestrator {
         // 本地项目的 cwd 是用户目录，因此只能读取 Proma 的隔离 user 配置；
         // 空白项目的 cwd 是 Proma 会话目录，保留其 project 配置以支持 .context 等托管行为。
         settingSources: getClaudeSettingSourcesForWorkspace(Boolean(workspace?.projectRootPath)),
+        ...(claudeSettingsFilePath && { settingsFilePath: claudeSettingsFilePath }),
         sdkCliPath: cliPath!,
         env: sdkEnv,
         ...(maxTurns != null && { maxTurns }),

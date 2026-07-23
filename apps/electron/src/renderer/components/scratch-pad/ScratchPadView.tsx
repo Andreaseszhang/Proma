@@ -739,7 +739,7 @@ function ScratchPadEditor({ variant }: ScratchPadEditorProps): React.ReactElemen
               disabled={!currentWorkspace}
               className="flex flex-col items-start"
             >
-              <span className="text-xs">保存到工作区目录</span>
+              <span className="text-xs">保存到项目根目录</span>
               <span className="text-[10px] text-muted-foreground">
                 {currentWorkspace?.name ?? '无当前工作区'}
               </span>

@@ -2,7 +2,7 @@
  * FileMentionSuggestion — TipTap Mention Suggestion 配置
  *
  * 工厂函数，创建用于 @ 引用文件的 TipTap Suggestion 配置。
- * 输入 @ 后异步搜索工作区文件，弹出 FileMentionList 浮动列表。
+ * 输入 @ 后异步搜索会话文件、项目文件与附加目录，弹出 FileMentionList 浮动列表。
  * 弹窗底部锚定在光标上方，展开文件夹时向上生长。
  */
 

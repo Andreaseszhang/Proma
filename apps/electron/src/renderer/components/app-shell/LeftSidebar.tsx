@@ -1619,9 +1619,15 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     }
 
     try {
-      const workspace = await window.electronAPI.createAgentWorkspace({ name: trimmed })
+      const { workspace, session } = await window.electronAPI.createAgentProject(
+        { name: trimmed },
+        agentChannelId || undefined,
+        agentModelId || undefined,
+      )
       setWorkspaces((prev) => [workspace, ...prev])
+      setAgentSessions((prev) => [session, ...prev])
       setCurrentWorkspaceId(workspace.id)
+      openSession('agent', session.id, session.title)
       window.electronAPI.updateSettings({ agentWorkspaceId: workspace.id }).catch(console.error)
       setCreatingProject(false)
       setNewProjectName('')
@@ -1629,7 +1635,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       const msg = error instanceof Error ? error.message : '创建项目失败'
       toast.error(msg)
     }
-  }, [newProjectName, setCurrentWorkspaceId, setWorkspaces])
+  }, [agentChannelId, agentModelId, newProjectName, openSession, setAgentSessions, setCurrentWorkspaceId, setWorkspaces])
 
   const handleCreateProjectKeyDown = React.useCallback((e: React.KeyboardEvent): void => {
     if (e.key === 'Enter') {
@@ -1647,18 +1653,24 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     try {
       const folder = await window.electronAPI.openFolderDialog()
       if (!folder) return
-      const workspace = await window.electronAPI.createAgentWorkspace({
-        name: folder.name,
-        projectRootPath: folder.path,
-      })
+      const { workspace, session } = await window.electronAPI.createAgentProject(
+        {
+          name: folder.name,
+          projectRootPath: folder.path,
+        },
+        agentChannelId || undefined,
+        agentModelId || undefined,
+      )
       setWorkspaces((prev) => [workspace, ...prev])
+      setAgentSessions((prev) => [session, ...prev])
       setCurrentWorkspaceId(workspace.id)
+      openSession('agent', session.id, session.title)
       window.electronAPI.updateSettings({ agentWorkspaceId: workspace.id }).catch(console.error)
     } catch (error) {
       const msg = error instanceof Error ? error.message : '从文件夹创建项目失败'
       toast.error(msg)
     }
-  }, [setCurrentWorkspaceId, setWorkspaces])
+  }, [agentChannelId, agentModelId, openSession, setAgentSessions, setCurrentWorkspaceId, setWorkspaces])
 
   /** 选择 Agent 会话（打开或聚焦标签页） */
   const handleSelectAgentSession = React.useCallback((id: string, title: string): void => {
@@ -2326,7 +2338,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
         <AlertDialogHeader>
           <AlertDialogTitle>确认删除项目</AlertDialogTitle>
           <AlertDialogDescription>
-            将删除「{pendingDeleteWorkspace?.name ?? '该项目'}」及其绑定的所有会话、自动任务、MCP、Skills、工作区文件和本地项目目录。附加目录和附加文件只会移除引用，不会删除原始文件。删除后无法恢复。
+            将删除「{pendingDeleteWorkspace?.name ?? '该项目'}」在 Proma 中保存的会话、自动任务、MCP、Skills 与工作区配置；空白项目的 Proma 托管项目文件也会被删除。本地项目根目录、附加目录和附加文件只会移除关联，不会删除原始文件。删除后无法恢复。
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

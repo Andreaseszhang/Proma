@@ -35,6 +35,12 @@ export interface CreateAgentWorkspaceInput {
   projectRootPath?: string
 }
 
+/** 创建项目后自动生成的首个 Agent 会话。 */
+export interface CreateAgentProjectResult {
+  workspace: AgentWorkspace
+  session: AgentSessionMeta
+}
+
 // ===== SDK 新增类型声明（0.2.52 ~ 0.2.63） =====
 
 /**
@@ -1468,6 +1474,8 @@ export const AGENT_IPC_CHANNELS = {
   LIST_WORKSPACES: 'agent:list-workspaces',
   /** 创建工作区 */
   CREATE_WORKSPACE: 'agent:create-workspace',
+  /** 创建项目及其首个 Agent 会话 */
+  CREATE_PROJECT: 'agent:create-project',
   /** 更新工作区 */
   UPDATE_WORKSPACE: 'agent:update-workspace',
   /** 删除工作区 */

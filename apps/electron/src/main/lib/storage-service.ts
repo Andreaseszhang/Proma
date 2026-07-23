@@ -423,7 +423,7 @@ async function calcWorkspacesCategory(): Promise<StorageCategory> {
   }
 
   return {
-    label: '工作区文件',
+    label: '项目与会话数据',
     key: 'workspaces',
     bytes, count,
     hasOrphans: orphanCount > 0,

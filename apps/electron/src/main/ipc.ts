@@ -2023,13 +2023,37 @@ export function registerIpcHandlers(): void {
     }
   )
 
-  // 创建 Agent 工作区
+  // 创建 Agent 工作区（保留给迁移与低层管理调用；交互式项目创建应使用 CREATE_PROJECT）。
   ipcMain.handle(
     AGENT_IPC_CHANNELS.CREATE_WORKSPACE,
     async (_, input: import('@proma/shared').CreateAgentWorkspaceInput): Promise<AgentWorkspace> => {
       const workspace = createAgentWorkspace(input)
       if (workspace.projectRootPath) watchAttachedDirectory(workspace.projectRootPath)
       return workspace
+    }
+  )
+
+  // 创建项目时同时生成其首个 Agent 会话，避免项目以无会话状态进入界面。
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.CREATE_PROJECT,
+    async (_, input: import('@proma/shared').CreateAgentWorkspaceInput, channelId?: string, modelId?: string): Promise<import('@proma/shared').CreateAgentProjectResult> => {
+      const workspace = createAgentWorkspace(input)
+      if (workspace.projectRootPath) watchAttachedDirectory(workspace.projectRootPath)
+
+      try {
+        const session = createAgentSession(undefined, channelId, workspace.id, modelId, getSettings().agentRuntime ?? 'pi')
+        feishuBridgeManager.ensureSessionMirror(session).catch((error) => {
+          console.error('[飞书 Session 镜像] 项目首个会话建群失败:', error)
+        })
+        return { workspace, session }
+      } catch (error) {
+        try {
+          deleteAgentWorkspace(workspace.id)
+        } catch (rollbackError) {
+          console.error('[项目创建] 首个会话创建失败后的项目回滚失败:', rollbackError)
+        }
+        throw error
+      }
     }
   )
 
@@ -3473,7 +3497,7 @@ export function registerIpcHandlers(): void {
           if (ignoreDirs.has(name)) return
 
           target.push({
-            name: name === 'workspace-files' ? '工作文件' : name,
+            name: name === 'workspace-files' ? '项目文件' : name,
             path: attachedPath,
             type: 'dir',
             source,

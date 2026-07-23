@@ -6,7 +6,7 @@
  *
  * 分组：
  * - 会话文件（session 工作目录下的文件）
- * - 工作区文件（workspace files + 附加目录下的文件）
+ * - 项目文件（项目根目录 + 项目级附加目录下的文件）
  *
  * 交互：
  * - 文件夹初始折叠，Tab 键展开/折叠，→/← 方向键辅助
@@ -332,10 +332,10 @@ export const FileMentionList = React.forwardRef<FileMentionRef, FileMentionListP
           />
         )}
 
-        {/* 工作区文件 */}
+        {/* 项目文件 */}
         {hasWorkspace && (
           <FileSection
-            label="工作区文件"
+            label="项目文件"
             tree={workspaceTreeWithState}
             selectedIndex={selectedIndex}
             baseIndex={sessionVisible.length}
@@ -354,7 +354,7 @@ export const FileMentionList = React.forwardRef<FileMentionRef, FileMentionListP
 
 // ===== 子组件 =====
 
-/** 分组区域（会话文件 / 工作区文件） */
+/** 分组区域（会话文件 / 项目文件） */
 function FileSection({
   label,
   tree,

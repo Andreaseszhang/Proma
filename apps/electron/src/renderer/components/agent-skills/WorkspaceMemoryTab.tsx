@@ -47,7 +47,7 @@ function buildWorkspaceMemoryInitPrompt(historyRange: MemoryHistoryRange): strin
 
 目标：
 1. 读取当前工作区${rangeLabel}的 Agent 工作会话，优先关注最新、最有代表性、用户实际完成工作的会话。如果证据不足，请说明而不是编造。
-2. 同时检查会话级 Context（各会话 cwd 下的 .context/）和工作区级 Context（工作区 workspace-files/.context/ 及相关本地文档），区分当前任务临时产物与跨会话长期资料。
+2. 同时检查会话级 Context（Proma 会话工作台目录下的 \`.context/\`）和工作区级 Context（系统提示中“工作区级 Context”给出的绝对路径及相关本地文档），区分当前任务临时产物与跨会话长期资料。
 3. 从这些会话和 Context 中提炼工作区级别的稳定知识，包括项目结构、常用命令、架构约定、用户偏好、踩坑经验、重要决策和未来 Agent 必须知道的注意事项。
 4. 更新工作区根目录的 CLAUDE.md：只写稳定、跨会话有价值的项目指令和工作方式，避免写临时过程和聊天流水账。
 5. 更新工作区 .claude/memory/MEMORY.md，必要时创建主题文件：MEMORY.md 只放主题索引和路由，详细内容拆到主题文件；只记录 SDK auto memory 应该长期回忆的经验。
@@ -287,7 +287,7 @@ export function WorkspaceMemoryTab({ workspaceSlug, search }: WorkspaceMemoryTab
       }
     } catch (err) {
       console.error('[工作区记忆] 刷新失败:', err)
-      toast.error('刷新工作区记忆失败')
+      toast.error('刷新项目记忆失败')
     } finally {
       setLoading(false)
     }
@@ -320,7 +320,7 @@ export function WorkspaceMemoryTab({ workspaceSlug, search }: WorkspaceMemoryTab
         setIsDirty(false)
       } catch (err) {
         console.error('[工作区记忆] 加载失败:', err)
-        toast.error('加载工作区记忆失败')
+        toast.error('加载项目记忆失败')
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -383,7 +383,7 @@ export function WorkspaceMemoryTab({ workspaceSlug, search }: WorkspaceMemoryTab
         sessionId,
         message: buildWorkspaceMemoryInitPrompt(historyRange),
       })
-      toast.success('已创建工作区记忆初始化会话')
+      toast.success('已创建项目记忆初始化会话')
     } catch (err) {
       console.error('[工作区记忆] 创建初始化会话失败:', err)
       toast.error(err instanceof Error ? err.message : '创建初始化会话失败')
@@ -398,7 +398,7 @@ export function WorkspaceMemoryTab({ workspaceSlug, search }: WorkspaceMemoryTab
   )
 
   if (loading || !summary) {
-    return <div className="py-20 text-center text-sm text-muted-foreground">加载工作区记忆中...</div>
+    return <div className="py-20 text-center text-sm text-muted-foreground">加载项目记忆中...</div>
   }
 
   return (
@@ -407,7 +407,7 @@ export function WorkspaceMemoryTab({ workspaceSlug, search }: WorkspaceMemoryTab
         <MemoryStatCard
           icon={<BookOpen size={18} />}
           title="项目指令"
-          subtitle="工作区根目录 CLAUDE.md"
+          subtitle="Proma 工作区 CLAUDE.md"
           value={summary.claudeMd.exists ? formatBytes(summary.claudeMd.size) : '尚未创建'}
           detail={`更新于 ${formatTime(summary.claudeMd.updatedAt)}`}
           active={selected?.kind === 'claude'}
@@ -427,9 +427,9 @@ export function WorkspaceMemoryTab({ workspaceSlug, search }: WorkspaceMemoryTab
       <SettingsCard divided={false}>
         <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
-            <div className="text-sm font-medium text-foreground">从历史会话生成工作区记忆</div>
+            <div className="text-sm font-medium text-foreground">从历史会话生成项目记忆</div>
             <div className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              新建一个 Agent 会话，读取当前工作区{historyRangeLabel}的工作会话，沉淀并更新 CLAUDE.md 与 auto memory 文件。
+              新建一个 Agent 会话，读取当前项目{historyRangeLabel}的工作会话，沉淀并更新 Proma 工作区中的 CLAUDE.md 与 auto memory 文件。
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -451,7 +451,7 @@ export function WorkspaceMemoryTab({ workspaceSlug, search }: WorkspaceMemoryTab
             </Select>
             <Button onClick={handleInitializeMemory} disabled={initializing}>
               <Sparkles size={14} className="mr-1.5" />
-              {initializing ? '创建中...' : '生成工作区记忆'}
+              {initializing ? '创建中...' : '生成项目记忆'}
             </Button>
           </div>
         </div>

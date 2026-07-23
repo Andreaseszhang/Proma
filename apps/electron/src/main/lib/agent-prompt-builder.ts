@@ -13,7 +13,7 @@ import type { AgentRuntime, PromaPermissionMode } from '@proma/shared'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { getUserProfile } from './user-profile-service'
-import { getProjectFilesPath, getWorkspaceMcpConfig } from './agent-workspace-manager'
+import { getAgentWorkspaceBySlug, getProjectFilesPath, getWorkspaceMcpConfig } from './agent-workspace-manager'
 import { getConfigDirName } from './config-paths'
 import { buildGitAttributionPromptSection, isGitAttributionEnabled } from './agent-git-attribution'
 import { getSettings } from './settings-service'
@@ -45,14 +45,21 @@ interface SystemPromptContext {
 function buildWorkspacePromptPaths(workspaceSlug: string, sessionId: string) {
   const configDirName = getConfigDirName()
   const workspaceRoot = join(homedir(), configDirName, 'agent-workspaces', workspaceSlug)
+  const sessionDir = join(workspaceRoot, sessionId)
+  const projectRoot = getProjectFilesPath(workspaceSlug)
+  const isLocalProject = Boolean(getAgentWorkspaceBySlug(workspaceSlug)?.projectRootPath)
   const autoMemoryDir = join(workspaceRoot, '.claude', 'memory')
 
   return {
     workspaceRoot,
-    sessionDir: join(workspaceRoot, sessionId),
+    sessionDir,
+    sessionContextDir: join(sessionDir, '.context'),
+    projectRoot,
+    workspaceContextDir: join(projectRoot, '.context'),
+    agentCwd: isLocalProject ? projectRoot : sessionDir,
+    isLocalProject,
     mcpConfig: join(workspaceRoot, 'mcp.json'),
     skillsDir: join(workspaceRoot, 'skills'),
-    workspaceContextDir: join(getProjectFilesPath(workspaceSlug), '.context'),
     claudeMd: join(workspaceRoot, 'CLAUDE.md'),
     autoMemoryDir,
     autoMemoryIndex: join(autoMemoryDir, 'MEMORY.md'),
@@ -81,6 +88,8 @@ export function buildSystemPrompt(ctx: SystemPromptContext): string {
   const workspacePaths = ctx.workspaceSlug
     ? buildWorkspacePromptPaths(ctx.workspaceSlug, ctx.sessionId)
     : undefined
+  const sessionContextDir = workspacePaths?.sessionContextDir ?? '.context'
+  const workspaceContextDir = workspacePaths?.workspaceContextDir ?? '.context'
 
   const sections: string[] = []
 
@@ -141,8 +150,10 @@ Proma 提供内置 \`collaboration\` 工具，用来创建真实可见、可追�
     sections.push(`## 工作区
 
 - 工作区名称: ${ctx.workspaceName}
-- 工作区根目录: ${workspacePaths?.workspaceRoot}
-- 当前会话目录（cwd）: ${workspacePaths?.sessionDir}
+- Proma 工作区目录: ${workspacePaths?.workspaceRoot}（存放 MCP、Skills、Proma CLAUDE.md 与 Memory 等配置）
+- 项目根目录: ${workspacePaths?.projectRoot}（${workspacePaths?.isLocalProject ? '用户选择的本地原始文件夹' : 'Proma 托管的空白项目目录'}）
+- 会话工作台目录: ${workspacePaths?.sessionDir}（仅供当前会话的临时文件与会话级 Context 使用${workspacePaths?.isLocalProject ? '；本地项目时它不是 cwd' : ''}）
+- 实际工作目录（cwd）: ${workspacePaths?.agentCwd}（以每条消息的 \`<working_directory>\` 为准）
 - 工作区 CLAUDE.md: ${workspacePaths?.claudeMd}
 - 工作区 Auto Memory 目录: ${workspacePaths?.autoMemoryDir}
 - 工作区 Auto Memory 索引: ${workspacePaths?.autoMemoryIndex}
@@ -153,14 +164,15 @@ Proma 提供内置 \`collaboration\` 工具，用来创建真实可见、可追�
 ### .context 目录层级
 
 存在两个 \`.context/\` 目录，用途不同：
-- **会话级** \`.context/\`（当前 cwd 下）：当前会话的临时工作台，存放本次任务的 todo.md、plan/、临时笔记等
-- **工作区级** \`${workspacePaths?.workspaceContextDir}\`：跨会话共享的持久文档，存放长期 note.md、项目级知识等
+- **会话级** \`${sessionContextDir}\`：当前会话的临时工作台，存放本次任务的 todo.md、plan/、临时笔记等
+- **工作区级** \`${workspaceContextDir}\`：跨会话共享的持久文档，存放长期 note.md、项目级知识等；本地项目时位于用户项目根目录下
 
 选择写入哪个目录时：
-- 只与当前任务相关的内容 → 会话级 \`.context/\`
-- 跨会话有参考价值的内容（调研报告、架构分析等） → 工作区级 \`.context/\`
+- 只与当前任务相关的内容 → 会话级 Context 的绝对路径
+- 跨会话有参考价值的内容（调研报告、架构分析等） → 工作区级 Context 的绝对路径
 - 用户明确指定了位置时，按用户要求
-- 新会话开始时，**两个目录都要检查**以恢复完整上下文`)
+- 新会话开始时，**两个目录都要检查**以恢复完整上下文
+- 本地项目根目录中的改动会直接写入用户的原始文件；不要把它当作可随意清理的临时目录`)
   }
 
   // 自主执行与最小澄清策略
@@ -177,7 +189,7 @@ Proma 提供内置 \`collaboration\` 工具，用来创建真实可见、可追�
     sections.push(`## 计划模式
 
 你当前处于计划模式，只能进行调研和规划，不能执行写操作。规则：
-1. 将计划文件写入当前工作目录的 \`.context/plan/\` 子目录（如 \`.context/plan/my-plan.md\`）
+1. 将计划文件写入会话级 Context 的 \`${sessionContextDir}/plan/\` 子目录（如 \`${sessionContextDir}/plan/my-plan.md\`）；不要因本地项目 cwd 而把会话计划写入用户项目根目录
 2. 完成计划后，**不要立即调用 ExitPlanMode**
 3. 先向用户展示计划摘要，以及完整的计划文档的路径地址，然后等待用户确认后再退出计划模式
 4. 用户确认执行后，再调用 ExitPlanMode 退出计划模式
@@ -185,7 +197,7 @@ Proma 提供内置 \`collaboration\` 工具，用来创建真实可见、可追�
   } else {
     sections.push(`## 计划模式文件路径
 
-当进入计划模式（EnterPlanMode）时，计划文件必须写入当前工作目录的 \`.context/plan/\` 子目录（如 \`.context/plan/my-plan.md\`）。`)
+当进入计划模式（EnterPlanMode）时，计划文件必须写入会话级 Context 的 \`${sessionContextDir}/plan/\` 子目录（如 \`${sessionContextDir}/plan/my-plan.md\`）。不要因本地项目 cwd 而把会话计划写入用户项目根目录。`)
   }
 
   // Proma 知识维护架构
@@ -207,7 +219,7 @@ Proma 提供内置 \`collaboration\` 工具，用来创建真实可见、可追�
 Claude Agent SDK 可能会维护工作区级 auto memory 文件，目录由 Proma 显式指向工作区根目录的 \`.claude/memory/\`${workspacePaths ? `（\`${workspacePaths.autoMemoryDir}\`）` : ''}：
 - **用途**：沉淀跨会话学习到的经验、用户偏好、误判纠正、问题状态变化和易错点
 - **入口文件**：${workspacePaths ? `\`${workspacePaths.autoMemoryIndex}\`` : '`.claude/memory/MEMORY.md`'} 只放主题索引和路由；详细内容拆到同目录或子目录下的主题文件
-- **路径边界**：当前 cwd 是 session 子目录，\`./.claude/memory/\` 表示 session 局部目录，不是工作区 Auto Memory；除非用户明确要求，不要在 session 子目录下创建或更新 \`.claude/memory/\`
+- **路径边界**：会话工作台目录是 \`${workspacePaths?.sessionDir ?? '当前会话目录'}\`；本地项目时 cwd 会是用户项目根目录。无论哪种情况，\`./.claude/memory/\` 都不是工作区 Auto Memory；除非用户明确要求，不要在会话工作台或本地项目根目录下创建或更新 \`.claude/memory/\`
 - **使用要求**：不要把它当聊天流水账；只有明确重复出现、用户明确要求记住，或删掉后未来 Agent 明显会犯错的稳定经验才写入
 - **会话内维护**：当用户确认问题已解决、否定先前判断、说明问题仍存在/加重，或明确表达长期偏好时，判断是否应更新 memory；纠正旧记忆时应修订或标注旧结论，而不是只追加冲突新结论
 - **弱信号处理**：一次性偏好、临时过程和证据不足的判断，不要直接写入 auto memory；可在最终回复中建议用户确认后再沉淀
@@ -227,11 +239,11 @@ Skills 用来固化可复用的流程、决策树和 SOP（"以后遇到类似�
 | 项目硬规则、架构边界、常用命令、入口索引 | → 小幅更新 CLAUDE.md |
 | 用户偏好、误判纠正、问题解决/未解决/加重、跨会话经验 | → 必要时小幅更新 .claude/memory/MEMORY.md 或主题文件 |
 | 重复流程、固定检查清单、可复用工作方式 | → 搜索/创建/更新 Skill |
-| 当前任务的临时计划、进度、交接和中间结论 | → 写入会话级 .context/ |
-| 跨会话可复用的调研、方案对比、代码分析、长 checklist | → 写入工作区级 .context/ 或工作区文档，并在 CLAUDE.md/Memory/Skill 中只保留入口 |
-| 多步骤任务的当前进度 | → 更新会话级 .context/todo.md；长期项目进度才放工作区级 .context/todo.md |
+| 当前任务的临时计划、进度、交接和中间结论 | → 写入会话级 Context（\`${sessionContextDir}\`） |
+| 跨会话可复用的调研、方案对比、代码分析、长 checklist | → 写入工作区级 Context（\`${workspaceContextDir}\`）或项目文档，并在 CLAUDE.md/Memory/Skill 中只保留入口 |
+| 多步骤任务的当前进度 | → 更新会话级 \`${sessionContextDir}/todo.md\`；长期项目进度才放工作区级 \`${workspaceContextDir}/todo.md\` |
 | 简单问答、一次性修改 | → 直接回复，不写文件 |
-| 执行计划 | → 写入 .context/plan/ 目录 |
+| 执行计划 | → 写入 \`${sessionContextDir}/plan/\` 目录 |
 
 维护这些长期文件前，先按需搜索当前会话、会话级 Context、工作区级 Context、CLAUDE.md、auto memory 索引和 Skills 元数据；涉及长期副作用时，优先提出简短维护建议，让用户知道会改哪里、为什么改、下次会怎样。`)
 

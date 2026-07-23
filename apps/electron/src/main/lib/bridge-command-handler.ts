@@ -14,11 +14,11 @@ import { createAgentSession, listAgentSessions, getAgentSessionMeta } from './ag
 import {
   listAgentWorkspacesByUpdatedAt,
   getAgentWorkspace,
+  getProjectFilesPath,
   getWorkspaceCapabilities,
 } from './agent-workspace-manager'
 import { runAgentHeadless, agentEventBus, stopAgent, isAgentSessionActive } from './agent-service'
 import { getSettings } from './settings-service'
-import { resolveWorkspaceFilesDir } from './config-paths'
 import { buildAttachedFilesBlock, buildSessionFileTree, buildFileTree } from './bridge-attachment-utils'
 import {
   listSwitchableChannels,
@@ -539,13 +539,13 @@ export class BridgeCommandHandler {
         }
       }
 
-      // 工作区文件（递归，体现文件夹-文件层级）
+      // 项目根目录文件（递归，体现文件夹-文件层级）
       try {
-        const wsPath = resolveWorkspaceFilesDir(workspace.slug)
-        const treeLines = buildFileTree(wsPath)
+        const projectRoot = getProjectFilesPath(workspace.slug)
+        const treeLines = buildFileTree(projectRoot)
         if (treeLines.length > 0) {
           lines.push('')
-          lines.push('工作区文件:')
+          lines.push(`项目文件（项目根目录: ${projectRoot}）:`)
           for (const l of treeLines) {
             lines.push(`  ${l}`)
           }

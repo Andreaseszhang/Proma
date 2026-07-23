@@ -250,46 +250,48 @@ export function createAgentSession(
   // 确保消息目录存在
   getAgentSessionsDir()
 
-  // 若有工作区，创建 session 级别子文件夹并初始化 .claude / .context
+  // 若有工作区，创建 session 级别子文件夹和 Proma 工作台目录。
   if (workspaceId) {
     const ws = getAgentWorkspace(workspaceId)
     if (ws) {
       const sessionDir = getAgentSessionWorkspacePath(ws.slug, meta.id)
 
-      // 初始化 .claude/settings.json（plansDirectory → .context）
-      const claudeDir = join(sessionDir, '.claude')
-      if (!existsSync(claudeDir)) mkdirSync(claudeDir, { recursive: true })
-      const settingsPath = join(claudeDir, 'settings.json')
-      let sdkSettings: Record<string, unknown> = {}
-      try {
-        sdkSettings = JSON.parse(readFileSync(settingsPath, 'utf-8'))
-      } catch { /* 文件不存在或解析失败 */ }
-      let needsWrite = false
-      if (sdkSettings.plansDirectory !== '.context') {
-        sdkSettings.plansDirectory = '.context'
-        needsWrite = true
-      }
-      if (sdkSettings.skipWebFetchPreflight !== true) {
-        sdkSettings.skipWebFetchPreflight = true
-        needsWrite = true
-      }
-      const autoMemoryDirectory = getWorkspaceAutoMemoryDir(ws.slug)
-      if (sdkSettings.autoMemoryDirectory !== autoMemoryDirectory) {
-        sdkSettings.autoMemoryDirectory = autoMemoryDirectory
-        needsWrite = true
-      }
-      // Proma Git/PR 推广标识：覆盖 Claude SDK 默认 Co-Authored-By
-      if (applyClaudeSdkAttributionSettings(
-        sdkSettings,
-        isGitAttributionEnabled(getSettings().gitAttributionEnabled),
-      )) {
-        needsWrite = true
-      }
-      if (needsWrite) {
-        writeFileSync(settingsPath, JSON.stringify(sdkSettings, null, 2))
+      // 本地项目以用户选择的目录为 Claude cwd；只在 Proma 托管项目的 session sidecar 写入 SDK 配置。
+      if (!ws.projectRootPath) {
+        const claudeDir = join(sessionDir, '.claude')
+        if (!existsSync(claudeDir)) mkdirSync(claudeDir, { recursive: true })
+        const settingsPath = join(claudeDir, 'settings.json')
+        let sdkSettings: Record<string, unknown> = {}
+        try {
+          sdkSettings = JSON.parse(readFileSync(settingsPath, 'utf-8'))
+        } catch { /* 文件不存在或解析失败 */ }
+        let needsWrite = false
+        if (sdkSettings.plansDirectory !== '.context') {
+          sdkSettings.plansDirectory = '.context'
+          needsWrite = true
+        }
+        if (sdkSettings.skipWebFetchPreflight !== true) {
+          sdkSettings.skipWebFetchPreflight = true
+          needsWrite = true
+        }
+        const autoMemoryDirectory = getWorkspaceAutoMemoryDir(ws.slug)
+        if (sdkSettings.autoMemoryDirectory !== autoMemoryDirectory) {
+          sdkSettings.autoMemoryDirectory = autoMemoryDirectory
+          needsWrite = true
+        }
+        // Proma Git/PR 推广标识：覆盖 Claude SDK 默认 Co-Authored-By。
+        if (applyClaudeSdkAttributionSettings(
+          sdkSettings,
+          isGitAttributionEnabled(getSettings().gitAttributionEnabled),
+        )) {
+          needsWrite = true
+        }
+        if (needsWrite) {
+          writeFileSync(settingsPath, JSON.stringify(sdkSettings, null, 2))
+        }
       }
 
-      // 初始化 .context/ 目录
+      // .context 是 Proma 的会话工作台，本地项目同样需要。
       const contextDir = join(sessionDir, '.context')
       if (!existsSync(contextDir)) mkdirSync(contextDir, { recursive: true })
     }

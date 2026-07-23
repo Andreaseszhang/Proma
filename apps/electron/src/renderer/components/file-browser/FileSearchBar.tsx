@@ -1,8 +1,8 @@
 /**
  * FileSearchBar — 文件搜索栏
  *
- * 位于 Files 面板顶部，跨会话文件与项目文件搜索。
- * 分别搜索会话目录和项目文件根，确保两边都使用相对路径。
+ * 可挂载到会话文件区或项目文件区，只搜索传入的对应根目录与附加目录。
+ * 搜索结果使用相对路径，供 FileBrowser 自动定位。
  */
 
 import * as React from 'react'
@@ -63,7 +63,7 @@ export function FileSearchBar({
     return `${base.replace(/[\\/]+$/, '')}${sep}${entry.path}`
   }, [workspaceFilesPath, sessionPath])
 
-  // 防抖搜索 — 分别搜索两个目录
+  // 防抖搜索 — 根据当前实例传入的根目录搜索对应文件区
   React.useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
     abortRef.current?.abort()

@@ -33,6 +33,31 @@ type SDKQuery = ReturnType<typeof import('@anthropic-ai/claude-agent-sdk').query
 /** SDK 用户消息类型 */
 type SDKUserMessage = import('@anthropic-ai/claude-agent-sdk').SDKUserMessage
 
+/** Claude SDK 可读取的 settings 层级。Proma 不启用 local 层，避免读取 .claude/settings.local.json。 */
+export type ClaudeSettingSource = 'user' | 'project'
+
+/**
+ * 解析 Claude SDK 的 settings 来源。
+ *
+ * 未显式指定时保持历史行为，兼容 Proma 托管项目；本地项目由编排层传入 ['user']，
+ * 从而只读取 CLAUDE_CONFIG_DIR 指向的 Proma 隔离配置，不读取用户项目中的 .claude 或 CLAUDE.md。
+ */
+export function resolveClaudeSettingSources(
+  configuredSources?: readonly ClaudeSettingSource[],
+): ClaudeSettingSource[] {
+  return configuredSources ? [...configuredSources] : ['user', 'project']
+}
+
+/**
+ * 根据项目根目录归属选择 Claude SDK settings 来源。
+ * 本地项目必须隔离用户已有的 Claude Code 项目配置；Proma 托管项目则保留会话目录内的配置。
+ */
+export function getClaudeSettingSourcesForWorkspace(
+  hasLocalProjectRoot: boolean,
+): ClaudeSettingSource[] {
+  return hasLocalProjectRoot ? ['user'] : ['user', 'project']
+}
+
 // ============================================================================
 // 长生命周期消息通道
 // ============================================================================
@@ -182,6 +207,11 @@ export interface ClaudeAgentQueryOptions extends AgentQueryInput {
   sdkSessionId?: string
   /** 附加的外部目录（SDK additionalDirectories） */
   additionalDirectories?: string[]
+  /**
+   * Claude SDK settings 来源。省略时兼容 Proma 托管项目（user + project）；
+   * 本地项目必须传入 ['user']，避免读取用户项目自身的 .claude 配置与 CLAUDE.md。
+   */
+  settingSources?: readonly ClaudeSettingSource[]
 }
 
 // ============================================================================
@@ -752,8 +782,9 @@ export class ClaudeAgentAdapter implements AgentProviderAdapter {
         abortController: controller,
         env: options.env,
         systemPrompt: options.systemPrompt,
-        // 加载用户级和项目级 SDK settings，排除 local 级别的 .claude/settings.local.json。
-        settingSources: ['user', 'project'],
+        // 本地项目仅加载 Proma 隔离的 user 配置；Proma 托管项目仍可加载其会话级 project 配置。
+        // 两种情形都排除 local 级别的 .claude/settings.local.json。
+        settingSources: resolveClaudeSettingSources(options.settingSources),
 
         // 条件字段
         ...(options.canUseTool && { canUseTool: options.canUseTool }),

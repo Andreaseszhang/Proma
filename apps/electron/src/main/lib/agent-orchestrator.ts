@@ -17,7 +17,7 @@
 import { randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
 import { join, dirname } from 'node:path'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { app } from 'electron'
 import type { AgentRuntime, AgentSendInput, AgentMessage, AgentGenerateTitleInput, AgentProviderAdapter, AgentSessionMeta, CodexOAuthCredentials, TypedError, RetryAttempt, SDKMessage, SDKAssistantMessage, AgentStreamPayload, RewindSessionResult, ProviderType } from '@proma/shared'
@@ -37,7 +37,7 @@ import {
 } from '@proma/shared'
 import type { PromaPermissionMode, AskUserRequest, ExitPlanModeRequest, SDKSystemMessage } from '@proma/shared'
 import type { ClaudeAgentQueryOptions } from './adapters/claude-agent-adapter'
-import { isPromptTooLongError, isThinkingSignatureError, friendlyErrorMessage, mapSDKErrorToTypedError, extractErrorDetails, shouldKeepChannelOpen } from './adapters/claude-agent-adapter'
+import { getClaudeSettingSourcesForWorkspace, isPromptTooLongError, isThinkingSignatureError, friendlyErrorMessage, mapSDKErrorToTypedError, extractErrorDetails, shouldKeepChannelOpen } from './adapters/claude-agent-adapter'
 import type { PiAgentQueryOptions } from './adapters/pi-agent-adapter'
 import { getPiAssistantErrorDetails, hasPiAssistantTextContent, stripPiAssistantError } from './adapters/pi-message-adapter'
 import { isTransientNetworkError, isMalformedResponseError, isSessionNotFoundError } from './error-patterns'
@@ -1197,46 +1197,7 @@ export class AgentOrchestrator {
       // fork 后的会话直接使用自己的 cwd，无需回退到源目录。
       // forkSourceDir 仅作为备用参考字段保留，不再影响 agentCwd。
 
-      // 9.5 确保 SDK 项目设置（plansDirectory → .context）
-      if (agentRuntime === 'claude') {
-        const claudeSettingsDir = join(agentCwd, '.claude')
-        if (!existsSync(claudeSettingsDir)) mkdirSync(claudeSettingsDir, { recursive: true })
-        const settingsPath = join(claudeSettingsDir, 'settings.json')
-        let sdkProjectSettings: Record<string, unknown> = {}
-        try {
-          sdkProjectSettings = JSON.parse(readFileSync(settingsPath, 'utf-8'))
-        } catch { /* 文件不存在或解析失败 */ }
-        let needsWrite = false
-        if (sdkProjectSettings.plansDirectory !== '.context') {
-          sdkProjectSettings.plansDirectory = '.context'
-          needsWrite = true
-        }
-        if (sdkProjectSettings.skipWebFetchPreflight !== true) {
-          sdkProjectSettings.skipWebFetchPreflight = true
-          needsWrite = true
-        }
-        if (workspaceSlug) {
-          const autoMemoryDirectory = getWorkspaceAutoMemoryDir(workspaceSlug)
-          if (sdkProjectSettings.autoMemoryDirectory !== autoMemoryDirectory) {
-            sdkProjectSettings.autoMemoryDirectory = autoMemoryDirectory
-            needsWrite = true
-          }
-        }
-        if (removePromaAutoCompactSettings(sdkProjectSettings)) {
-          needsWrite = true
-        }
-        // Proma Git/PR 推广标识：覆盖 Claude SDK 默认 Co-Authored-By / Generated with
-        if (applyClaudeSdkAttributionSettings(
-          sdkProjectSettings,
-          isGitAttributionEnabled(getSettings().gitAttributionEnabled),
-        )) {
-          needsWrite = true
-        }
-        if (needsWrite) {
-          writeFileSync(settingsPath, JSON.stringify(sdkProjectSettings, null, 2))
-          console.log(`[Agent 编排] 已设置 SDK settings (plansDirectory, skipWebFetchPreflight, autoMemoryDirectory, autoCompact, attribution)`)
-        }
-      }
+
 
       // 9.6 直接信任已保存的 sdkSessionId，跳过 listSessions 预验证
       // 原因：listSessions({ dir }) 基于 cwd 路径哈希查找，但 session 级别的 cwd
@@ -1698,6 +1659,9 @@ export class AgentOrchestrator {
         // 仅 Claude Agent SDK 使用 `[1m]` 扩展上下文变体；Pi 分支保持原始模型 ID。
         model: resolveAgentSdkModelId(selectedModelId, channel.provider),
         cwd: agentCwd,
+        // 本地项目的 cwd 是用户目录，因此只能读取 Proma 的隔离 user 配置；
+        // 空白项目的 cwd 是 Proma 会话目录，保留其 project 配置以支持 .context 等托管行为。
+        settingSources: getClaudeSettingSourcesForWorkspace(Boolean(workspace?.projectRootPath)),
         sdkCliPath: cliPath!,
         env: sdkEnv,
         ...(maxTurns != null && { maxTurns }),

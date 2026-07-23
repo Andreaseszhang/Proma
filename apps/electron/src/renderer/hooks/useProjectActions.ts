@@ -6,13 +6,17 @@
  */
 
 import * as React from 'react'
-import { useAtom, useSetAtom } from 'jotai'
+import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import { toast } from 'sonner'
 import {
+  agentChannelIdAtom,
+  agentModelIdAtom,
+  agentSessionsAtom,
   agentWorkspacesAtom,
   currentAgentWorkspaceIdAtom,
 } from '@/atoms/agent-atoms'
 import { activeViewAtom } from '@/atoms/active-view'
+import { useOpenSession } from './useOpenSession'
 import type { AgentWorkspace, CreateAgentWorkspaceInput } from '@proma/shared'
 
 interface UseProjectActionsResult {
@@ -29,6 +33,10 @@ interface UseProjectActionsResult {
 export function useProjectActions(): UseProjectActionsResult {
   const [workspaces, setWorkspaces] = useAtom(agentWorkspacesAtom)
   const [currentWorkspaceId, setCurrentWorkspaceId] = useAtom(currentAgentWorkspaceIdAtom)
+  const setAgentSessions = useSetAtom(agentSessionsAtom)
+  const agentChannelId = useAtomValue(agentChannelIdAtom)
+  const agentModelId = useAtomValue(agentModelIdAtom)
+  const openSession = useOpenSession()
   const setActiveView = useSetAtom(activeViewAtom)
   const createInFlightRef = React.useRef(false)
 
@@ -50,9 +58,15 @@ export function useProjectActions(): UseProjectActionsResult {
       createInFlightRef.current = true
 
       try {
-        const workspace = await window.electronAPI.createAgentWorkspace({ name: trimmed, ...options })
+        const { workspace, session } = await window.electronAPI.createAgentProject(
+          { name: trimmed, ...options },
+          agentChannelId ?? undefined,
+          agentModelId ?? undefined,
+        )
         setWorkspaces((prev) => [workspace, ...prev])
+        setAgentSessions((prev) => [session, ...prev])
         setCurrentWorkspaceId(workspace.id)
+        openSession('agent', session.id, session.title)
         setActiveView('conversations')
         window.electronAPI.updateSettings({ agentWorkspaceId: workspace.id }).catch(console.error)
         return workspace
@@ -64,7 +78,7 @@ export function useProjectActions(): UseProjectActionsResult {
         createInFlightRef.current = false
       }
     },
-    [setWorkspaces, setCurrentWorkspaceId, setActiveView],
+    [agentChannelId, agentModelId, openSession, setAgentSessions, setWorkspaces, setCurrentWorkspaceId, setActiveView],
   )
 
   const createProjectFromFolder = React.useCallback(async (): Promise<AgentWorkspace | null> => {

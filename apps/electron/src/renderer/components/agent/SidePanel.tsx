@@ -515,11 +515,11 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
                     </Tooltip>
                   </div>
                   <FileSearchBar
-                    workspaceFilesPath={workspaceFilesPath}
+                    workspaceFilesPath={null}
                     sessionPath={sessionPath}
                     sessionAttachedDirs={attachedDirs}
-                    workspaceAttachedDirs={wsAttachedDirs}
-                    placeholder="搜索文件..."
+                    workspaceAttachedDirs={[]}
+                    placeholder="搜索会话文件..."
                     sessionId={sessionId}
                     onFilePreview={handleFilePreview}
                   />
@@ -571,7 +571,7 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
                   >
                     <div className="absolute inset-x-0 top-1/2 h-px bg-border transition-colors group-hover/split:h-0.5 group-hover/split:bg-primary/60" />
                   </div>
-                  <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin pt-2">
+                  <div className="min-h-0 flex-1 flex flex-col pt-2">
                     <div>
                       <div className="flex items-center gap-1 px-2 h-[32px] flex-shrink-0">
                         <FolderHeart className="size-3 text-muted-foreground" />
@@ -606,6 +606,16 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
                           </Tooltip>
                         )}
                       </div>
+                      <FileSearchBar
+                        workspaceFilesPath={workspaceFilesPath}
+                        sessionPath={null}
+                        sessionAttachedDirs={[]}
+                        workspaceAttachedDirs={wsAttachedDirs}
+                        placeholder="搜索项目文件..."
+                        sessionId={sessionId}
+                        onFilePreview={handleFilePreview}
+                      />
+                      <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
                       {wsAttachedFiles.length > 0 && (
                         <AttachedFilesSection
                           attachedFiles={wsAttachedFiles}
@@ -643,6 +653,7 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
                         onAttachFolder={handleAttachWorkspaceFolder}
                         onFoldersDropped={handleWorkspaceFoldersDropped}
                       />
+                      </div>
                     </div>
                   </div>
                 </>

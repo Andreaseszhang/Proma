@@ -43,6 +43,7 @@ import type {
   AgentStreamCompletePayload,
   AgentWorkspace,
   CreateAgentWorkspaceInput,
+  CreateAgentProjectResult,
   AgentGenerateTitleInput,
   AgentSaveFilesInput,
   AgentSaveWorkspaceFilesInput,
@@ -516,6 +517,9 @@ export interface ElectronAPI {
 
   /** 创建 Agent 工作区 */
   createAgentWorkspace: (input: CreateAgentWorkspaceInput) => Promise<AgentWorkspace>
+
+  /** 创建项目及其首个 Agent 会话 */
+  createAgentProject: (input: CreateAgentWorkspaceInput, channelId?: string, modelId?: string) => Promise<CreateAgentProjectResult>
 
   /** 更新 Agent 工作区 */
   updateAgentWorkspace: (id: string, updates: { name: string }) => Promise<AgentWorkspace>
@@ -1578,6 +1582,10 @@ const electronAPI: ElectronAPI = {
 
   createAgentWorkspace: (input: CreateAgentWorkspaceInput) => {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.CREATE_WORKSPACE, input)
+  },
+
+  createAgentProject: (input: CreateAgentWorkspaceInput, channelId?: string, modelId?: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.CREATE_PROJECT, input, channelId, modelId)
   },
 
   updateAgentWorkspace: (id: string, updates: { name: string }) => {

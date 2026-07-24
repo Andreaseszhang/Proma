@@ -5,6 +5,7 @@ import {
   replaceAgentSessionInFreshnessOrder,
   upsertAgentSession,
   mergeFetchedAgentSessions,
+  countSettledDelegatedChildren,
 } from './agent-session-list'
 
 function makeSession(
@@ -122,5 +123,38 @@ describe('mergeFetchedAgentSessions', () => {
     const result = mergeFetchedAgentSessions(sessions, sessions)
     expect(result.map((s) => s.id)).toEqual(['a', 'b'])
     expect(result).toHaveLength(2)
+  })
+})
+
+describe('countSettledDelegatedChildren', () => {
+  test('取消后的子会话被直接重跑时，实时 running 状态优先于历史 cancelled', () => {
+    const child = makeSession('child', 1, {
+      parentSessionId: 'parent',
+      sourceDelegationId: 'delegation',
+      delegationStatus: 'cancelled',
+    })
+
+    expect(countSettledDelegatedChildren([child], new Map([['child', 'running' as const]]))).toBe(0)
+    expect(countSettledDelegatedChildren([child], new Map())).toBe(1)
+  })
+
+  test('运行中或阻塞中的子会话不计入已停止数量', () => {
+    const running = makeSession('running', 1, { delegationStatus: 'running' })
+    const blocked = makeSession('blocked', 1, { delegationStatus: 'completed' })
+    const finished = makeSession('finished', 1, { delegationStatus: 'cancelled' })
+
+    const statusMap = new Map([
+      ['running', 'running' as const],
+      ['blocked', 'blocked' as const],
+      ['finished', 'completed' as const],
+    ])
+
+    expect(countSettledDelegatedChildren([running, blocked, finished], statusMap)).toBe(1)
+  })
+
+  test('应用重启后没有实时流状态时，持久化 running 仍不计入已停止数量', () => {
+    const child = makeSession('child', 1, { delegationStatus: 'running' })
+
+    expect(countSettledDelegatedChildren([child], new Map())).toBe(0)
   })
 })

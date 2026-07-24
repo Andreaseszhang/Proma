@@ -1,4 +1,5 @@
 import type { AgentSessionMeta } from '@proma/shared'
+import type { SessionIndicatorStatus } from '@/atoms/agent-atoms'
 
 interface AgentSessionTreeLike {
   session: Pick<AgentSessionMeta, 'id'>
@@ -99,4 +100,36 @@ export function isAgentSessionVisibleInTrees(
 ): boolean {
   if (!sessionId) return false
   return collectAgentSessionTreeIds(items).has(sessionId)
+}
+
+/**
+ * 以侧栏指示器为准解析协作子会话的当前状态。
+ *
+ * 实时流状态优先于持久化的 delegationStatus。后者只在应用重启后、流式
+ * 状态尚未恢复时保留“原委派仍在运行”的信息；历史 cancelled 不应覆盖子会话
+ * 后续被直接重跑时的真实运行状态。
+ */
+export function getDelegatedChildSessionStatus(
+  session: AgentSessionMeta,
+  agentIndicatorMap: ReadonlyMap<string, SessionIndicatorStatus>,
+): SessionIndicatorStatus {
+  const status = agentIndicatorMap.get(session.id)
+  if (status) return status
+  return session.delegationStatus === 'running' ? 'running' : 'idle'
+}
+
+/**
+ * 父会话进度的分子：当前已停止的直属子会话数量。
+ *
+ * 这里刻意不读取历史 delegationStatus 是否为 completed。用户可在原委派
+ * 被取消后直接重跑子会话，父行进度应与该子会话在左侧栏的实时状态保持一致。
+ */
+export function countSettledDelegatedChildren(
+  childSessions: readonly AgentSessionMeta[],
+  agentIndicatorMap: ReadonlyMap<string, SessionIndicatorStatus>,
+): number {
+  return childSessions.filter((session) => {
+    const status = getDelegatedChildSessionStatus(session, agentIndicatorMap)
+    return status !== 'running' && status !== 'blocked'
+  }).length
 }

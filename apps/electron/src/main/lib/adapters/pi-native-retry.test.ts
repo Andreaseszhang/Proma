@@ -11,10 +11,11 @@ function failedAssistant(errorMessage: string): AssistantMessage {
 }
 
 describe('Pi native retry classifier', () => {
-  test('classifies an OpenAI Responses terminal-event stream interruption as retryable', () => {
-    expect(isRetryableAssistantError(
-      failedAssistant('OpenAI Responses stream ended before a terminal response event'),
-    )).toBe(true)
+  test.each([
+    'OpenAI Responses stream ended before a terminal response event',
+    'Upstream Responses stream ended before a terminal event',
+  ])('classifies Responses terminal-event stream interruption "%s" as retryable', (errorMessage) => {
+    expect(isRetryableAssistantError(failedAssistant(errorMessage))).toBe(true)
   })
 
   test.each([

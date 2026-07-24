@@ -7,7 +7,7 @@ index b3c27c8d5fb9a77c117af7ab8f789170903d5252..42b41a67c5607ef605fba6340882db6f
      // (#4433); Bedrock/Smithy can throw an HTTP/2 no-response error (#3594).
      "ended without",
 +    // OpenAI Responses can close an SSE stream before sending its terminal event.
-+    "stream ended before (?:a )?terminal response event",
++    "stream ended before (?:a )?terminal (?:response )?event",
 +    // HTTP chunked/SSE transports can close before the complete body arrives.
 +    // Match both phrases because proxy implementations may retain only one.
 +    "peer closed connection",

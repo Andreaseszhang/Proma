@@ -17,6 +17,7 @@ describe('isTransientNetworkError', () => {
     'stream closed prematurely',
     'premature close',
     'OpenAI Responses stream ended before a terminal response event',
+    'Upstream Responses stream ended before a terminal event',
     'Anthropic stream ended before message_stop',
     'peer closed connection',
     'incomplete chunked read',

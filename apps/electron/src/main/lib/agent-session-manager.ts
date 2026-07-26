@@ -37,6 +37,7 @@ import type {
   AgentSessionMeta,
   AgentMessage,
   SDKMessage,
+  AgentWorkspace,
   ForkSessionInput,
   AgentMessageSearchResult,
   AgentSessionReferenceSearchInput,
@@ -216,10 +217,27 @@ export function getAgentSessionMeta(id: string): AgentSessionMeta | undefined {
   return index.sessions.find((s) => s.id === id)
 }
 
+/** Agent 运行 cwd 与 Proma 会话 sidecar 工作台目录解析。 */
+export function resolveAgentCwd(
+  workspace: Pick<AgentWorkspace, 'slug' | 'projectRootPath'> | undefined,
+  sessionId: string,
+): string | undefined {
+  if (!workspace) return undefined
+  return workspace.projectRootPath ?? getAgentSessionWorkspacePath(workspace.slug, sessionId)
+}
+
+export function resolveAgentWorkbenchDir(
+  workspace: Pick<AgentWorkspace, 'slug' | 'projectRootPath'> | undefined,
+  sessionId: string,
+): string | undefined {
+  if (!workspace) return undefined
+  return getAgentSessionWorkspacePath(workspace.slug, sessionId)
+}
+
 /**
  * 确保 Claude runtime 的 Proma 会话 sidecar 配置存在。
  *
- * 本地目录项目的 Claude cwd 是用户目录，不能依赖 project settings source；
+ * 本地目录项目的 Claude cwd 是用户项目根，不能依赖 project settings source；
  * 此文件会由 adapter 通过 SDK `settings` 选项显式加载。空白项目仍可将计划存放在会话 `.context/`，
  * 本地项目则不设置 plansDirectory，避免向用户项目根目录写入 `.context/`。
  */
@@ -790,14 +808,11 @@ export async function forkAgentSession(input: ForkSessionInput): Promise<AgentSe
       })
     : sourceMeta.modelId
 
-  // 2. 确定源会话的工作目录（SDK 需要从此目录的项目空间读取 session 文件）
-  let sourceDir: string | undefined
-  if (sourceMeta.workspaceId) {
-    const ws = getAgentWorkspace(sourceMeta.workspaceId)
-    if (ws) {
-      sourceDir = getAgentSessionWorkspacePath(ws.slug, sessionId)
-    }
-  }
+  // 2. 确定源会话的 Agent cwd；本地项目使用共享项目根，托管项目使用 session 工作台。
+  // sidecar 工作台单独解析，fork 时仍需复制其中的 .context 等会话临时文件。
+  const workspace = sourceMeta.workspaceId ? getAgentWorkspace(sourceMeta.workspaceId) : undefined
+  const sourceDir = resolveAgentCwd(workspace, sessionId)
+  const sourceWorkbenchDir = resolveAgentWorkbenchDir(workspace, sessionId)
 
   // 2.5 校验目标消息并确定其所属的 SDK session ID
   // - 当会话经历过 "session not found" 恢复后，sdkSessionId 会被替换为新的，
@@ -866,22 +881,19 @@ export async function forkAgentSession(input: ForkSessionInput): Promise<AgentSe
   newMeta.forkSourceDir = sourceDir
   newMeta.forkSourceSdkSessionId = forkSourceSdkSessionId
 
-  // 4.4 计算 fork 目标会话的 cwd（新会话目录），后续多个步骤需要用到
-  let destDir: string | undefined
-  if (sourceDir && sourceMeta.workspaceId) {
-    const ws = getAgentWorkspace(sourceMeta.workspaceId)
-    if (ws) {
-      destDir = getAgentSessionWorkspacePath(ws.slug, newMeta.id)
-    }
-  }
+  // 4.4 计算 fork 目标的 Agent cwd 与 sidecar 工作台目录。
+  const destDir = resolveAgentCwd(workspace, newMeta.id)
+  const destWorkbenchDir = resolveAgentWorkbenchDir(workspace, newMeta.id)
 
-  // 4.5 将 SDK session JSONL 复制到 fork 自己的 project-hash 目录
+  // 4.5 托管项目需要将 SDK session JSONL 复制到 fork 自己的 project-hash 目录
   // SDK forkSession() 在源 cwd 的 project-hash 下创建 JSONL（如 projects/<hash-of-sourceDir>/<newId>.jsonl），
   // 但 fork 会话的 cwd 是新的 session 目录（不同 project-hash），resume 时 SDK 会找不到。
   // 这里直接将 JSONL 复制到 fork 目标 cwd 的 project-hash 下，让后续每轮 resume 都能直接命中。
   // 同时把 JSONL 内容中所有源目录路径改写为目标目录路径，避免历史中的绝对路径误导 Claude
   // 继续在源目录下读写文件。
-  if (sourceDir && destDir) {
+  // 本地项目两端 cwd 相同，forkSession 已经在正确的共享 project-hash 中创建文件，
+  // 不能再次复制到同一路径，否则会在读源文件前将其截断。
+  if (sourceDir && destDir && sourceDir !== destDir) {
     const sourceJsonl = findSdkSessionJsonl(forkResult.sessionId)
     if (sourceJsonl) {
       // SDK 使用简单的字符替换计算 project-hash：path.replace(/[^a-zA-Z0-9]/g, '-')
@@ -900,19 +912,19 @@ export async function forkAgentSession(input: ForkSessionInput): Promise<AgentSe
     }
   }
 
-  // 5. 复制源会话工作区文件到新会话目录
+  // 5. 复制源会话 sidecar 工作台文件到新会话目录；绝不复制本地项目根。
   // 保留 .context/，但跳过依赖、构建产物和 Git 元数据，避免 fork 点击时同步复制巨量目录拖垮主进程。
   // .context/ 必须保留 — Proma 约定 .context/note.md、todo.md、plan/ 等是会话上下文，
   // 如果不复制，fork 后这些参考资料会丢失或被 Claude 误回源目录读取。
-  if (sourceDir && destDir) {
+  if (sourceWorkbenchDir && destWorkbenchDir) {
     try {
-      const copyResult = copyForkWorkspaceFiles(sourceDir, destDir)
+      const copyResult = copyForkWorkspaceFiles(sourceWorkbenchDir, destWorkbenchDir)
       console.log(
-        `[Agent 会话] 已复制工作区文件: ${sourceDir} → ${destDir} `
+        `[Agent 会话] 已复制工作台文件: ${sourceWorkbenchDir} → ${destWorkbenchDir} `
         + `(${copyResult.copiedCount} 个条目, 跳过 ${copyResult.skippedCount} 个, 失败 ${copyResult.failedCount} 个)`,
       )
     } catch (err) {
-      console.warn(`[Agent 会话] 复制工作区文件失败:`, err)
+      console.warn(`[Agent 会话] 复制工作台文件失败:`, err)
     }
   }
 
@@ -950,15 +962,12 @@ async function forkPiAgentSession(sourceMeta: AgentSessionMeta, input: ForkSessi
   const forkModelId = input.modelId !== undefined
     ? assertEnabledModelForChannel({ channelId: sourceMeta.channelId, modelId: input.modelId, purpose: '分叉 Pi Agent 会话' })
     : sourceMeta.modelId
-  const sourceDir = sourceMeta.workspaceId
-    ? getAgentWorkspace(sourceMeta.workspaceId)
-      ? getAgentSessionWorkspacePath(getAgentWorkspace(sourceMeta.workspaceId)!.slug, sourceMeta.id)
-      : undefined
-    : undefined
+  const workspace = sourceMeta.workspaceId ? getAgentWorkspace(sourceMeta.workspaceId) : undefined
+  const sourceDir = resolveAgentCwd(workspace, sourceMeta.id)
+  const sourceWorkbenchDir = resolveAgentWorkbenchDir(workspace, sourceMeta.id)
   const newMeta = createAgentSession(`${sourceMeta.title} (fork)`, sourceMeta.channelId, sourceMeta.workspaceId, forkModelId, 'pi')
-  const destDir = sourceMeta.workspaceId && getAgentWorkspace(sourceMeta.workspaceId)
-    ? getAgentSessionWorkspacePath(getAgentWorkspace(sourceMeta.workspaceId)!.slug, newMeta.id)
-    : undefined
+  const destDir = resolveAgentCwd(workspace, newMeta.id)
+  const destWorkbenchDir = resolveAgentWorkbenchDir(workspace, newMeta.id)
 
   try {
     const sdk = await import('@earendil-works/pi-coding-agent')
@@ -982,7 +991,7 @@ async function forkPiAgentSession(sourceMeta: AgentSessionMeta, input: ForkSessi
     newMeta.piSessionFile = piSessionFile
     newMeta.piEntryBindings = { ...(sourceMeta.piEntryBindings ?? {}) }
 
-    if (sourceDir && destDir) copyForkWorkspaceFiles(sourceDir, destDir)
+    if (sourceWorkbenchDir && destWorkbenchDir) copyForkWorkspaceFiles(sourceWorkbenchDir, destWorkbenchDir)
     await copyForkStoredSDKMessages({
       sourceSessionId: sourceMeta.id,
       destSessionId: newMeta.id,
@@ -1005,9 +1014,8 @@ export async function rewindPiAgentSession(sessionId: string, assistantMessageUu
   const entryId = meta.piEntryBindings?.[assistantMessageUuid]
   if (!entryId) throw new Error('该 Pi 历史消息尚无 entry ID 映射，无法安全回退')
   if (!meta.piSessionFile || !existsSync(meta.piSessionFile)) throw new Error('未找到 Pi session artifact，无法安全回退')
-  const cwd = meta.workspaceId && getAgentWorkspace(meta.workspaceId)
-    ? getAgentSessionWorkspacePath(getAgentWorkspace(meta.workspaceId)!.slug, meta.id)
-    : process.cwd()
+  const workspace = meta.workspaceId ? getAgentWorkspace(meta.workspaceId) : undefined
+  const cwd = resolveAgentCwd(workspace, meta.id) ?? process.cwd()
   const sdk = await import('@earendil-works/pi-coding-agent')
   const manager = sdk.SessionManager.open(meta.piSessionFile, join(getSdkConfigDir(), 'sessions'), cwd)
   const branchFile = manager.createBranchedSession(entryId)

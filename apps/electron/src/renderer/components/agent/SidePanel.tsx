@@ -26,6 +26,7 @@ import {
   workspaceFilesVersionAtom,
   currentAgentWorkspaceIdAtom,
   agentWorkspacesAtom,
+  agentSessionsAtom,
   agentAttachedDirectoriesMapAtom,
   agentAttachedFilesMapAtom,
   workspaceAttachedDirectoriesMapAtom,
@@ -116,9 +117,12 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
   const diffRefreshVersion = diffRefreshVersionMap.get(sessionId) ?? 0
   const hasFileChanges = filesVersion > 0
 
-  // 派生当前工作区 slug（用于 FileDropZone IPC 调用）
-  const currentWorkspaceId = useAtomValue(currentAgentWorkspaceIdAtom)
+  // 文件面板必须跟随当前会话归属的项目。仅在会话元数据尚未加载时回退全局选择，
+  // 避免用户切换项目列表但仍查看旧会话时读写错误项目根目录。
+  const selectedWorkspaceId = useAtomValue(currentAgentWorkspaceIdAtom)
   const workspaces = useAtomValue(agentWorkspacesAtom)
+  const sessions = useAtomValue(agentSessionsAtom)
+  const currentWorkspaceId = sessions.find((session) => session.id === sessionId)?.workspaceId ?? selectedWorkspaceId
   const currentWorkspace = workspaces.find((workspace) => workspace.id === currentWorkspaceId)
   const workspaceSlug = currentWorkspace?.slug ?? null
   const projectRootSourceLabel = currentWorkspace?.projectRootPath ? '本地目录' : 'Proma 托管'
@@ -373,6 +377,42 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
   // Files 将会话与项目文件放在同一视图；FileBrowser 自己处理对应根目录的自动定位。
   // RightSidePanel 完全由用户控制，不因 Agent 文件变更自动打开。
 
+  // Agent 写文件时把已打开的侧栏切回文件视图，让 FileBrowser 消费定位/高亮信号。
+  // 用户从搜索结果选择文件时不抢占当前视图，也不重新打开用户主动关闭的侧栏。
+  const autoRevealSignal = useAtomValue(fileBrowserAutoRevealAtom)
+  const consumedTabRevealTsRef = React.useRef(0)
+  React.useEffect(() => {
+    if (!isOpen || !autoRevealSignal || autoRevealSignal.select) return
+    if (autoRevealSignal.sessionId !== sessionId) return
+    if (autoRevealSignal.ts <= consumedTabRevealTsRef.current) return
+
+    const targetPath = autoRevealSignal.path
+    const belongsToSession =
+      (!!sessionPath && (targetPath === sessionPath || isPathUnderRoot(sessionPath, targetPath)))
+      || attachedDirs.some((dir) => isPathUnderRoot(dir, targetPath))
+      || attachedFiles.includes(targetPath)
+    const belongsToProject =
+      (!!workspaceFilesPath && (targetPath === workspaceFilesPath || isPathUnderRoot(workspaceFilesPath, targetPath)))
+      || wsAttachedDirs.some((dir) => isPathUnderRoot(dir, targetPath))
+      || wsAttachedFiles.includes(targetPath)
+    if (!belongsToSession && !belongsToProject) return
+
+    consumedTabRevealTsRef.current = autoRevealSignal.ts
+    if (activeTab !== 'files') onTabChange('files')
+  }, [
+    activeTab,
+    attachedDirs,
+    attachedFiles,
+    autoRevealSignal,
+    isOpen,
+    onTabChange,
+    sessionId,
+    sessionPath,
+    workspaceFilesPath,
+    wsAttachedDirs,
+    wsAttachedFiles,
+  ])
+
   // 同步 basePaths ref（供 handleFilePreview 使用，避免 hooks 声明顺序问题）
   basePathsRef.current = [sessionPath, workspaceFilesPath, ...fileAccessPathsMemo].filter(Boolean) as string[]
   const hasSessionAttachedItems = attachedDirs.length > 0 || attachedFiles.length > 0
@@ -572,7 +612,7 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
                     <div className="absolute inset-x-0 top-1/2 h-px bg-border transition-colors group-hover/split:h-0.5 group-hover/split:bg-primary/60" />
                   </div>
                   <div className="min-h-0 flex-1 flex flex-col pt-2">
-                    <div>
+                    <div className="min-h-0 flex flex-1 flex-col">
                       <div className="flex items-center gap-1 px-2 h-[32px] flex-shrink-0">
                         <FolderHeart className="size-3 text-muted-foreground" />
                         <span className="text-[11px] font-medium text-muted-foreground">项目根目录</span>

@@ -224,6 +224,53 @@ describe('Agent 会话 runtime 元数据', () => {
   })
 })
 
+describe('Agent fork cwd 与 sidecar 工作台规划', () => {
+  test('Given 本地项目的 Claude/Pi 会话 When 规划 fork 目录 Then 两端 Agent cwd 都使用同一个项目根且 sidecar 仍按会话隔离', () => {
+    const localProjectRoot = mkdtempSync(join(tempHome, 'fork-local-project-'))
+    const workspace = workspaceManager.createAgentWorkspace({
+      name: 'Fork Local Project',
+      projectRootPath: localProjectRoot,
+    })
+    const sourceSession = manager.createAgentSession('本地 fork 源会话', undefined, workspace.id, undefined, 'claude')
+    const destSession = manager.createAgentSession('本地 fork 目标会话', undefined, workspace.id, undefined, 'pi')
+    const sourceSessionId = sourceSession.id
+    const destSessionId = destSession.id
+
+    const sourceCwd = manager.resolveAgentCwd(workspace, sourceSessionId)
+    const destCwd = manager.resolveAgentCwd(workspace, destSessionId)
+    const sourceWorkbenchDir = manager.resolveAgentWorkbenchDir(workspace, sourceSessionId)
+    const destWorkbenchDir = manager.resolveAgentWorkbenchDir(workspace, destSessionId)
+
+    expect(sourceCwd).toBe(workspace.projectRootPath)
+    expect(destCwd).toBe(workspace.projectRootPath)
+    expect(sourceWorkbenchDir).toBe(configPaths.getAgentSessionWorkspacePath(workspace.slug, sourceSessionId))
+    expect(destWorkbenchDir).toBe(configPaths.getAgentSessionWorkspacePath(workspace.slug, destSessionId))
+    expect(sourceWorkbenchDir).not.toBe(workspace.projectRootPath)
+    expect(destWorkbenchDir).not.toBe(workspace.projectRootPath)
+    expect(existsSync(join(sourceWorkbenchDir!, '.context'))).toBe(true)
+    expect(existsSync(join(destWorkbenchDir!, '.context'))).toBe(true)
+  })
+
+  test('Given Proma 托管项目 When 规划 fork 目录 Then Agent cwd 与 sidecar 都按源/新会话分离', () => {
+    const workspace = workspaceManager.createAgentWorkspace('Fork Managed Project')
+    const sourceSessionId = 'managed-source-session'
+    const destSessionId = 'managed-dest-session'
+
+    const sourceCwd = manager.resolveAgentCwd(workspace, sourceSessionId)
+    const destCwd = manager.resolveAgentCwd(workspace, destSessionId)
+    const sourceWorkbenchDir = manager.resolveAgentWorkbenchDir(workspace, sourceSessionId)
+    const destWorkbenchDir = manager.resolveAgentWorkbenchDir(workspace, destSessionId)
+    const expectedSourceDir = configPaths.getAgentSessionWorkspacePath(workspace.slug, sourceSessionId)
+    const expectedDestDir = configPaths.getAgentSessionWorkspacePath(workspace.slug, destSessionId)
+
+    expect(sourceCwd).toBe(expectedSourceDir)
+    expect(destCwd).toBe(expectedDestDir)
+    expect(sourceWorkbenchDir).toBe(expectedSourceDir)
+    expect(destWorkbenchDir).toBe(expectedDestDir)
+    expect(sourceCwd).not.toBe(destCwd)
+  })
+})
+
 describe('Agent 会话引用搜索', () => {
   test('Given 工作区有超过 20 个会话 When 请求最近 200 条 Then 按更新时间返回 200 条', () => {
     writeAgentSessionsIndex(createIndexedSessions(220))

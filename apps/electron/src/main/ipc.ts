@@ -5,7 +5,7 @@
  */
 
 import { ipcMain, nativeTheme, shell, dialog, BrowserWindow, app, clipboard, nativeImage } from 'electron'
-import { join, resolve, sep, dirname } from 'node:path'
+import { basename, join, resolve, sep, dirname } from 'node:path'
 import { existsSync, realpathSync, rmSync, readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -2089,6 +2089,7 @@ export function registerIpcHandlers(): void {
       const affectedAutomationIds = listAutomations()
         .filter((automation) => automation.workspaceId === id)
         .map((automation) => automation.id)
+      const deletedProjectRoot = deletingWorkspace.projectRootPath
 
       for (const sessionId of affectedSessionIds) {
         if (isAgentSessionActive(sessionId)) {
@@ -2103,6 +2104,19 @@ export function registerIpcHandlers(): void {
         broadcastAutomationsChanged()
       }
       deleteAgentWorkspace(id)
+
+      if (deletedProjectRoot) {
+        const remainingWorkspaces = listAgentWorkspaces()
+        const remainingSessions = listAgentSessions()
+        const isStillReferenced = remainingWorkspaces.some((workspace) =>
+          workspace.projectRootPath === deletedProjectRoot
+          || getWorkspaceAttachedDirectories(workspace.slug).includes(deletedProjectRoot),
+        ) || remainingSessions.some((session) =>
+          session.attachedDirectories?.includes(deletedProjectRoot),
+        )
+
+        if (!isStillReferenced) unwatchAttachedDirectory(deletedProjectRoot)
+      }
     }
   )
 
@@ -2745,7 +2759,7 @@ export function registerIpcHandlers(): void {
       if (result.canceled || result.filePaths.length === 0) return null
 
       const folderPath = result.filePaths[0]!
-      const name = folderPath.split('/').filter(Boolean).pop() || 'folder'
+      const name = basename(folderPath) || 'folder'
       return { path: folderPath, name }
     }
   )

@@ -48,6 +48,17 @@ function getPathBasename(filePath: string): string {
   return filePath.split(/[\\/]/).filter(Boolean).pop() || filePath
 }
 
+function getPathDirname(filePath: string): string {
+  const normalized = filePath.replace(/[\\/]+$/, '')
+  const separatorIndex = Math.max(normalized.lastIndexOf('/'), normalized.lastIndexOf('\\'))
+  return separatorIndex >= 0 ? normalized.slice(0, separatorIndex) : ''
+}
+
+function joinPath(parentDir: string, name: string): string {
+  const separator = parentDir.includes('\\') && !parentDir.includes('/') ? '\\' : '/'
+  return parentDir ? `${parentDir}${separator}${name}` : name
+}
+
 function getMediaTypeFromFilename(filename: string): string {
   const ext = filename.split('.').pop()?.toLowerCase() ?? ''
   const imageExts = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico'])
@@ -1154,8 +1165,8 @@ function AttachedDirItem({ entry, depth, selectedPaths, onSelect, refreshVersion
     try {
       await window.electronAPI.renameAttachedFile(currentPath, newName, { sessionId, candidateBasePaths: allowedPaths })
       // 更新本地显示
-      const parentDir = currentPath.substring(0, currentPath.lastIndexOf('/'))
-      const newPath = `${parentDir}/${newName}`
+      const parentDir = getPathDirname(currentPath)
+      const newPath = joinPath(parentDir, newName)
       // 更新选中状态中的路径
       onSelect(newPath, false)
       setCurrentName(newName)
@@ -1179,7 +1190,7 @@ function AttachedDirItem({ entry, depth, selectedPaths, onSelect, refreshVersion
       if (!result) return
       await window.electronAPI.moveAttachedFile(currentPath, result.path, { sessionId, candidateBasePaths: allowedPaths })
       // 移动后更新路径
-      const newPath = `${result.path}/${currentName}`
+      const newPath = joinPath(result.path, currentName)
       setCurrentPath(newPath)
     } catch (err) {
       console.error('[AttachedDirItem] 移动失败:', err)

@@ -830,6 +830,7 @@ function FileTreeItem({
                 {menuSelectedCount === 1 && !entry.isDirectory && (
                   <DefaultAppMenuItem
                     filePath={entry.path}
+                    access={access}
                     className="text-xs py-1 [&>svg]:size-3.5"
                   />
                 )}

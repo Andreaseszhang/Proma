@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, mock, test } from 'bun:test'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import * as os from 'node:os'
-import { join } from 'node:path'
+import { join, win32 } from 'node:path'
 
 type AgentSessionManager = typeof import('./agent-session-manager')
 
@@ -51,6 +51,12 @@ function writeSdkSessionJsonl(sdkSessionId: string, rows: string[]): void {
   const dir = join(tempHome, '.proma', 'sdk-config', 'projects', 'test-project')
   mkdirSync(dir, { recursive: true })
   writeFileSync(join(dir, `${sdkSessionId}.jsonl`), jsonl(rows), 'utf-8')
+}
+
+function writeSdkFileHistoryBackup(sdkSessionId: string, backupFileName: string, content: string): void {
+  const dir = join(tempHome, '.proma', 'sdk-config', 'file-history', sdkSessionId)
+  mkdirSync(dir, { recursive: true })
+  writeFileSync(join(dir, backupFileName), content, 'utf-8')
 }
 
 function writeAgentSessionsIndex(sessions: Array<{
@@ -147,6 +153,88 @@ describe('Agent 会话 JSONL 读取', () => {
 
     expect(() => manager.truncateSDKMessages('session-truncate-bad-line', 'assistant-1'))
       .toThrow('JSONL 第 2 行解析失败')
+  })
+})
+
+describe('Agent checkpoint 路径边界', () => {
+  test('Given POSIX 快照包含 cwd 相对路径和附加目录绝对路径 When 从快照恢复 Then 只恢复允许目录内文件并拒绝越界路径', () => {
+    const sdkSessionId = 'sdk-rewind-posix-path-boundaries'
+    const cwd = join(tempHome, 'rewind-project')
+    const attached = join(tempHome, 'rewind-attached')
+    const attachedPrefix = join(tempHome, 'rewind-attached-escape')
+    const outside = join(tempHome, 'rewind-outside')
+    mkdirSync(cwd, { recursive: true })
+    mkdirSync(attached, { recursive: true })
+    mkdirSync(attachedPrefix, { recursive: true })
+    mkdirSync(outside, { recursive: true })
+
+    writeFileSync(join(cwd, 'src.txt'), 'current cwd', 'utf-8')
+    writeFileSync(join(cwd, 'unsafe.txt'), 'current unsafe', 'utf-8')
+    writeFileSync(join(attached, 'notes.txt'), 'current attached', 'utf-8')
+    writeFileSync(join(attachedPrefix, 'notes.txt'), 'current prefix', 'utf-8')
+    writeFileSync(join(outside, 'notes.txt'), 'current outside', 'utf-8')
+
+    writeSdkFileHistoryBackup(sdkSessionId, 'cwd-backup', 'rewound cwd')
+    writeSdkFileHistoryBackup(sdkSessionId, 'attached-backup', 'rewound attached')
+    writeSdkFileHistoryBackup(sdkSessionId, 'prefix-backup', 'must stay prefix')
+    writeSdkFileHistoryBackup(sdkSessionId, 'outside-backup', 'must stay outside')
+    const escapedBackupPath = join(tempHome, '.proma', 'sdk-config', 'file-history', 'escaped-backup')
+    mkdirSync(join(tempHome, '.proma', 'sdk-config', 'file-history'), { recursive: true })
+    writeFileSync(escapedBackupPath, 'must stay unsafe', 'utf-8')
+
+    writeSdkSessionJsonl(sdkSessionId, [
+      JSON.stringify({ type: 'user', uuid: 'rewind-user-1' }),
+      JSON.stringify({
+        type: 'file-history-snapshot',
+        isSnapshotUpdate: false,
+        snapshot: {
+          messageId: 'rewind-user-1',
+          trackedFileBackups: {
+            'src.txt': { backupFileName: 'cwd-backup' },
+            [join(attached, 'notes.txt')]: { backupFileName: 'attached-backup' },
+            [join(attachedPrefix, 'notes.txt')]: { backupFileName: 'prefix-backup' },
+            '../rewind-outside/notes.txt': { backupFileName: 'outside-backup' },
+            'unsafe.txt': { backupFileName: '../escaped-backup' },
+          },
+        },
+      }),
+    ])
+
+    const result = manager.rewindFilesFromSnapshot(sdkSessionId, 'rewind-user-1', cwd, undefined, undefined, [attached])
+
+    expect(result).toMatchObject({
+      canRewind: true,
+      filesChanged: ['src.txt', join(attached, 'notes.txt')],
+    })
+    expect(readFileSync(join(cwd, 'src.txt'), 'utf-8')).toBe('rewound cwd')
+    expect(readFileSync(join(attached, 'notes.txt'), 'utf-8')).toBe('rewound attached')
+    expect(readFileSync(join(attachedPrefix, 'notes.txt'), 'utf-8')).toBe('current prefix')
+    expect(readFileSync(join(outside, 'notes.txt'), 'utf-8')).toBe('current outside')
+    expect(readFileSync(join(cwd, 'unsafe.txt'), 'utf-8')).toBe('current unsafe')
+  })
+
+  test('Given Windows 路径 When 使用 path.win32 解析快照路径 Then 正确支持反斜杠、附加盘符并拒绝越界', () => {
+    const cwd = 'C:\\work\\project'
+    const attached = 'D:\\shared'
+    const fileHistoryDir = 'C:\\sdk\\file-history\\session'
+
+    expect(manager.resolveSafeRewindPath('src\\index.ts', cwd, [], win32))
+      .toBe('C:\\work\\project\\src\\index.ts')
+    expect(manager.resolveSafeRewindPath('D:\\shared\\notes.txt', cwd, [attached], win32))
+      .toBe('D:\\shared\\notes.txt')
+    expect(manager.resolveSafeRewindPath('D:\\shared-escape\\notes.txt', cwd, [attached], win32))
+      .toBeUndefined()
+    expect(manager.resolveSafeRewindPath('..\\outside.txt', cwd, [], win32))
+      .toBeUndefined()
+    expect(manager.resolveSafeRewindPath('E:\\other-drive.txt', cwd, [attached], win32))
+      .toBeUndefined()
+
+    expect(manager.resolveSafeRewindPath('nested\\backup', fileHistoryDir, [], win32))
+      .toBe('C:\\sdk\\file-history\\session\\nested\\backup')
+    expect(manager.resolveSafeRewindPath('C:\\sdk\\file-history\\session-escape\\backup', fileHistoryDir, [], win32))
+      .toBeUndefined()
+    expect(manager.resolveSafeRewindPath('..\\escaped-backup', fileHistoryDir, [], win32))
+      .toBeUndefined()
   })
 })
 

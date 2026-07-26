@@ -1175,21 +1175,22 @@ export class AgentOrchestrator {
       workspace = undefined
       if (workspaceId) {
         const ws = getAgentWorkspace(workspaceId)
-        if (ws) {
-          agentCwd = ws.projectRootPath ?? getAgentSessionWorkspacePath(ws.slug, sessionId)
-          workspaceSlug = ws.slug
-          workspace = ws
-          console.log(`[Agent 编排] 使用${ws.projectRootPath ? '项目根' : 'session 级别'} cwd: ${agentCwd} (${ws.name}/${sessionId})`)
+        if (!ws) {
+          throw new Error(`指定的 Agent 项目不存在或已删除: ${workspaceId}`)
+        }
+        agentCwd = ws.projectRootPath ?? getAgentSessionWorkspacePath(ws.slug, sessionId)
+        workspaceSlug = ws.slug
+        workspace = ws
+        console.log(`[Agent 编排] 使用${ws.projectRootPath ? '项目根' : 'session 级别'} cwd: ${agentCwd} (${ws.name}/${sessionId})`)
 
-          if (agentRuntime === 'claude') {
-            ensurePluginManifest(ws.slug, ws.name)
-          }
+        if (agentRuntime === 'claude') {
+          ensurePluginManifest(ws.slug, ws.name)
+        }
 
-          if (existingSdkSessionId) {
-            console.log(`[Agent 编排] 将尝试 resume: ${existingSdkSessionId}`)
-          } else {
-            console.log(`[Agent 编排] 无 sdkSessionId，将作为新会话启动（回填历史上下文）`)
-          }
+        if (existingSdkSessionId) {
+          console.log(`[Agent 编排] 将尝试 resume: ${existingSdkSessionId}`)
+        } else {
+          console.log(`[Agent 编排] 无 sdkSessionId，将作为新会话启动（回填历史上下文）`)
         }
       }
 

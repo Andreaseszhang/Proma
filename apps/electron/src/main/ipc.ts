@@ -840,6 +840,17 @@ export function resolveAppIconPath(variantId: string): string | null {
   return join(resourcesDir, 'proma-logos', `proma-${variantId}.png`)
 }
 
+function releaseDirectoryWatcherIfUnreferenced(dirPath: string): void {
+  const isStillReferenced = listAgentWorkspaces().some((workspace) =>
+    workspace.projectRootPath === dirPath
+    || getWorkspaceAttachedDirectories(workspace.slug).includes(dirPath),
+  ) || listAgentSessions().some((session) =>
+    session.attachedDirectories?.includes(dirPath),
+  )
+
+  if (!isStillReferenced) unwatchAttachedDirectory(dirPath)
+}
+
 export function registerIpcHandlers(): void {
   console.log('[IPC] 正在注册 IPC 处理器...')
 
@@ -2103,20 +2114,13 @@ export function registerIpcHandlers(): void {
       if (affectedAutomationIds.length > 0) {
         broadcastAutomationsChanged()
       }
+      const removedFeishuBindings = feishuBridgeManager.removeBindingsForDeletedWorkspace(id, affectedSessionIds)
+      if (removedFeishuBindings > 0) {
+        console.log(`[项目删除] 已移除 ${removedFeishuBindings} 条飞书聊天绑定`)
+      }
       deleteAgentWorkspace(id)
 
-      if (deletedProjectRoot) {
-        const remainingWorkspaces = listAgentWorkspaces()
-        const remainingSessions = listAgentSessions()
-        const isStillReferenced = remainingWorkspaces.some((workspace) =>
-          workspace.projectRootPath === deletedProjectRoot
-          || getWorkspaceAttachedDirectories(workspace.slug).includes(deletedProjectRoot),
-        ) || remainingSessions.some((session) =>
-          session.attachedDirectories?.includes(deletedProjectRoot),
-        )
-
-        if (!isStillReferenced) unwatchAttachedDirectory(deletedProjectRoot)
-      }
+      if (deletedProjectRoot) releaseDirectoryWatcherIfUnreferenced(deletedProjectRoot)
     }
   )
 
@@ -2792,8 +2796,7 @@ export function registerIpcHandlers(): void {
       const existing = meta.attachedDirectories ?? []
       const updated = existing.filter((d) => d !== input.directoryPath)
       updateAgentSessionMeta(input.sessionId, { attachedDirectories: updated })
-      // 停止附加目录文件监听
-      unwatchAttachedDirectory(input.directoryPath)
+      releaseDirectoryWatcherIfUnreferenced(input.directoryPath)
       return updated
     }
   )
@@ -2849,7 +2852,7 @@ export function registerIpcHandlers(): void {
     AGENT_IPC_CHANNELS.DETACH_WORKSPACE_DIRECTORY,
     async (_, input: WorkspaceAttachDirectoryInput): Promise<string[]> => {
       const updated = detachWorkspaceDirectory(input.workspaceSlug, input.directoryPath)
-      unwatchAttachedDirectory(input.directoryPath)
+      releaseDirectoryWatcherIfUnreferenced(input.directoryPath)
       return updated
     }
   )

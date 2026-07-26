@@ -13,7 +13,7 @@ import { createInterface } from 'node:readline'
 import { writeJsonFileAtomic, writeTextFileAtomic, readJsonFileSafe } from './safe-file'
 import { randomUUID } from 'node:crypto'
 import { rmSyncWithRetry, renameWithRetry } from './fs-retry'
-import { join, resolve, dirname } from 'node:path'
+import { join, resolve, dirname, isAbsolute, relative, sep, type PlatformPath } from 'node:path'
 import {
   getAgentSessionsIndexPath,
   getAgentSessionsDir,
@@ -1445,6 +1445,38 @@ function findSdkSessionJsonl(sdkSessionId: string, _projectDir?: string): string
   return undefined
 }
 
+type RewindPathApi = Pick<PlatformPath, 'isAbsolute' | 'resolve' | 'relative' | 'sep'>
+
+const nativeRewindPathApi: RewindPathApi = { isAbsolute, resolve, relative, sep }
+
+/**
+ * 将快照中的路径解析为允许目录内的绝对路径。
+ * pathApi 参数让 Windows 路径语义可以在非 Windows 平台上独立测试。
+ */
+export function resolveSafeRewindPath(
+  filePath: string,
+  cwd: string,
+  attachedDirectories: string[] = [],
+  pathApi: RewindPathApi = nativeRewindPathApi,
+): string | undefined {
+  const resolvedCwd = pathApi.resolve(cwd)
+  const resolvedPath = pathApi.isAbsolute(filePath)
+    ? pathApi.resolve(filePath)
+    : pathApi.resolve(resolvedCwd, filePath)
+  const allowedDirs = [resolvedCwd, ...attachedDirectories.map((dir) => pathApi.resolve(dir))]
+
+  const isAllowed = allowedDirs.some((dir) => {
+    const relativePath = pathApi.relative(dir, resolvedPath)
+    return relativePath === '' || (
+      relativePath !== '..'
+      && !relativePath.startsWith(`..${pathApi.sep}`)
+      && !pathApi.isAbsolute(relativePath)
+    )
+  })
+
+  return isAllowed ? resolvedPath : undefined
+}
+
 /**
  * 直接从 SDK JSONL 的 file-history-snapshot 恢复文件到指定 user message 时的状态。
  *
@@ -1586,18 +1618,10 @@ export function rewindFilesFromSnapshot(
     const fileHistoryDir = join(sdkConfigDir, 'file-history', effectiveSdkSessionId)
     const filesChanged: string[] = []
 
-    const resolvedCwd = resolve(cwd)
-    // 预计算允许写入的目录列表（cwd + attachedDirectories）
-    const allowedDirs = [resolvedCwd, ...(attachedDirectories || []).map((d) => resolve(d))]
-
     for (const [filePath, backupFileName] of fileState) {
       // SDK 对 cwd 内文件使用相对路径，对 additionalDirectories 内文件使用绝对路径
-      const isAbsolute = filePath.startsWith('/')
-      const fullPath = isAbsolute ? resolve(filePath) : resolve(cwd, filePath)
-
-      // 路径安全检查：文件必须位于 cwd 或 attachedDirectories 之内
-      const isInAllowedDir = allowedDirs.some((dir) => fullPath.startsWith(dir + '/') || fullPath === dir)
-      if (!isInAllowedDir) {
+      const fullPath = resolveSafeRewindPath(filePath, cwd, attachedDirectories)
+      if (!fullPath) {
         console.warn(`[Agent 会话] rewindFiles: 拒绝路径越界 ${filePath}`)
         continue
       }
@@ -1615,9 +1639,8 @@ export function rewindFilesFromSnapshot(
         }
       } else {
         // 文件在 target 时存在 → 用备份恢复
-        const backupPath = resolve(fileHistoryDir, backupFileName)
-        // backupPath 越界检查
-        if (!backupPath.startsWith(resolve(fileHistoryDir) + '/') && backupPath !== resolve(fileHistoryDir)) {
+        const backupPath = resolveSafeRewindPath(backupFileName, fileHistoryDir)
+        if (!backupPath) {
           console.warn(`[Agent 会话] rewindFiles: 拒绝备份路径越界 ${backupFileName}`)
           continue
         }

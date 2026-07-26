@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import {
   createJsonBridgeChatBindingStore,
   filterExistingBridgeBindings,
+  isBindingForDeletedWorkspace,
   loadBridgeChatBindings,
 } from './bridge-binding-store'
 import type { BridgeChatBinding } from './bridge-command-handler'
@@ -74,5 +75,25 @@ describe('bridge binding store', () => {
     ]
 
     expect(filterExistingBridgeBindings(bindings, (sessionId) => sessionId === 'alive')).toEqual([bindings[0]!])
+  })
+
+  test('Given 删除项目的会话或项目 ID When 检查绑定 Then 两种孤儿绑定都会被识别', () => {
+    const deletedSessionIds = new Set(['deleted-session'])
+
+    expect(isBindingForDeletedWorkspace(
+      { workspaceId: 'deleted-workspace', sessionId: 'live-session' },
+      'deleted-workspace',
+      deletedSessionIds,
+    )).toBeTrue()
+    expect(isBindingForDeletedWorkspace(
+      { workspaceId: 'other-workspace', sessionId: 'deleted-session' },
+      'deleted-workspace',
+      deletedSessionIds,
+    )).toBeTrue()
+    expect(isBindingForDeletedWorkspace(
+      { workspaceId: 'other-workspace', sessionId: 'live-session' },
+      'deleted-workspace',
+      deletedSessionIds,
+    )).toBeFalse()
   })
 })

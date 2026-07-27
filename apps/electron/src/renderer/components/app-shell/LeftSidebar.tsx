@@ -11,7 +11,7 @@
 import * as React from 'react'
 import { useAtom, useSetAtom, useAtomValue, useStore } from 'jotai'
 import { toast } from 'sonner'
-import { Pin, PinOff, Star, Settings, Plus, Trash2, Pencil, PanelLeftClose, PanelLeftOpen, ArrowRightLeft, Search, Archive, ArchiveRestore, ArrowLeft, Bot, MessageSquare, MoreHorizontal, FolderOpen, FolderInput, GripVertical, Clock, AlarmClock, ChevronRight, Blocks, GitBranch, Download, Loader2, RotateCw } from 'lucide-react'
+import { Pin, PinOff, Star, Settings, Plus, Trash2, Pencil, PanelLeftClose, PanelLeftOpen, ArrowRightLeft, Search, Archive, ArchiveRestore, ArrowLeft, Bot, MessageSquare, MoreHorizontal, FolderOpen, FolderInput, FolderPlus, GripVertical, Clock, AlarmClock, ChevronRight, Blocks, GitBranch, Download, Loader2, RotateCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { ModeSwitcher } from './ModeSwitcher'
@@ -86,6 +86,7 @@ import { useCreateSession } from '@/hooks/useCreateSession'
 import { useOpenSession } from '@/hooks/useOpenSession'
 import { useSyncActiveTabSideEffects } from '@/hooks/useSyncActiveTabSideEffects'
 import { CollapsedWorkspacePopover } from '@/components/agent/CollapsedWorkspacePopover'
+import { LocalProjectBadge } from '@/components/agent/LocalProjectBadge'
 import { MoveSessionDialog } from '@/components/agent/MoveSessionDialog'
 import {
   SessionMiniMapPopover,
@@ -725,6 +726,9 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   /** 待删除项目 ID，非空时显示项目删除确认弹窗 */
   const [pendingDeleteWorkspaceId, setPendingDeleteWorkspaceId] = React.useState<string | null>(null)
   const [deletingWorkspaceId, setDeletingWorkspaceId] = React.useState<string | null>(null)
+  /** 待在原路径重建根目录的本地项目 ID。 */
+  const [pendingRestoreProjectRootId, setPendingRestoreProjectRootId] = React.useState<string | null>(null)
+  const [restoringProjectRootId, setRestoringProjectRootId] = React.useState<string | null>(null)
   /** 待迁移会话 ID，非空时显示迁移对话框 */
   const [moveTargetId, setMoveTargetId] = React.useState<string | null>(null)
   /** 待迁移会话所属的工作区 ID（用于对话框排除当前分区） */
@@ -925,6 +929,10 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   const pendingDeleteWorkspace = React.useMemo(
     () => workspaces.find((workspace) => workspace.id === pendingDeleteWorkspaceId) ?? null,
     [pendingDeleteWorkspaceId, workspaces],
+  )
+  const pendingRestoreProjectRootWorkspace = React.useMemo(
+    () => workspaces.find((workspace) => workspace.id === pendingRestoreProjectRootId) ?? null,
+    [pendingRestoreProjectRootId, workspaces],
   )
 
   /** 待删除 Agent 会话下的委派子会话数量，用于删除确认弹窗提示是否级联删除 */
@@ -1877,6 +1885,39 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     }
   }, [setWorkspaces])
 
+  /** 重新选择已有文件夹作为本地项目根，保留该项目的会话和设置。 */
+  const handleRelinkProjectRoot = React.useCallback(async (workspaceId: string): Promise<void> => {
+    try {
+      const folder = await window.electronAPI.openFolderDialog()
+      if (!folder) return
+      const updated = await window.electronAPI.relinkAgentWorkspaceProjectRoot(workspaceId, folder.path)
+      setWorkspaces((prev) => prev.map((workspace) => (workspace.id === updated.id ? updated : workspace)))
+      toast.success('本地项目根已重新关联', { description: folder.path })
+    } catch (error) {
+      console.error('[侧边栏] 重新关联本地项目根失败:', error)
+      toast.error(error instanceof Error ? error.message : '重新关联项目文件夹失败')
+    }
+  }, [setWorkspaces])
+
+  /** 确认在原路径新建空目录。 */
+  const handleConfirmRestoreProjectRoot = React.useCallback(async (): Promise<void> => {
+    const workspaceId = pendingRestoreProjectRootId
+    if (!workspaceId) return
+
+    try {
+      setRestoringProjectRootId(workspaceId)
+      const updated = await window.electronAPI.restoreAgentWorkspaceProjectRoot(workspaceId)
+      setWorkspaces((prev) => prev.map((workspace) => (workspace.id === updated.id ? updated : workspace)))
+      toast.success('已在原路径新建空项目文件夹', { description: updated.projectRootPath })
+      setPendingRestoreProjectRootId(null)
+    } catch (error) {
+      console.error('[侧边栏] 恢复本地项目根失败:', error)
+      toast.error(error instanceof Error ? error.message : '恢复项目文件夹失败')
+    } finally {
+      setRestoringProjectRootId(null)
+    }
+  }, [pendingRestoreProjectRootId, setWorkspaces])
+
   /** 重命名 Agent 会话标题 */
   const handleAgentRename = React.useCallback(async (id: string, newTitle: string): Promise<void> => {
     try {
@@ -2355,6 +2396,37 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     </AlertDialog>
   )
 
+  const restoreProjectRootDialog = (
+    <AlertDialog
+      open={pendingRestoreProjectRootId !== null}
+      onOpenChange={(open) => {
+        if (!open && !restoringProjectRootId) setPendingRestoreProjectRootId(null)
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>在原路径新建空文件夹？</AlertDialogTitle>
+          <AlertDialogDescription>
+            将为「{pendingRestoreProjectRootWorkspace?.name ?? '该项目'}」在原路径创建一个空文件夹：
+            <span className="mt-2 block break-all font-mono text-xs text-foreground">
+              {pendingRestoreProjectRootWorkspace?.projectRootPath}
+            </span>
+            此操作不会恢复原来的文件，仅用于继续使用该项目关联。
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={!!restoringProjectRootId}>取消</AlertDialogCancel>
+          <AlertDialogAction
+            disabled={!!restoringProjectRootId}
+            onClick={() => void handleConfirmRestoreProjectRoot()}
+          >
+            {restoringProjectRootId ? '创建中...' : '新建空文件夹'}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+
   // 迁移会话对话框（collapsed/expanded 共享）
   const moveDialog = (
     <MoveSessionDialog
@@ -2574,6 +2646,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
 
         {deleteDialog}
         {projectDeleteDialog}
+        {restoreProjectRootDialog}
         {moveDialog}
         <SearchDialog />
       </div>
@@ -2908,6 +2981,8 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                       handleOpenMcpManagement()
                     }}
                     onRenameWorkspace={isAuto ? noopAsync : handleWorkspaceRename}
+                    onRelinkProjectRoot={isAuto ? noopAsync : handleRelinkProjectRoot}
+                    onRequestRestoreProjectRoot={isAuto ? noopVoid : setPendingRestoreProjectRootId}
                     onRequestDeleteWorkspace={isAuto ? noopVoid : handleRequestDeleteWorkspace}
                     canDeleteWorkspace={isAuto ? false : canDeleteWorkspace(group.workspace)}
                     onSelectSession={handleSelectAgentSession}
@@ -3111,6 +3186,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
 
       {deleteDialog}
       {projectDeleteDialog}
+      {restoreProjectRootDialog}
       {moveDialog}
       <SearchDialog />
     </div>
@@ -3976,6 +4052,8 @@ interface AgentProjectGroupItemProps {
   onDragEnd: () => void
   onConfigureProject: (workspaceId: string) => void
   onRenameWorkspace: (workspaceId: string, newName: string) => Promise<void>
+  onRelinkProjectRoot: (workspaceId: string) => Promise<void>
+  onRequestRestoreProjectRoot: (workspaceId: string) => void
   onRequestDeleteWorkspace: (workspaceId: string) => void
   canDeleteWorkspace: boolean
   onSelectSession: (id: string, title: string) => void
@@ -4014,6 +4092,8 @@ const AgentProjectGroupItem = React.memo(function AgentProjectGroupItem({
   onDragEnd,
   onConfigureProject,
   onRenameWorkspace,
+  onRelinkProjectRoot,
+  onRequestRestoreProjectRoot,
   onRequestDeleteWorkspace,
   canDeleteWorkspace,
   onSelectSession,
@@ -4027,6 +4107,11 @@ const AgentProjectGroupItem = React.memo(function AgentProjectGroupItem({
 }: AgentProjectGroupItemProps): React.ReactElement {
   const isCurrent = group.workspace.id === currentWorkspaceId
   const newSessionShortcutLabel = getAcceleratorDisplay(getActiveAccelerator('new-session'))
+  const hasUnavailableProjectRoot = Boolean(
+    group.workspace.projectRootPath
+    && group.workspace.projectRootStatus
+    && group.workspace.projectRootStatus !== 'available',
+  )
 
   const [renamingWorkspace, setRenamingWorkspace] = React.useState(false)
   const [projectMenuOpen, setProjectMenuOpen] = React.useState(false)
@@ -4191,10 +4276,14 @@ const AgentProjectGroupItem = React.memo(function AgentProjectGroupItem({
                 />
               </>
             )}
-            <span className="flex min-w-0 items-center">
+            <span className="flex min-w-0 items-center gap-1.5">
               <span className="min-w-0 truncate text-[13px] font-medium leading-[18px]">
                 {group.workspace.name}
               </span>
+              <LocalProjectBadge
+                projectRootPath={group.workspace.projectRootPath}
+                projectRootStatus={group.workspace.projectRootStatus}
+              />
               {isCurrent && (
                 <span className="workspace-selected-triangle flex-shrink-0" aria-hidden="true" />
               )}
@@ -4275,6 +4364,27 @@ const AgentProjectGroupItem = React.memo(function AgentProjectGroupItem({
               <Settings size={14} />
               配置 MCP 与 Skills
             </DropdownMenuItem>
+            {hasUnavailableProjectRoot && (
+              <>
+                <DropdownMenuSeparator className="my-0.5" />
+                <DropdownMenuItem
+                  className="text-xs py-1 [&>svg]:size-3.5"
+                  onSelect={() => void onRelinkProjectRoot(group.workspace.id)}
+                >
+                  <FolderInput size={14} />
+                  重新选择文件夹
+                </DropdownMenuItem>
+                {group.workspace.projectRootStatus === 'missing' && (
+                  <DropdownMenuItem
+                    className="text-xs py-1 [&>svg]:size-3.5"
+                    onSelect={() => onRequestRestoreProjectRoot(group.workspace.id)}
+                  >
+                    <FolderPlus size={14} />
+                    在原路径新建空文件夹
+                  </DropdownMenuItem>
+                )}
+              </>
+            )}
             <DropdownMenuSeparator className="my-0.5" />
             <DropdownMenuItem
               disabled={!canDeleteWorkspace}

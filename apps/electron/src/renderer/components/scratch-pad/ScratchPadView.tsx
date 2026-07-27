@@ -60,6 +60,7 @@ import { SelectionActionPopover } from '@/components/selection/SelectionActionPo
 import { SELECTION_ACTION_POPOVER_SELECTOR } from '@/lib/quoted-selection'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { ImageLightbox } from '@/components/ui/image-lightbox'
+import { LocalProjectBadge } from '@/components/agent/LocalProjectBadge'
 import { openScratchInSplit } from './scratch-pad-opener'
 import { resolveScratchPadExportWorkspaceId } from '@/lib/scratch-pad-export-context'
 
@@ -748,8 +749,12 @@ function ScratchPadEditor({ variant }: ScratchPadEditorProps): React.ReactElemen
               className="flex flex-col items-start"
             >
               <span className="text-xs">保存到项目根目录</span>
-              <span className="text-[10px] text-muted-foreground">
-                {currentWorkspace?.name ?? '无当前工作区'}
+              <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                <span>{currentWorkspace?.name ?? '无当前工作区'}</span>
+                <LocalProjectBadge
+                  projectRootPath={currentWorkspace?.projectRootPath}
+                  projectRootStatus={currentWorkspace?.projectRootStatus}
+                />
               </span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />

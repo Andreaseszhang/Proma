@@ -48,7 +48,7 @@ import pkg from '../../../package.json' with { type: 'json' }
 import { getFetchFn } from './proxy-fetch'
 import { getEffectiveProxyUrl } from './proxy-settings-service'
 import { appendSDKMessages, updateAgentSessionMeta, getAgentSessionMeta, getAgentSessionMessages, truncateSDKMessages, removeSDKErrorMessage, resolveUserUuidFromSDK, rewindFilesFromSnapshot, rewindPiAgentSession, ensureClaudeSessionSettings } from './agent-session-manager'
-import { getAgentWorkspace, getProjectFilesPath, getWorkspaceMcpConfig, ensurePluginManifest, getWorkspaceAutoMemoryDir, getWorkspaceAttachedDirectories, getWorkspaceAttachedFiles } from './agent-workspace-manager'
+import { getAgentWorkspace, getLocalProjectRootStatus, getProjectFilesPath, getWorkspaceMcpConfig, ensurePluginManifest, getWorkspaceAutoMemoryDir, getWorkspaceAttachedDirectories, getWorkspaceAttachedFiles } from './agent-workspace-manager'
 import { getAgentWorkspacePath, getAgentSessionWorkspacePath, getSdkConfigDir, getWorkspaceSkillsDir } from './config-paths'
 import { getRuntimeStatus } from './runtime-init'
 import { getSettings } from './settings-service'
@@ -918,6 +918,35 @@ export class AgentOrchestrator {
       }
       callbacks.onError(errorContent)
       callbacks.onComplete([], { startedAt: streamStartedAt })
+    }
+
+    // 本地项目根由用户管理。根目录被删除、替换为文件或无法访问时，绝不能
+    // 进入 SDK/Agent 初始化链路，以免后续文件工具通过 mkdir 间接重建该目录。
+    if (workspaceId) {
+      const workspace = getAgentWorkspace(workspaceId)
+      if (!workspace) {
+        reportPreflightError({
+          code: 'workspace_not_found',
+          title: '项目不存在',
+          message: `指定的 Agent 项目不存在或已删除: ${workspaceId}`,
+          actions: [],
+          canRetry: false,
+        })
+        return
+      }
+
+      const projectRootStatus = getLocalProjectRootStatus(workspace.projectRootPath)
+      if (projectRootStatus && projectRootStatus !== 'available') {
+        reportPreflightError({
+          code: 'local_project_root_unavailable',
+          title: '本地项目根目录不可用',
+          message: `本地项目根目录不存在或无法访问：${workspace.projectRootPath}。请在 Proma 中重新选择项目文件夹。`,
+          details: [`目录状态: ${projectRootStatus}`],
+          actions: [],
+          canRetry: false,
+        })
+        return
+      }
     }
 
     // 1. Windows 平台：检查 Shell 环境可用性

@@ -12,7 +12,7 @@
  */
 
 import * as React from 'react'
-import { Bot, Loader2, AlertTriangle, FileText, FileImage, Download, Split, Undo2, RotateCw, Plus, Minimize2, Wrench, Settings, Cpu, ExternalLink, Quote, Clock } from 'lucide-react'
+import { Bot, Loader2, AlertTriangle, FileText, FileImage, Download, Split, Undo2, RotateCw, Plus, Minimize2, Wrench, Settings, Cpu, ExternalLink, Quote, Clock, FolderInput, FolderPlus } from 'lucide-react'
 import { useAtomValue, useSetAtom } from 'jotai'
 import { cn } from '@/lib/utils'
 import { ImageLightbox, type LightboxImage } from '@/components/ui/image-lightbox'
@@ -386,6 +386,8 @@ export interface AssistantTurnRendererProps {
   onRetryInNewSession?: () => void
   /** 压缩上下文回调（仅 prompt_too_long 错误使用） */
   onCompact?: () => void
+  onRelinkProjectRoot?: () => void
+  onRestoreProjectRoot?: () => void
   /** 是否正在流式输出中（隐藏操作栏） */
   isStreaming?: boolean
   /** 是否被用户中断 */
@@ -394,7 +396,7 @@ export interface AssistantTurnRendererProps {
   sessionModelId?: string
 }
 
-export function AssistantTurnRenderer({ turn, allMessages, basePath, onFork, onRewind, onRetry, onRetryInNewSession, onCompact, isStreaming, stoppedByUser, sessionModelId }: AssistantTurnRendererProps): React.ReactElement | null {
+export function AssistantTurnRenderer({ turn, allMessages, basePath, onFork, onRewind, onRetry, onRetryInNewSession, onCompact, onRelinkProjectRoot, onRestoreProjectRoot, isStreaming, stoppedByUser, sessionModelId }: AssistantTurnRendererProps): React.ReactElement | null {
   const channels = useAtomValue(channelsAtom)
   // 收集所有 assistant 消息的内容块，保留 parent_tool_use_id 关联
   interface EnrichedBlock {
@@ -489,6 +491,8 @@ export function AssistantTurnRenderer({ turn, allMessages, basePath, onFork, onR
         onRetry={onRetry}
         onRetryInNewSession={onRetryInNewSession}
         onCompact={onCompact}
+        onRelinkProjectRoot={onRelinkProjectRoot}
+        onRestoreProjectRoot={onRestoreProjectRoot}
       />
     )
   }
@@ -563,6 +567,8 @@ export function AssistantTurnRenderer({ turn, allMessages, basePath, onFork, onR
             onRetry={onRetry}
             onRetryInNewSession={onRetryInNewSession}
             onCompact={onCompact}
+            onRelinkProjectRoot={onRelinkProjectRoot}
+            onRestoreProjectRoot={onRestoreProjectRoot}
           />
         )}
         </TurnFileMapProvider>
@@ -1060,6 +1066,8 @@ interface AssistantErrorTailProps {
   onRetryInNewSession?: () => void
   /** 压缩上下文回调（仅 prompt_too_long 错误使用） */
   onCompact?: () => void
+  onRelinkProjectRoot?: () => void
+  onRestoreProjectRoot?: () => void
   /**
    * 以「独立错误消息」形式渲染：正文用红色 MessageResponse 展示（用于 ErrorMessage 主体）。
    *
@@ -1083,6 +1091,8 @@ export function AssistantErrorTail({
   onRetry,
   onRetryInNewSession,
   onCompact,
+  onRelinkProjectRoot,
+  onRestoreProjectRoot,
   standalone = false,
 }: AssistantErrorTailProps): React.ReactElement | null {
   const errorText = message.error?.message ?? '未知错误'
@@ -1097,6 +1107,7 @@ export function AssistantErrorTail({
     ? (msgAny._errorActions as RecoveryAction[])
     : undefined
   const isPromptTooLong = errorCode === 'prompt_too_long'
+  const isLocalProjectRootUnavailable = errorCode === 'local_project_root_unavailable'
 
   const setEnvDialogOpen = useSetAtom(environmentCheckDialogOpenAtom)
   const setSettingsOpen = useSetAtom(settingsOpenAtom)
@@ -1176,7 +1187,8 @@ export function AssistantErrorTail({
 
   const hasStructuredActions = displayedErrorActions.length > 0
   const hasLegacyActions = !!(onRetry || onRetryInNewSession || (isPromptTooLong && onCompact))
-  const hasActions = hasStructuredActions || hasLegacyActions
+  const hasProjectRootActions = isLocalProjectRootUnavailable && !!(onRelinkProjectRoot || onRestoreProjectRoot)
+  const hasActions = hasStructuredActions || hasLegacyActions || hasProjectRootActions
 
   // tail 模式：给出上边距 + 顶部细边分隔线，让它视觉上是「正文之后的一段警告」而不是「消息本身」
   const rootClass = standalone
@@ -1222,6 +1234,22 @@ export function AssistantErrorTail({
       )}
       {hasActions && (
         <div className="flex items-center flex-wrap gap-2 mt-3">
+          {hasProjectRootActions && (
+            <>
+              {onRelinkProjectRoot && (
+                <Button size="sm" onClick={onRelinkProjectRoot}>
+                  <FolderInput className="size-3.5 mr-1.5" />
+                  重新选择文件夹
+                </Button>
+              )}
+              {onRestoreProjectRoot && (
+                <Button size="sm" variant="outline" onClick={onRestoreProjectRoot}>
+                  <FolderPlus className="size-3.5 mr-1.5" />
+                  在原路径新建空文件夹
+                </Button>
+              )}
+            </>
+          )}
           {hasStructuredActions &&
             displayedErrorActions.map((a, i) => (
               <Button
@@ -1273,7 +1301,7 @@ export function AssistantErrorTail({
   )
 }
 
-function ErrorMessage({ message, onRetry, onRetryInNewSession, onCompact }: ErrorMessageProps): React.ReactElement {
+function ErrorMessage({ message, onRetry, onRetryInNewSession, onCompact, onRelinkProjectRoot, onRestoreProjectRoot }: ErrorMessageProps): React.ReactElement {
   const meta = extractMeta(message as unknown as SDKMessage)
 
   // Do not copy assistant content carried by an error record.
@@ -1296,6 +1324,8 @@ function ErrorMessage({ message, onRetry, onRetryInNewSession, onCompact }: Erro
           onRetry={onRetry}
           onRetryInNewSession={onRetryInNewSession}
           onCompact={onCompact}
+          onRelinkProjectRoot={onRelinkProjectRoot}
+          onRestoreProjectRoot={onRestoreProjectRoot}
           standalone
         />
       </MessageContent>
@@ -1320,6 +1350,8 @@ export interface MessageGroupRendererProps {
   onRetryInNewSession?: () => void
   /** 压缩上下文回调（仅 prompt_too_long 错误使用） */
   onCompact?: () => void
+  onRelinkProjectRoot?: () => void
+  onRestoreProjectRoot?: () => void
   /** 是否正在流式输出中（隐藏操作栏） */
   isStreaming?: boolean
   /** 是否被用户中断 */
@@ -1374,7 +1406,7 @@ export function getGroupId(group: MessageGroup): string {
 
 // getGroupPreview 已迁移至 @proma/session-core（本文件从该包 import 并 re-export）
 
-export function MessageGroupRenderer({ group, allMessages, basePath, onFork, onRewind, onRetry, onRetryInNewSession, onCompact, isStreaming, stoppedByUser, sessionModelId }: MessageGroupRendererProps): React.ReactElement | null {
+export function MessageGroupRenderer({ group, allMessages, basePath, onFork, onRewind, onRetry, onRetryInNewSession, onCompact, onRelinkProjectRoot, onRestoreProjectRoot, isStreaming, stoppedByUser, sessionModelId }: MessageGroupRendererProps): React.ReactElement | null {
   const groupId = getGroupId(group)
 
   if (group.type === 'user') {
@@ -1404,6 +1436,8 @@ export function MessageGroupRenderer({ group, allMessages, basePath, onFork, onR
         onRetry={onRetry}
         onRetryInNewSession={onRetryInNewSession}
         onCompact={onCompact}
+        onRelinkProjectRoot={onRelinkProjectRoot}
+        onRestoreProjectRoot={onRestoreProjectRoot}
         isStreaming={isStreaming}
         stoppedByUser={stoppedByUser}
         sessionModelId={sessionModelId}

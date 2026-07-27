@@ -513,6 +513,9 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
   const [pendingFiles, setPendingFiles] = useAtom(agentPendingFilesAtomFamily(sessionId))
   const [queuedMessages, setQueuedMessages] = useAtom(agentMessageQueueAtomFamily(sessionId))
   const workspaces = useAtomValue(agentWorkspacesAtom)
+  const setWorkspaces = useSetAtom(agentWorkspacesAtom)
+  const [restoreProjectRootDialogOpen, setRestoreProjectRootDialogOpen] = React.useState(false)
+  const [restoringProjectRoot, setRestoringProjectRoot] = React.useState(false)
   // 保持 channelId 稳定：初始化前使用上次有效值，避免工具栏抖动
   const stableChannelIdRef = React.useRef(agentChannelId)
   if (agentChannelId) stableChannelIdRef.current = agentChannelId
@@ -2276,6 +2279,36 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
     }
   }, [agentError])
 
+  const handleRelinkProjectRoot = React.useCallback(async (): Promise<void> => {
+    if (!currentWorkspaceId) return
+    try {
+      const folder = await window.electronAPI.openFolderDialog()
+      if (!folder) return
+      const updated = await window.electronAPI.relinkAgentWorkspaceProjectRoot(currentWorkspaceId, folder.path)
+      setWorkspaces((prev) => prev.map((workspace) => (workspace.id === updated.id ? updated : workspace)))
+      toast.success('本地项目根已重新关联', { description: folder.path })
+    } catch (error) {
+      console.error('[AgentView] 重新关联本地项目根失败:', error)
+      toast.error(error instanceof Error ? error.message : '重新关联项目文件夹失败')
+    }
+  }, [currentWorkspaceId, setWorkspaces])
+
+  const handleRestoreProjectRoot = React.useCallback(async (): Promise<void> => {
+    if (!currentWorkspaceId) return
+    try {
+      setRestoringProjectRoot(true)
+      const updated = await window.electronAPI.restoreAgentWorkspaceProjectRoot(currentWorkspaceId)
+      setWorkspaces((prev) => prev.map((workspace) => (workspace.id === updated.id ? updated : workspace)))
+      toast.success('已在原路径新建空项目文件夹', { description: updated.projectRootPath })
+      setRestoreProjectRootDialogOpen(false)
+    } catch (error) {
+      console.error('[AgentView] 恢复本地项目根失败:', error)
+      toast.error(error instanceof Error ? error.message : '恢复项目文件夹失败')
+    } finally {
+      setRestoringProjectRoot(false)
+    }
+  }, [currentWorkspaceId, setWorkspaces])
+
   /** 重试：在当前会话中重新发送最后一条用户消息 */
   const handleRetry = React.useCallback((retryOfErrorUuid?: string): void => {
     if (!agentChannelId || streaming) return
@@ -2840,6 +2873,8 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
           stoppedByUser={stoppedByUser}
           onRetry={handleRetry}
           onRetryInNewSession={handleRetryInNewSession}
+          onRelinkProjectRoot={handleRelinkProjectRoot}
+          onRestoreProjectRoot={() => setRestoreProjectRootDialogOpen(true)}
           onFork={handleFork}
           onRewind={handleRewindRequest}
           onCompact={handleCompact}
@@ -3004,6 +3039,23 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
             回退
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+
+    <AlertDialog open={restoreProjectRootDialogOpen} onOpenChange={setRestoreProjectRootDialogOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>在原路径新建空文件夹？</AlertDialogTitle>
+          <AlertDialogDescription>
+            将在该本地项目原路径创建空文件夹。此操作不会恢复被删除的文件。
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel disabled={restoringProjectRoot}>取消</AlertDialogCancel>
+          <AlertDialogAction disabled={restoringProjectRoot} onClick={() => void handleRestoreProjectRoot()}>
+            {restoringProjectRoot ? '创建中...' : '新建空文件夹'}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { projectListHeightAtom } from '@/atoms/sidebar-atoms'
 import { useProjectActions } from '@/hooks/useProjectActions'
+import { LocalProjectBadge } from './LocalProjectBadge'
 import { agentSessionsAtom, agentWorkspacesAtom } from '@/atoms/agent-atoms'
 import type { AgentWorkspace } from '@proma/shared'
 
@@ -340,6 +341,10 @@ export function WorkspaceSelector(): React.ReactElement {
               ) : (
                 <>
                   <span className="flex-1 min-w-0 truncate">{ws.name}</span>
+                  <LocalProjectBadge
+                    projectRootPath={ws.projectRootPath}
+                    projectRootStatus={ws.projectRootStatus}
+                  />
 
                   <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
                     <button

@@ -15,6 +15,7 @@ import { FolderOpen, FolderInput, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useProjectActions } from '@/hooks/useProjectActions'
+import { LocalProjectBadge } from './LocalProjectBadge'
 
 /** Popover hover 关闭延迟（ms），与项目其他 hover popover 一致 */
 const HOVER_CLOSE_DELAY = 150
@@ -164,6 +165,10 @@ export function CollapsedWorkspacePopover({
             >
               <FolderOpen size={13} className="flex-shrink-0 text-foreground/40" />
               <span className="flex-1 min-w-0 truncate">{ws.name}</span>
+              <LocalProjectBadge
+                projectRootPath={ws.projectRootPath}
+                projectRootStatus={ws.projectRootStatus}
+              />
             </button>
           ))}
 

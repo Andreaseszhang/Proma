@@ -524,6 +524,12 @@ export interface ElectronAPI {
   /** 更新 Agent 工作区 */
   updateAgentWorkspace: (id: string, updates: { name: string }) => Promise<AgentWorkspace>
 
+  /** 将本地项目关联到一个已存在的目录，保留项目和会话。 */
+  relinkAgentWorkspaceProjectRoot: (id: string, projectRootPath: string) => Promise<AgentWorkspace>
+
+  /** 在丢失的本地项目原路径新建空目录。 */
+  restoreAgentWorkspaceProjectRoot: (id: string) => Promise<AgentWorkspace>
+
   /** 删除 Agent 工作区 */
   deleteAgentWorkspace: (id: string) => Promise<void>
 
@@ -1590,6 +1596,14 @@ const electronAPI: ElectronAPI = {
 
   updateAgentWorkspace: (id: string, updates: { name: string }) => {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.UPDATE_WORKSPACE, id, updates)
+  },
+
+  relinkAgentWorkspaceProjectRoot: (id: string, projectRootPath: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.RELINK_WORKSPACE_PROJECT_ROOT, id, projectRootPath)
+  },
+
+  restoreAgentWorkspaceProjectRoot: (id: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.RESTORE_WORKSPACE_PROJECT_ROOT, id)
   },
 
   deleteAgentWorkspace: (id: string) => {

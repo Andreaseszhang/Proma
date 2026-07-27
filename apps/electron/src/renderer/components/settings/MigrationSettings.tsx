@@ -25,14 +25,16 @@ import { SettingsSection } from './primitives'
 import { useAtomValue, useSetAtom } from 'jotai'
 import { agentWorkspacesAtom } from '@/atoms/agent-atoms'
 import { migrationImportDialogOpenAtom } from '@/atoms/migration-atoms'
+import { LocalProjectBadge } from '@/components/agent/LocalProjectBadge'
 import { cn } from '@/lib/utils'
+import type { LocalProjectRootStatus } from '@proma/shared'
 
 type MigrationMode = 'personal' | 'share'
 type MigrationComponent = 'sessions' | 'skills' | 'mcp' | 'channels' | 'chattools'
 type ShareDetailMode = 'default' | 'custom'
 
 interface ShareExportWorkspacePreview {
-  workspace: { id: string; name: string; slug: string }
+  workspace: { id: string; name: string; slug: string; projectRootPath?: string; projectRootStatus?: LocalProjectRootStatus }
   skills: Array<{ slug: string; name: string; enabled: boolean }>
   mcpServers: Array<{ name: string; enabled: boolean; type: string }>
 }
@@ -344,6 +346,10 @@ export function MigrationSettings(): React.ReactElement {
                             >
                               {expanded ? <ChevronDown size={14} className="text-muted-foreground" /> : <ChevronRight size={14} className="text-muted-foreground" />}
                               <span className="text-sm font-medium text-foreground flex-1">{ws.workspace.name}</span>
+                              <LocalProjectBadge
+                                projectRootPath={ws.workspace.projectRootPath}
+                                projectRootStatus={ws.workspace.projectRootStatus}
+                              />
                               <span className="text-xs text-muted-foreground">
                                 {selectedItems}/{totalItems} 项
                               </span>

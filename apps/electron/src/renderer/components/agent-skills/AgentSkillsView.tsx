@@ -26,6 +26,7 @@ import { agentSkillsTabAtom } from '@/atoms/active-view'
 import { settingsOpenAtom, settingsTabAtom, toolSettingsFocusAtom, type ToolSettingsFocus } from '@/atoms/settings-tab'
 import { useProjectActions } from '@/hooks/useProjectActions'
 import { useCreateSession } from '@/hooks/useCreateSession'
+import { LocalProjectBadge } from '@/components/agent/LocalProjectBadge'
 import type { BuiltinMcpServerSummary, McpServerEntry, SkillMeta } from '@proma/shared'
 import { useAgentSkillsData } from './useAgentSkillsData'
 import { SkillCard } from './SkillCard'
@@ -94,6 +95,7 @@ export function AgentSkillsView(): React.ReactElement {
   const setToolSettingsFocus = useSetAtom(toolSettingsFocusAtom)
   const { workspaces, currentWorkspaceId, selectProject } = useProjectActions()
   const { createAgent } = useCreateSession()
+  const currentWorkspace = workspaces.find((workspace) => workspace.id === currentWorkspaceId)
 
   const [tab, setTab] = useAtom(agentSkillsTabAtom)
   const [search, setSearch] = React.useState('')
@@ -232,6 +234,10 @@ export function AgentSkillsView(): React.ReactElement {
             >
               <FolderOpen size={14} className="text-foreground/45" />
               <span className="max-w-[180px] truncate">{data.workspaceName}</span>
+              <LocalProjectBadge
+                projectRootPath={currentWorkspace?.projectRootPath}
+                projectRootStatus={currentWorkspace?.projectRootStatus}
+              />
               <ChevronDown size={14} className="text-foreground/45" />
             </button>
           </PopoverTrigger>
@@ -254,7 +260,11 @@ export function AgentSkillsView(): React.ReactElement {
                     : 'text-foreground/80 hover:bg-accent/50',
                 )}
               >
-                <span className="truncate">{w.name}</span>
+                <span className="min-w-0 flex-1 truncate">{w.name}</span>
+                <LocalProjectBadge
+                  projectRootPath={w.projectRootPath}
+                  projectRootStatus={w.projectRootStatus}
+                />
                 {w.id === currentWorkspaceId && <Check size={14} className="shrink-0 text-primary" />}
               </button>
             ))}

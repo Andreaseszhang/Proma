@@ -8,6 +8,9 @@ import type { ProviderType } from './channel'
 
 // ===== Agent 工作区 =====
 
+/** 本地项目根目录的即时可用状态；仅在读取工作区列表时计算，不写入索引。 */
+export type LocalProjectRootStatus = 'available' | 'missing' | 'not_directory' | 'unavailable'
+
 /** Agent 工作区 */
 export interface AgentWorkspace {
   /** 工作区唯一标识 */
@@ -21,6 +24,8 @@ export interface AgentWorkspace {
    * workspace-files/ 目录；设置后，项目文件直接指向该原始目录。
    */
   projectRootPath?: string
+  /** 本地项目根目录的运行时状态；Proma 托管项目不设置此字段。 */
+  projectRootStatus?: LocalProjectRootStatus
   /** 创建时间戳 */
   createdAt: number
   /** 更新时间戳 */
@@ -401,6 +406,8 @@ export type ErrorCode =
   | 'api_key_decrypt_failed'
   | 'claude_binary_not_found'
   | 'agent_runtime_not_found'
+  | 'workspace_not_found'
+  | 'local_project_root_unavailable'
   | 'session_busy'
   | 'unknown_error'
 
@@ -1478,6 +1485,10 @@ export const AGENT_IPC_CHANNELS = {
   CREATE_PROJECT: 'agent:create-project',
   /** 更新工作区 */
   UPDATE_WORKSPACE: 'agent:update-workspace',
+  /** 为本地项目重新选择已有项目根目录 */
+  RELINK_WORKSPACE_PROJECT_ROOT: 'agent:relink-workspace-project-root',
+  /** 在丢失的本地项目原路径重新创建空目录 */
+  RESTORE_WORKSPACE_PROJECT_ROOT: 'agent:restore-workspace-project-root',
   /** 删除工作区 */
   DELETE_WORKSPACE: 'agent:delete-workspace',
   /** 重排工作区顺序 */

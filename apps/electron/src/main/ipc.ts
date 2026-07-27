@@ -206,6 +206,8 @@ import {
   listAgentWorkspaces,
   createAgentWorkspace,
   updateAgentWorkspace,
+  relinkAgentWorkspaceProjectRoot,
+  restoreAgentWorkspaceProjectRoot,
   deleteAgentWorkspace,
   reorderAgentWorkspaces,
   ensureDefaultWorkspace,
@@ -2073,6 +2075,30 @@ export function registerIpcHandlers(): void {
     AGENT_IPC_CHANNELS.UPDATE_WORKSPACE,
     async (_, id: string, updates: { name: string }): Promise<AgentWorkspace> => {
       return updateAgentWorkspace(id, updates)
+    }
+  )
+
+  // 重新选择本地项目根目录，保留原项目、会话和配置。
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.RELINK_WORKSPACE_PROJECT_ROOT,
+    async (_, id: string, projectRootPath: string): Promise<AgentWorkspace> => {
+      const previousRoot = getAgentWorkspace(id)?.projectRootPath
+      const updated = relinkAgentWorkspaceProjectRoot(id, projectRootPath)
+      if (previousRoot && previousRoot !== updated.projectRootPath) {
+        releaseDirectoryWatcherIfUnreferenced(previousRoot)
+      }
+      if (updated.projectRootPath) watchAttachedDirectory(updated.projectRootPath)
+      return updated
+    }
+  )
+
+  // 在缺失本地项目的原路径恢复空目录。
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.RESTORE_WORKSPACE_PROJECT_ROOT,
+    async (_, id: string): Promise<AgentWorkspace> => {
+      const updated = restoreAgentWorkspaceProjectRoot(id)
+      if (updated.projectRootPath) watchAttachedDirectory(updated.projectRootPath)
+      return updated
     }
   )
 

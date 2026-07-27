@@ -27,7 +27,7 @@ import { findAllGitRoots, normalizeGitRoot } from './git-diff-service'
 import { listBuiltinMcpServers } from './builtin-mcp/catalog'
 import { RESERVED_BUILTIN_KEYS } from './builtin-mcp/baseline'
 import { inferMcpTransportType, normalizeMcpTransportType } from '@proma/shared'
-import type { AgentWorkspace, CreateAgentWorkspaceInput, WorkspaceMcpConfig, SkillMeta, SkillImportSource, OtherWorkspaceSkillsGroup, WorkspaceCapabilities, SkillFileNode, SkillFileContent, WorkspaceMemorySummary } from '@proma/shared'
+import type { AgentWorkspace, CreateAgentWorkspaceInput, LocalProjectRootStatus, WorkspaceMcpConfig, SkillMeta, SkillImportSource, OtherWorkspaceSkillsGroup, WorkspaceCapabilities, SkillFileNode, SkillFileContent, WorkspaceMemorySummary } from '@proma/shared'
 
 interface AgentWorkspacesIndex {
   version: number
@@ -151,13 +151,34 @@ function slugify(name: string, existingSlugs: Set<string>): string {
 
 export function listAgentWorkspaces(): AgentWorkspace[] {
   const index = readIndex()
-  return index.workspaces.slice()
+  return index.workspaces.map(withProjectRootStatus)
 }
 
 /** 按 updatedAt 降序（桥接/飞书列表等与旧版内联 sort 一致；渲染进程仍用 listAgentWorkspaces） */
 export function listAgentWorkspacesByUpdatedAt(): AgentWorkspace[] {
   const index = readIndex()
-  return index.workspaces.slice().sort((a, b) => b.updatedAt - a.updatedAt)
+  return index.workspaces.map(withProjectRootStatus).sort((a, b) => b.updatedAt - a.updatedAt)
+}
+
+/**
+ * 同步检查用户选择的本地项目根。该状态用于运行前硬阻断和工作区列表提示，
+ * 不依赖目录 watcher，避免把临时监听失败误报为项目根丢失。
+ */
+export function getLocalProjectRootStatus(projectRootPath: string | undefined): LocalProjectRootStatus | undefined {
+  if (!projectRootPath) return undefined
+  if (!existsSync(projectRootPath)) return 'missing'
+
+  try {
+    return statSync(projectRootPath).isDirectory() ? 'available' : 'not_directory'
+  } catch {
+    return 'unavailable'
+  }
+}
+
+/** 为 IPC/展示调用附加即时状态，绝不修改磁盘索引中的工作区记录。 */
+function withProjectRootStatus(workspace: AgentWorkspace): AgentWorkspace {
+  const projectRootStatus = getLocalProjectRootStatus(workspace.projectRootPath)
+  return projectRootStatus ? { ...workspace, projectRootStatus } : { ...workspace }
 }
 
 /** 按指定 ID 顺序重排工作区，未列出的追加到末尾 */
@@ -319,7 +340,53 @@ export function updateAgentWorkspace(
   writeIndex(index)
 
   console.log(`[Agent 工作区] 已更新工作区: ${updated.name} (${updated.id})`)
-  return updated
+  return withProjectRootStatus(updated)
+}
+
+/** 将本地项目重新关联到一个已有文件夹，保留项目、会话与配置。 */
+export function relinkAgentWorkspaceProjectRoot(id: string, projectRootPath: string): AgentWorkspace {
+  const index = readIndex()
+  const idx = index.workspaces.findIndex((workspace) => workspace.id === id)
+  if (idx === -1) throw new Error(`Agent 工作区不存在: ${id}`)
+
+  let normalizedProjectRootPath: string
+  try {
+    normalizedProjectRootPath = realpathSync(resolve(projectRootPath))
+    if (!statSync(normalizedProjectRootPath).isDirectory()) {
+      throw new Error('选择的路径不是文件夹')
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '无法访问选择的文件夹'
+    throw new Error(`项目文件夹无效: ${message}`)
+  }
+
+  const updated: AgentWorkspace = {
+    ...index.workspaces[idx]!,
+    projectRootPath: normalizedProjectRootPath,
+    updatedAt: Date.now(),
+  }
+  index.workspaces[idx] = updated
+  writeIndex(index)
+  console.log(`[Agent 工作区] 已重新关联项目根: ${updated.name} → ${normalizedProjectRootPath}`)
+  return withProjectRootStatus(updated)
+}
+
+/** 在本地项目原路径恢复一个空目录。仅允许路径确实缺失时执行。 */
+export function restoreAgentWorkspaceProjectRoot(id: string): AgentWorkspace {
+  const index = readIndex()
+  const idx = index.workspaces.findIndex((workspace) => workspace.id === id)
+  if (idx === -1) throw new Error(`Agent 工作区不存在: ${id}`)
+
+  const workspace = index.workspaces[idx]!
+  if (!workspace.projectRootPath) throw new Error('该项目不是本地项目')
+  const status = getLocalProjectRootStatus(workspace.projectRootPath)
+  if (status !== 'missing') {
+    throw new Error('只能恢复已缺失的本地项目根目录')
+  }
+
+  mkdirSync(workspace.projectRootPath, { recursive: true })
+  console.log(`[Agent 工作区] 已在原路径恢复空项目根: ${workspace.projectRootPath}`)
+  return withProjectRootStatus(workspace)
 }
 
 /** 删除工作区索引条目及其本地目录 */

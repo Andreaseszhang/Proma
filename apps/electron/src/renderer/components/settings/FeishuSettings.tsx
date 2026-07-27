@@ -43,6 +43,7 @@ import { SettingsCard } from './primitives/SettingsCard'
 import { SettingsInput } from './primitives/SettingsInput'
 import { SettingsSecretInput } from './primitives/SettingsSecretInput'
 import { SettingsRow } from './primitives/SettingsRow'
+import { LocalProjectBadge } from '@/components/agent/LocalProjectBadge'
 import { feishuBotStatesAtom, feishuBindingsAtom } from '@/atoms/feishu-atoms'
 import { agentWorkspacesAtom, agentSessionsAtom } from '@/atoms/agent-atoms'
 import { cn } from '@/lib/utils'
@@ -507,12 +508,26 @@ const FeishuBindingCard = React.memo(function FeishuBindingCard({
         >
           <SelectTrigger className="h-8 text-xs">
             <SelectValue placeholder="选择工作区">
-              {currentWorkspace?.name ?? '未知工作区'}
+              <span className="flex min-w-0 items-center gap-1.5">
+                <span className="truncate">{currentWorkspace?.name ?? '未知工作区'}</span>
+                <LocalProjectBadge
+                  projectRootPath={currentWorkspace?.projectRootPath}
+                  projectRootStatus={currentWorkspace?.projectRootStatus}
+                />
+              </span>
             </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {workspaceSelectOpen && workspaces.map((w) => (
-              <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>
+              <SelectItem key={w.id} value={w.id}>
+                <span className="flex items-center gap-1.5">
+                  <span>{w.name}</span>
+                  <LocalProjectBadge
+                    projectRootPath={w.projectRootPath}
+                    projectRootStatus={w.projectRootStatus}
+                  />
+                </span>
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>

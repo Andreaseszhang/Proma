@@ -137,6 +137,11 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
   const currentWorkspace = workspaces.find((workspace) => workspace.id === currentWorkspaceId)
   const workspaceSlug = currentWorkspace?.slug ?? null
   const projectRootSourceLabel = currentWorkspace?.projectRootPath ? '本地目录' : 'Proma 托管'
+  const isProjectRootUnavailable = Boolean(
+    currentWorkspace?.projectRootPath
+    && currentWorkspace.projectRootStatus
+    && currentWorkspace.projectRootStatus !== 'available',
+  )
   const fileAccess = React.useMemo(() => ({ sessionId }), [sessionId])
 
   // 附加目录列表（会话级）
@@ -657,15 +662,17 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
                           </Tooltip>
                         )}
                       </div>
-                      <FileSearchBar
-                        workspaceFilesPath={workspaceFilesPath}
-                        sessionPath={null}
-                        sessionAttachedDirs={[]}
-                        workspaceAttachedDirs={wsAttachedDirs}
-                        placeholder="搜索项目文件..."
-                        sessionId={sessionId}
-                        onFilePreview={handleFilePreview}
-                      />
+                      {!isProjectRootUnavailable && (
+                        <FileSearchBar
+                          workspaceFilesPath={workspaceFilesPath}
+                          sessionPath={null}
+                          sessionAttachedDirs={[]}
+                          workspaceAttachedDirs={wsAttachedDirs}
+                          placeholder="搜索项目文件..."
+                          sessionId={sessionId}
+                          onFilePreview={handleFilePreview}
+                        />
+                      )}
                       <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin">
                       {wsAttachedFiles.length > 0 && (
                         <AttachedFilesSection
@@ -688,22 +695,30 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
                           sessionId={sessionId}
                         />
                       )}
-                      {workspaceFilesPath && (
+                      {isProjectRootUnavailable ? (
+                        <div className="flex min-h-24 items-center justify-center px-3 py-4 text-center text-xs font-medium text-destructive">
+                          本地项目根目录不可用
+                        </div>
+                      ) : (
                         <>
-                          {hasWorkspaceAttachedItems && (
-                            <div className="text-[11px] font-medium text-muted-foreground mb-1 px-3 pt-2">项目根目录</div>
+                          {workspaceFilesPath && (
+                            <>
+                              {hasWorkspaceAttachedItems && (
+                                <div className="text-[11px] font-medium text-muted-foreground mb-1 px-3 pt-2">项目根目录</div>
+                              )}
+                              <FileBrowser rootPath={workspaceFilesPath} access={fileAccess} hideToolbar embedded hideEmpty={hasWorkspaceAttachedItems} onAddToChat={handleAddToChat} onFilePreview={handleFilePreview} />
+                            </>
                           )}
-                          <FileBrowser rootPath={workspaceFilesPath} access={fileAccess} hideToolbar embedded hideEmpty={hasWorkspaceAttachedItems} onAddToChat={handleAddToChat} onFilePreview={handleFilePreview} />
+                          <FileDropZone
+                            workspaceSlug={workspaceSlug ?? ''}
+                            target="workspace"
+                            onFilesUploaded={handleFilesUploaded}
+                            onFilesAttached={handleWorkspaceFilesAttached}
+                            onAttachFolder={handleAttachWorkspaceFolder}
+                            onFoldersDropped={handleWorkspaceFoldersDropped}
+                          />
                         </>
                       )}
-                      <FileDropZone
-                        workspaceSlug={workspaceSlug ?? ''}
-                        target="workspace"
-                        onFilesUploaded={handleFilesUploaded}
-                        onFilesAttached={handleWorkspaceFilesAttached}
-                        onAttachFolder={handleAttachWorkspaceFolder}
-                        onFoldersDropped={handleWorkspaceFoldersDropped}
-                      />
                       </div>
                     </div>
                   </div>

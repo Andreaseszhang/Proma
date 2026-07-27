@@ -956,6 +956,8 @@ export interface AgentSendInput {
   sessionId: string
   /** 用户消息内容 */
   userMessage: string
+  /** 用于持久化、重放与历史渲染的用户消息；可保留附件和临时选区元数据，省略时回退到 userMessage */
+  rawUserMessage?: string
   /** 渠道 ID（用于获取 API Key） */
   channelId: string
   /** 模型 ID */
@@ -994,7 +996,7 @@ export interface AgentQueueMessageInput {
   sessionId: string
   /** 用户消息内容 */
   userMessage: string
-  /** 仅用于持久化/重放的原始用户输入；省略时回退到 userMessage */
+  /** 用于持久化、重放与历史渲染的用户消息；可保留附件和临时选区元数据，省略时回退到 userMessage */
   rawUserMessage?: string
   /** 前端预生成的 UUID（用于乐观更新去重） */
   uuid?: string

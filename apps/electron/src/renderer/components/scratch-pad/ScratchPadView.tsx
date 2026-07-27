@@ -60,6 +60,8 @@ import { SELECTION_ACTION_POPOVER_SELECTOR } from '@/lib/quoted-selection'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { ImageLightbox } from '@/components/ui/image-lightbox'
 import { openScratchInSplit } from './scratch-pad-opener'
+import { AgentQuoteReferenceExtension, insertAgentQuoteReferenceAtSelection } from '@/components/agent/AgentQuoteReference'
+import { parseAgentQuoteClipboardData, serializeAgentQuoteReferencePayload } from '@/lib/agent-quote-reference'
 
 const MAX_SCRATCH_PAD_QUOTED_CHARS = 2000
 
@@ -158,6 +160,7 @@ function ScratchPadEditor({ variant }: ScratchPadEditorProps): React.ReactElemen
       heading: { levels: [1, 2, 3] },
       codeBlock: false, // 用 CodeBlockLowlight 替代：支持 ``` 触发、可编辑、可删除
     }),
+    AgentQuoteReferenceExtension,
     Placeholder.configure({
       placeholder: '在此随意书写… 支持 Markdown 快捷输入',
     }),
@@ -568,6 +571,19 @@ function ScratchPadEditor({ variant }: ScratchPadEditorProps): React.ReactElemen
     if (!el || !editor) return
 
     const handlePaste = (e: ClipboardEvent): void => {
+      const html = e.clipboardData?.getData('text/html') ?? ''
+      const text = e.clipboardData?.getData('text/plain') ?? ''
+      const quoteReference = parseAgentQuoteClipboardData(html, text)
+      if (quoteReference) {
+        e.preventDefault()
+        e.stopPropagation()
+        insertAgentQuoteReferenceAtSelection(
+          editor.view,
+          serializeAgentQuoteReferencePayload(quoteReference),
+        )
+        return
+      }
+
       // 检测剪贴板中的图片
       const items = e.clipboardData?.items
       if (items) {
@@ -590,7 +606,6 @@ function ScratchPadEditor({ variant }: ScratchPadEditorProps): React.ReactElemen
         }
       }
 
-      const text = e.clipboardData?.getData('text/plain')
       if (!text) return
       // markdown 触发字符：#标题 *强调 >引用 -列表 `代码 [链接 ~删除 |表格 $公式
       if (!/[#*>\-`[\]~|$]/.test(text)) return

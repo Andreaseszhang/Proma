@@ -30,6 +30,12 @@ import { htmlToMarkdown } from '@/lib/markdown-rich-text'
 import { richTextRenderingEnabledAtom } from '@/atoms/ui-preferences'
 import { createFileMentionSuggestion } from '@/components/file-browser/file-mention-suggestion'
 import { createSkillMentionSuggestion, createMcpMentionSuggestion, createSessionMentionSuggestion } from '@/components/agent/mention-suggestions'
+import { AgentQuoteReferenceExtension, insertAgentQuoteReferenceAtSelection } from '@/components/agent/AgentQuoteReference'
+import {
+  parseAgentQuoteClipboardData,
+  renderAgentQuoteReferenceTokensAsHtml,
+  serializeAgentQuoteReferencePayload,
+} from '@/lib/agent-quote-reference'
 import { shouldConvertClipboardTextToAttachment } from '@/lib/clipboard-text-attachment'
 import {
   VOICE_DICTATION_INSERT_EVENT,
@@ -181,6 +187,9 @@ export function RichTextInput({
   const lineCheckHandleRef = useRef<number | null>(null)
   // 跟踪编辑器自己设置的值，用于区分外部设置和内部更新
   const lastEditorValueRef = useRef<string>('')
+  // HTML 草稿与 Markdown token 分开保存。切换会话时 HTML 可能晚于 token 到达，
+  // 因此需要单独记录已应用的 HTML，避免把引用 token 降级为普通文本。
+  const lastEditorHtmlRef = useRef<string>('')
   // 跟踪 IME 输入状态（中文输入法等）
   const isComposingRef = useRef(false)
   // 保持 onSubmit 引用最新
@@ -312,6 +321,7 @@ export function RichTextInput({
       // @ 引用文件、/ 触发 Skill、# 触发 MCP
       // 纯文本模式下仍然保留，确保引用功能可用
       ...(hasMentionSupport ? [
+        AgentQuoteReferenceExtension,
         Mention.extend({
           addAttributes() {
             return {
@@ -398,6 +408,20 @@ export function RichTextInput({
         },
       },
       handlePaste: (view, event) => {
+        const html = event.clipboardData?.getData('text/html') ?? ''
+        const plainText = event.clipboardData?.getData('text/plain') ?? ''
+        const quoteReference = parseAgentQuoteClipboardData(html, plainText)
+        if (quoteReference) {
+          const inserted = insertAgentQuoteReferenceAtSelection(
+            view,
+            serializeAgentQuoteReferencePayload(quoteReference),
+          )
+          if (inserted) {
+            event.preventDefault()
+            return true
+          }
+        }
+
         // 拦截粘贴的文件（图片等）
         const clipboardItems = event.clipboardData?.files
         if (clipboardItems && clipboardItems.length > 0 && onPasteFilesRef.current) {
@@ -407,7 +431,6 @@ export function RichTextInput({
         }
 
         const threshold = longTextPasteThresholdRef.current
-        const plainText = event.clipboardData?.getData('text/plain') ?? ''
 
         // 纯文本模式：直接插入原始文本，不经过 HTML 解析
         if (!richTextEnabledRef.current) {
@@ -427,7 +450,6 @@ export function RichTextInput({
           return true
         }
 
-        const html = event.clipboardData?.getData('text/html') ?? ''
         // 预处理 HTML：将 <div> 替换为 <p>，避免 htmlToMarkdown 对 <div> 不分段导致换行丢失
         const text = html
           ? (htmlToMarkdown(
@@ -568,6 +590,7 @@ export function RichTextInput({
       const html = ed.getHTML()
       if (html === '<p></p>') {
         lastEditorValueRef.current = ''
+        lastEditorHtmlRef.current = ''
         onChange('')
         onHtmlChangeRef.current?.('')
         if (isExpandedRef.current) {
@@ -580,6 +603,7 @@ export function RichTextInput({
         // 纯文本模式下跳过 markdown 特殊字符转义，保持用户所见即所得
         const markdown = htmlToMarkdown(html, { skipMarkdownEscape: !richTextEnabled })
         lastEditorValueRef.current = markdown
+        lastEditorHtmlRef.current = html
         onChange(markdown)
         onHtmlChangeRef.current?.(html)
 
@@ -612,38 +636,47 @@ export function RichTextInput({
 
   // 追踪编辑器实例，重建时强制同步（避免 htmlValue 草稿丢失）
   const editorInstanceRef = useRef(editor)
-  // 同步外部 value 变化（清空时）
+  // 同步外部 value 变化。含 React NodeView 的内容必须离开 effect 再 setContent，
+  // 否则 TipTap 的 ReactRenderer 会在 React lifecycle 内触发 flushSync 警告。
   useEffect(() => {
-    if (editor) {
-      const controllerValue = value
-      const isEditorRecreated = editor !== editorInstanceRef.current
-      editorInstanceRef.current = editor
-      // 如果值是编辑器自己设置的，跳过同步
-      // 但编辑器重建后必须强制同步（即使 value 未变，htmlValue 草稿可能不同）
-      if (!isEditorRecreated && controllerValue === lastEditorValueRef.current) {
-        return
-      }
+    if (!editor) return
 
-      if (controllerValue === '') {
-        editor.commands.clearContent()
-        lastEditorValueRef.current = ''
-        isExpandedRef.current = false
-        setIsExpanded(false)
-        setIsManuallyCollapsed(false)
-      } else if (htmlValue) {
-        // 优先使用 HTML 草稿恢复（保留 mention 等富文本节点）
-        editor.commands.setContent(htmlValue)
-        lastEditorValueRef.current = controllerValue
-      } else {
-        const html = controllerValue
-          .split(/\n\n+/)
-          .map(para => `<p>${para.replace(/\n/g, '<br>')}</p>`)
-          .join('')
-        editor.commands.setContent(html)
-        lastEditorValueRef.current = controllerValue
-      }
+    const controllerValue = value
+    const isEditorRecreated = editor !== editorInstanceRef.current
+    editorInstanceRef.current = editor
+    const externalHtml = htmlValue?.trim() ?? ''
+    const hasUpdatedExternalHtml = externalHtml !== '' && externalHtml !== lastEditorHtmlRef.current
+    // 如果 Markdown 和 HTML 都是编辑器自己设置的，跳过同步。
+    // HTML 草稿可能晚于 Markdown token 到达；此时即使 token 未变也必须重新恢复。
+    // 编辑器重建后同样强制同步，避免 htmlValue 草稿丢失。
+    if (!isEditorRecreated && controllerValue === lastEditorValueRef.current && !hasUpdatedExternalHtml) {
+      return
     }
-  }, [editor, value])
+
+    if (controllerValue === '') {
+      editor.commands.clearContent()
+      lastEditorValueRef.current = ''
+      lastEditorHtmlRef.current = ''
+      isExpandedRef.current = false
+      setIsExpanded(false)
+      setIsManuallyCollapsed(false)
+      return
+    }
+
+    const fallbackHtml = renderAgentQuoteReferenceTokensAsHtml(controllerValue)
+      .split(/\n\n+/)
+      .map(para => `<p>${para.replace(/\n/g, '<br>')}</p>`)
+      .join('')
+    const nextHtml = externalHtml || fallbackHtml
+    const frameId = requestAnimationFrame(() => {
+      if (editor.isDestroyed) return
+      editor.commands.setContent(nextHtml)
+      lastEditorValueRef.current = controllerValue
+      lastEditorHtmlRef.current = nextHtml
+    })
+
+    return () => cancelAnimationFrame(frameId)
+  }, [editor, htmlValue, value])
 
   // 同步 disabled 状态
   useEffect(() => {

@@ -78,6 +78,7 @@ import type { WorkspaceCapabilities } from '@proma/shared'
 import { showCapabilityChangeToasts } from './lib/capabilities-toast'
 import { GlobalShortcuts } from './components/shortcuts/GlobalShortcuts'
 import { TabSwitcher } from './components/tabs/TabSwitcher'
+import { AgentQuoteNavigationListener } from './components/agent/AgentQuoteNavigationListener'
 import { htmlToMarkdown, markdownToHtml } from './lib/markdown-rich-text'
 import { getEnabledClaudeAgentChannelIds } from './lib/agent-channel-selection'
 import './styles/globals.css'
@@ -936,6 +937,7 @@ if (isQuickTaskWindow) {
       <ScratchPadPersistence />
       <GlobalShortcuts />
       <TabSwitcher />
+      <AgentQuoteNavigationListener />
       <App />
       <Toaster position="bottom-right" />
     </React.StrictMode>

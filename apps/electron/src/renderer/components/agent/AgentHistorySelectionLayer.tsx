@@ -16,9 +16,10 @@ import {
   selectedModelAtom,
 } from '@/atoms/chat-atoms'
 import { quotedSelectionMapAtom } from '@/atoms/preview-atoms'
-import { agentDiffPanelTabAtom, agentSidePanelOpenAtom } from '@/atoms/agent-atoms'
+import { agentDiffPanelTabAtom, agentSessionsAtom, agentSidePanelOpenAtom } from '@/atoms/agent-atoms'
 import { SelectionActionPopover } from '@/components/selection/SelectionActionPopover'
 import { SELECTION_ACTION_POPOVER_SELECTOR } from '@/lib/quoted-selection'
+import { copyAgentQuoteReference } from '@/lib/agent-quote-reference'
 
 const MAX_AGENT_HISTORY_QUOTED_CHARS = 2000
 
@@ -27,6 +28,8 @@ interface AgentHistorySelection {
   x: number
   y: number
   sourceLabel: string
+  sessionTitle: string
+  turn: number
   messageId?: string
   messageRole?: 'user' | 'assistant' | 'system'
 }
@@ -52,12 +55,24 @@ function getRoleLabel(role?: string): string {
   return 'Agent 历史'
 }
 
+function getMessageTurn(root: HTMLDivElement, target: Element): number {
+  const messages = Array.from(root.querySelectorAll('[data-message-id]'))
+  const targetIndex = messages.indexOf(target)
+  if (targetIndex < 0) return 1
+  const turns = messages
+    .slice(0, targetIndex + 1)
+    .filter((message) => message.getAttribute('data-message-role') === 'user')
+    .length
+  return turns || targetIndex + 1
+}
+
 export function AgentHistorySelectionLayer({
   sessionId,
   rootRef,
 }: AgentHistorySelectionLayerProps): React.ReactElement {
   const setQuotedSelectionMap = useSetAtom(quotedSelectionMapAtom)
   const selectedChatModel = useAtomValue(selectedModelAtom)
+  const agentSessions = useAtomValue(agentSessionsAtom)
   const setConversations = useSetAtom(conversationsAtom)
   const setConversationDrafts = useSetAtom(conversationDraftsAtom)
   const setSideChatMap = useSetAtom(agentSideChatMapAtom)
@@ -118,11 +133,14 @@ export function AgentHistorySelectionLayer({
       : null
     const messageId = sameMessage ? startMessageEl.getAttribute('data-message-id') ?? undefined : undefined
 
+    const sessionTitle = agentSessions.find((session) => session.id === sessionId)?.title ?? '未命名 Agent 会话'
     setSelection({
       text,
       x: anchorRect.left + anchorRect.width / 2,
       y: Math.max(12, anchorRect.top - 12),
       sourceLabel: sameMessage ? getRoleLabel(role ?? undefined) : 'Agent 历史 · 多条消息',
+      sessionTitle,
+      turn: sameMessage ? getMessageTurn(root, startMessageEl) : 1,
       messageId,
       messageRole: role ?? undefined,
     })
@@ -133,7 +151,7 @@ export function AgentHistorySelectionLayer({
         duration: 3000,
       })
     }
-  }, [clearSelection, rootRef, sessionId])
+  }, [agentSessions, clearSelection, rootRef, sessionId])
 
   const scheduleCaptureSelection = React.useCallback((): void => {
     if (captureTimerRef.current != null) {
@@ -212,6 +230,31 @@ export function AgentHistorySelectionLayer({
     toast.success('已添加到 Agent 引用')
   }, [clearSelection, selection, sessionId, setQuotedSelectionMap])
 
+  const handleCopyAsQuote = React.useCallback(async (): Promise<void> => {
+    if (!selection?.messageId) {
+      toast.error('引用块暂不支持跨消息选区')
+      return
+    }
+    try {
+      await copyAgentQuoteReference({
+        version: 1,
+        sessionId,
+        messageId: selection.messageId,
+        sessionTitle: selection.sessionTitle,
+        turn: selection.turn,
+        messageRole: selection.messageRole ?? 'assistant',
+        text: selection.text,
+        capturedAt: Date.now(),
+      })
+      window.getSelection()?.removeAllRanges()
+      clearSelection()
+      toast.success('已复制为引用块')
+    } catch (error) {
+      console.error('[AgentMessages] 复制引用块失败:', error)
+      toast.error('复制引用块失败')
+    }
+  }, [clearSelection, selection, sessionId])
+
   const handleOpenChatTab = React.useCallback(async (): Promise<void> => {
     if (!selection) return
     if (openChatPendingRef.current) return
@@ -283,6 +326,7 @@ export function AgentHistorySelectionLayer({
           x={selection.x}
           y={selection.y}
           onAddToAgent={handleAddToAgent}
+          onCopyAsQuote={handleCopyAsQuote}
           onOpenChat={handleOpenChatTab}
         />
       )}

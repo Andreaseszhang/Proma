@@ -845,14 +845,14 @@ export class AgentOrchestrator {
    * 通过 EventBus 分发 AgentEvent，通过 callbacks 发送控制信号。
    */
   async sendMessage(input: AgentSendInput, callbacks: SessionCallbacks): Promise<void> {
-    const { sessionId, userMessage, channelId, modelId, agentRuntime: inputAgentRuntime, workspaceId, additionalDirectories, customMcpServers, permissionModeOverride, mentionedSkills, mentionedMcpServers, mentionedSessionIds, automationContext, retryOfErrorUuid } = input
+    const { sessionId, userMessage, rawUserMessage, channelId, modelId, agentRuntime: inputAgentRuntime, workspaceId, additionalDirectories, customMcpServers, permissionModeOverride, mentionedSkills, mentionedMcpServers, mentionedSessionIds, automationContext, retryOfErrorUuid } = input
     const stderrChunks: string[] = []
     const streamStartedAt = input.startedAt ?? Date.now()
     let userMessagePersisted = false
 
     const persistInitialUserMessage = (): void => {
       if (userMessagePersisted) return
-      this.persistUserMessage(sessionId, userMessage)
+      this.persistUserMessage(sessionId, rawUserMessage ?? userMessage)
       userMessagePersisted = true
       callbacks.onRunStarted?.({ startedAt: streamStartedAt })
     }

@@ -1,4 +1,9 @@
 import type { QuotedSelection } from '@/atoms/preview-atoms'
+import {
+  buildAgentQuoteReferenceContextBlock,
+  extractAgentQuoteReferences,
+  stripAgentQuoteReferenceTokens,
+} from './agent-quote-reference'
 
 export type QueueDropPlacement = 'before' | 'after'
 
@@ -130,7 +135,7 @@ export function parseQueuedMessageMentions(text: string): ParsedQueuedMessageMen
   }
 
   return {
-    cleanedText: text.replace(REF_PATTERN, '').trim(),
+    cleanedText: stripAgentQuoteReferenceTokens(text.replace(REF_PATTERN, '')).trim(),
     mentionedSkills,
     mentionedMcpServers,
     mentionedSessionIds,
@@ -143,17 +148,28 @@ export function buildQueuedMessageSendPayload(
 ): QueuedMessageSendPayload {
   const text = message.text.trim()
   const mentions = parseQueuedMessageMentions(text)
-  const contextBlocks = [
+  // 文件附件和旧的临时选区需要留在持久化消息中，供历史 UI 还原既有附件/引用 chip。
+  const historyContextBlocks = [
     message.fileReferenceBlock?.trim(),
     quotedSelectionBlock.trim(),
   ].filter((block): block is string => Boolean(block))
-  const prefix = contextBlocks.length > 0
-    ? `${contextBlocks.join('\n\n')}\n\n`
+  const quoteContextBlocks = extractAgentQuoteReferences(text)
+    .map((reference) => buildAgentQuoteReferenceContextBlock(reference))
+  const sdkContextBlocks = [
+    ...historyContextBlocks,
+    ...quoteContextBlocks,
+  ]
+  const historyPrefix = historyContextBlocks.length > 0
+    ? `${historyContextBlocks.join('\n\n')}\n\n`
+    : ''
+  const sdkPrefix = sdkContextBlocks.length > 0
+    ? `${sdkContextBlocks.join('\n\n')}\n\n`
     : ''
 
   return {
-    rawText: `${prefix}${text}`.trim(),
-    sdkText: `${prefix}${mentions.cleanedText}`.trim(),
+    // 新会话引用仅以紧凑 token 持久化；精确选区快照仅进入 SDK 上下文。
+    rawText: `${historyPrefix}${text}`.trim(),
+    sdkText: `${sdkPrefix}${mentions.cleanedText}`.trim(),
     mentions,
   }
 }

@@ -40,7 +40,7 @@ import { AgentHistorySelectionLayer } from './AgentHistorySelectionLayer'
 import { TaskProgressOverlay, type ContextCompactionProgress } from './TaskProgressOverlay'
 import type { AgentEventUsage, RetryAttempt, SDKMessage, SDKSystemMessage } from '@proma/shared'
 import { getSDKCompactStatus } from '@proma/shared'
-import type { AgentStreamState } from '@/atoms/agent-atoms'
+import { agentQuoteFocusAtom, type AgentStreamState } from '@/atoms/agent-atoms'
 
 function stableStringify(value: unknown): string {
   if (value == null || typeof value !== 'object') return JSON.stringify(value) ?? String(value)
@@ -477,12 +477,57 @@ export function AgentMessages({ sessionId, sessionModelId, messagesLoaded, persi
   const userProfile = useAtomValue(userProfileAtom)
   const setMinimapCache = useSetAtom(tabMinimapCacheAtom)
   const channels = useAtomValue(channelsAtom)
+  const quoteFocus = useAtomValue(agentQuoteFocusAtom)
+  const setQuoteFocus = useSetAtom(agentQuoteFocusAtom)
+  const handledQuoteFocusNonceRef = React.useRef<number | null>(null)
   const historySelectionRootRef = React.useRef<HTMLDivElement>(null)
   /** 淡入控制：切换会话时先隐藏，等布局完成后再显示。 */
   const [ready, setReady] = React.useState(false)
   // 空会话无需淡入过渡（无消息则无滚动位置问题）
   const [skipFadeIn, setSkipFadeIn] = React.useState(false)
   const prevSessionIdRef = React.useRef<string | null>(null)
+
+  React.useEffect(() => {
+    if (
+      !quoteFocus
+      || quoteFocus.sessionId !== sessionId
+      || handledQuoteFocusNonceRef.current === quoteFocus.nonce
+    ) return
+
+    let frameId: number | null = null
+    let highlightTimer: number | null = null
+    let attempts = 0
+    let cancelled = false
+    const revealTarget = (): void => {
+      if (cancelled) return
+      const root = historySelectionRootRef.current
+      const target = root
+        ? Array.from(root.querySelectorAll<HTMLElement>('[data-message-id]'))
+          .find((node) => node.getAttribute('data-message-id') === quoteFocus.messageId)
+        : undefined
+      if (!target) {
+        attempts += 1
+        if (attempts < 36) frameId = requestAnimationFrame(revealTarget)
+        return
+      }
+      handledQuoteFocusNonceRef.current = quoteFocus.nonce
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      target.classList.remove('agent-quote-target-highlight')
+      void target.offsetWidth
+      target.classList.add('agent-quote-target-highlight')
+      highlightTimer = window.setTimeout(() => {
+        target.classList.remove('agent-quote-target-highlight')
+        setQuoteFocus((current) => current?.nonce === quoteFocus.nonce ? null : current)
+      }, 1_900)
+    }
+
+    frameId = requestAnimationFrame(revealTarget)
+    return () => {
+      cancelled = true
+      if (frameId != null) cancelAnimationFrame(frameId)
+      if (highlightTimer != null) window.clearTimeout(highlightTimer)
+    }
+  }, [liveMessages, messagesLoaded, persistedSDKMessages, quoteFocus, sessionId, setQuoteFocus])
 
   React.useEffect(() => {
     if (sessionId !== prevSessionIdRef.current) {

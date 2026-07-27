@@ -952,7 +952,8 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
   }, [appendLiveUserMessage, removeLiveUserMessage, sessionId])
 
   const startQueuedMessageRun = React.useCallback(async (
-    text: string,
+    rawText: string,
+    sdkText: string,
     mentions: ReturnType<typeof parseQueuedMessageMentions>,
     channelId: string,
     queuedAdditionalDirectories: string[] = [],
@@ -977,12 +978,13 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
       return map
     })
 
-    appendOptimisticPersistedMessage(createUserSDKMessage(text, undefined, streamStartedAt))
+    appendOptimisticPersistedMessage(createUserSDKMessage(rawText, undefined, streamStartedAt))
 
     try {
       await window.electronAPI.sendAgentMessage({
         sessionId,
-        userMessage: text,
+        userMessage: sdkText,
+        rawUserMessage: rawText,
         channelId,
         modelId: agentModelId || undefined,
         agentRuntime: sessionAgentRuntime,
@@ -1047,7 +1049,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
       } catch (error) {
         if (isStaleAgentQueueError(error)) {
           console.warn('[AgentView] 检测到陈旧的 Agent 追加通道，改为启动新一轮运行:', error)
-          await startQueuedMessageRun(payload.rawText, payload.mentions, agentChannelId, message.additionalDirectories)
+          await startQueuedMessageRun(payload.rawText, payload.sdkText, payload.mentions, agentChannelId, message.additionalDirectories)
           return
         }
         throw error
@@ -1055,7 +1057,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
       return
     }
 
-    await startQueuedMessageRun(payload.rawText, payload.mentions, agentChannelId, message.additionalDirectories)
+    await startQueuedMessageRun(payload.rawText, payload.sdkText, payload.mentions, agentChannelId, message.additionalDirectories)
   }, [
     agentChannelId,
     backgroundWaiting,
@@ -2073,17 +2075,18 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
       ? await preparePendingFilesForSend(pendingFilesSnapshot, additionalDirectoriesForRun)
       : null
     if (pendingFilesSnapshot.length > 0 && !attachmentContext) return
-    let fileReferences = attachmentContext?.referenceBlock ?? ''
-
-    // 构建引用选中文本：内联 XML 拼入 prompt，对话框不展示（parseAttachedFiles 剥离）
     const quotedSelection = consumeQuotedSelection()
-    if (quotedSelection) {
-      fileReferences = fileReferences + buildQuotedSelectionBlock(quotedSelection)
-    }
-
-    // 2. 构建最终消息
-    const finalMessage = fileReferences + effectiveText
-    const mentions = parseQueuedMessageMentions(effectiveText)
+    const messageForSend = createAgentQueuedMessage(
+      effectiveText,
+      crypto.randomUUID(),
+      Date.now(),
+      quotedSelection,
+      attachmentContext ? { fileReferenceBlock: attachmentContext.referenceBlock } : undefined,
+    )
+    const payload = buildQueuedMessageSendPayload(
+      messageForSend,
+      quotedSelection ? buildQuotedSelectionBlock(quotedSelection) : '',
+    )
 
     // 清除打断状态（上一轮的打断标记不再显示）
     store.set(stoppedByUserSessionsAtom, (prev: Set<string>) => {
@@ -2122,7 +2125,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
     const tempUserSDKMsg: SDKMessage = {
       type: 'user',
       message: {
-        content: [{ type: 'text', text: finalMessage }],
+        content: [{ type: 'text', text: payload.rawText }],
       },
       parent_tool_use_id: null,
       _createdAt: Date.now(),
@@ -2131,7 +2134,8 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
 
     const input: AgentSendInput = {
       sessionId,
-      userMessage: finalMessage,
+      userMessage: payload.sdkText,
+      rawUserMessage: payload.rawText,
       channelId: agentChannelId,
       modelId: agentModelId || undefined,
       agentRuntime: sessionAgentRuntime,
@@ -2139,9 +2143,9 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
       startedAt: streamStartedAt,
       permissionModeOverride: permissionMode,
       ...(additionalDirectoriesForRun.size > 0 && { additionalDirectories: Array.from(additionalDirectoriesForRun) }),
-      ...(mentions.mentionedSkills.length > 0 && { mentionedSkills: mentions.mentionedSkills }),
-      ...(mentions.mentionedMcpServers.length > 0 && { mentionedMcpServers: mentions.mentionedMcpServers }),
-      ...(mentions.mentionedSessionIds.length > 0 && { mentionedSessionIds: mentions.mentionedSessionIds }),
+      ...(payload.mentions.mentionedSkills.length > 0 && { mentionedSkills: payload.mentions.mentionedSkills }),
+      ...(payload.mentions.mentionedMcpServers.length > 0 && { mentionedMcpServers: payload.mentions.mentionedMcpServers }),
+      ...(payload.mentions.mentionedSessionIds.length > 0 && { mentionedSessionIds: payload.mentions.mentionedSessionIds }),
     }
 
     // 清空输入框（仅当发送的是用户自己输入的内容，而非推荐建议时）

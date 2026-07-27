@@ -1,4 +1,9 @@
 import MarkdownIt from 'markdown-it'
+import {
+  parseAgentQuoteReferencePayload,
+  renderAgentQuoteReferenceTokensAsHtml,
+  serializeAgentQuoteReferenceToken,
+} from './agent-quote-reference'
 
 const VIDEO_EXT_RE = /\.(mp4|webm|ogg|ogv|mov|m4v)(?:[?#].*)?$/i
 const PREVIEW_BLOCK_RE = /^<div\s+[^>]*data-type=(["'])(?:raw-html-block|math-block)\1/i
@@ -184,9 +189,14 @@ markdownIt.renderer.rules.html_block = (tokens, idx) => {
   return `<div data-type="raw-html-block" data-markdown="${escapeAttr(content)}" data-html="${escapeAttr(content)}"></div>\n`
 }
 
-markdownIt.renderer.rules.html_inline = (tokens, idx) => (
-  `<span data-type="raw-html-inline" data-html="${escapeAttr(tokens[idx]?.content ?? '')}"></span>`
-)
+markdownIt.renderer.rules.html_inline = (tokens, idx) => {
+  const content = tokens[idx]?.content ?? ''
+  const quoteMatch = /^<span\s+data-type="agent-quote-reference"\s+data-reference="([A-Za-z0-9_-]+)"\s*><\/span>$/.exec(content)
+  if (quoteMatch && parseAgentQuoteReferencePayload(quoteMatch[1] ?? '')) {
+    return content
+  }
+  return `<span data-type="raw-html-inline" data-html="${escapeAttr(content)}"></span>`
+}
 
 markdownIt.renderer.rules.image = (tokens, idx) => {
   const token = tokens[idx]
@@ -332,7 +342,9 @@ function preprocessMarkdown(markdown: string): string {
   return splitMarkdownCodeRegions(wrapLeadingFrontmatterBlock(markdown))
     .map((chunk) => chunk.code
       ? chunk.text
-      : wrapMarkdownDetailsBlocks(separateStandaloneHtmlMediaBlocks(normalizeMarkdownLinePrefixes(chunk.text))))
+      : renderAgentQuoteReferenceTokensAsHtml(
+        wrapMarkdownDetailsBlocks(separateStandaloneHtmlMediaBlocks(normalizeMarkdownLinePrefixes(chunk.text))),
+      ))
     .join('')
 }
 
@@ -514,6 +526,10 @@ export function htmlToMarkdown(
       case 'h6': return `###### ${children}\n`
       case 'hr': return '---\n'
       case 'span': {
+        if (el.getAttribute('data-type') === 'agent-quote-reference') {
+          const reference = parseAgentQuoteReferencePayload(el.getAttribute('data-reference') ?? '')
+          return reference ? serializeAgentQuoteReferenceToken(reference) : children
+        }
         if (el.getAttribute('data-type') === 'raw-html-inline') {
           return el.getAttribute('data-html') || ''
         }

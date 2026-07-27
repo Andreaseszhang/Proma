@@ -112,6 +112,8 @@
     --accent-foreground: 0 0% 9%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
+    --agent-quote: 38 92% 50%;
+    --agent-quote-foreground: 28 82% 28%;
     --stop-hover-bg: hsla(0, 80%, 60%, 0.12);
     --card: 0 0% 100%;
     --card-foreground: 0 0% 3.9%;
@@ -157,6 +159,8 @@
     --accent-foreground: 0 0% 98%;
     --destructive: 0 55% 45%;
     --destructive-foreground: 0 0% 98%;
+    --agent-quote: 38 82% 56%;
+    --agent-quote-foreground: 38 100% 78%;
     --stop-hover-bg: hsl(0, 40%, 18%);
     --card: 0 0% 13%;                      /* 卡片：浮起于背景 */
     --card-foreground: 0 0% 98%;
@@ -2452,4 +2456,43 @@
 }
 .ProseMirror-focused .ProseMirror-gapcursor {
   display: block;
+}
+
+/* Agent 消息选区引用：橙黄色独立于 Skill/MCP/session mention。 */
+.agent-quote-reference-node {
+  display: inline-flex;
+  vertical-align: baseline;
+}
+.agent-quote-reference-chip {
+  display: inline-flex;
+  max-width: min(100%, 28rem);
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: var(--radius);
+  background: hsl(var(--agent-quote) / 0.16);
+  color: hsl(var(--agent-quote-foreground));
+  padding: 1px 4px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.35;
+  vertical-align: baseline;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+.agent-quote-reference-chip:hover {
+  background: hsl(var(--agent-quote) / 0.24);
+}
+.agent-quote-reference-chip:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}
+.agent-quote-reference-invalid {
+  color: hsl(var(--muted-foreground));
+}
+.agent-quote-target-highlight {
+  animation: agent-quote-target-flash 1.8s ease-out;
+}
+@keyframes agent-quote-target-flash {
+  0% { background-color: hsl(var(--agent-quote) / 0.26); }
+  55% { background-color: hsl(var(--agent-quote) / 0.12); }
+  100% { background-color: transparent; }
 }

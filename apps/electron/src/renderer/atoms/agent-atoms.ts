@@ -11,6 +11,7 @@ import type { AgentSessionMeta, AgentEvent, AgentWorkspace, AgentPendingFile, Re
 import { PROMA_DEFAULT_PERMISSION_MODE } from '@proma/shared'
 import { calculateDockBadgeCount, countPendingRequests } from '@/lib/dock-badge-count'
 import type { AgentQueuedMessage } from '@/lib/agent-message-queue'
+import type { AgentQuoteFocus } from '@/lib/agent-quote-reference'
 
 /** 活动状态 */
 export type ActivityStatus = 'pending' | 'running' | 'completed' | 'error' | 'backgrounded'
@@ -230,6 +231,8 @@ export const agentSessionChannelMapAtom = atom<Map<string, string>>(new Map())
 /** Per-session 模型 ID Map — sessionId → modelId */
 export const agentSessionModelMapAtom = atom<Map<string, string>>(new Map())
 export const currentAgentSessionIdAtom = atom<string | null>(null)
+/** 下一次打开 Agent 会话时需要滚动并高亮的消息。 */
+export const agentQuoteFocusAtom = atom<AgentQuoteFocus | null>(null)
 export const agentStreamingStatesAtom = atom<Map<string, AgentStreamState>>(new Map())
 
 /**

@@ -38,6 +38,8 @@ import { LoadingIndicator } from '@/components/ui/loading-indicator'
 import { CodeBlock, MermaidBlock } from '@proma/ui'
 import { detectLanguage } from '@proma/core'
 import { FilePathChip, isAbsoluteFilePath, isRelativeFilePath } from './file-path-chip'
+import { AgentQuoteReferenceChip } from '@/components/agent/AgentQuoteReference'
+import { parseAgentQuoteReferencePayload } from '@/lib/agent-quote-reference'
 import type { HTMLAttributes, ComponentProps, ReactNode } from 'react'
 import type { FileAttachment } from '@proma/shared'
 
@@ -301,7 +303,7 @@ export function remarkMentions() {
     walkMdastText(tree, (node, index, parent) => {
       const text = node.value
       // 每次调用创建独立正则实例，避免 /g 状态在并发 remark pipeline 间互相干扰
-      const mentionPattern = /@file:(\S+)|\/skill:(\S+)|#mcp:(\S+)|&session:(\S+)/g
+      const mentionPattern = /@file:(\S+)|\/skill:(\S+)|#mcp:(\S+)|&session:(\S+)|\[\[proma:agent-quote:([A-Za-z0-9_-]+)\]\]/g
       if (!mentionPattern.test(text)) return
       mentionPattern.lastIndex = 0
 
@@ -313,16 +315,25 @@ export function remarkMentions() {
         if (m.index > lastIdx) {
           parts.push({ type: 'text', value: text.slice(lastIdx, m.index) })
         }
-        const mType: MentionType = m[1] ? 'file' : m[2] ? 'skill' : m[3] ? 'mcp' : 'session'
-        const mValue = m[1] ?? m[2] ?? m[3] ?? m[4] ?? ''
-        // 新版 htmlToMarkdown 已 encodeURIComponent，旧消息是原始路径
-        const alreadyEncoded = /%[0-9A-Fa-f]{2}/.test(mValue)
-        const safeValue = alreadyEncoded ? mValue : encodeURIComponent(mValue)
-        parts.push({
-          type: 'link',
-          url: `mention://${mType}/${safeValue}`,
-          children: [{ type: 'text', value: m[0] }],
-        })
+        const quotePayload = m[5]
+        if (quotePayload) {
+          parts.push({
+            type: 'link',
+            url: `agentquote://${quotePayload}`,
+            children: [{ type: 'text', value: m[0] }],
+          })
+        } else {
+          const mType: MentionType = m[1] ? 'file' : m[2] ? 'skill' : m[3] ? 'mcp' : 'session'
+          const mValue = m[1] ?? m[2] ?? m[3] ?? m[4] ?? ''
+          // 新版 htmlToMarkdown 已 encodeURIComponent，旧消息是原始路径
+          const alreadyEncoded = /%[0-9A-Fa-f]{2}/.test(mValue)
+          const safeValue = alreadyEncoded ? mValue : encodeURIComponent(mValue)
+          parts.push({
+            type: 'link',
+            url: `mention://${mType}/${safeValue}`,
+            children: [{ type: 'text', value: m[0] }],
+          })
+        }
         lastIdx = m.index + m[0].length
       }
 
@@ -403,7 +414,7 @@ const REHYPE_PLUGINS = [rehypeKatex]
 
 /** 允许 mention:// 和本地绝对路径通过 URL 清洗 */
 function mentionUrlTransform(url: string): string {
-  if (url.startsWith('mention://') || isAbsoluteFilePath(safeDecode(url))) return url
+  if (url.startsWith('mention://') || url.startsWith('agentquote://') || isAbsoluteFilePath(safeDecode(url))) return url
   return defaultUrlTransform(url)
 }
 
@@ -411,6 +422,7 @@ function mentionUrlTransform(url: string): string {
 
 /** mention:// URL 匹配 */
 const MENTION_URL_RE = /^mention:\/\/(file|skill|mcp|session)\/(.+)$/
+const AGENT_QUOTE_URL_RE = /^agentquote:\/\/([A-Za-z0-9_-]+)$/
 
 /** 外部链接 / mention chip 渲染器 */
 const MarkdownLink = React.memo(function MarkdownLink({
@@ -423,6 +435,11 @@ const MarkdownLink = React.memo(function MarkdownLink({
     const mentionMatch = MENTION_URL_RE.exec(href)
     if (mentionMatch) {
       return <MentionChip type={mentionMatch[1] as MentionType} value={mentionMatch[2] ?? ''} />
+    }
+    const quoteMatch = AGENT_QUOTE_URL_RE.exec(href)
+    if (quoteMatch) {
+      const reference = parseAgentQuoteReferencePayload(quoteMatch[1] ?? '')
+      if (reference) return <AgentQuoteReferenceChip reference={reference} />
     }
 
     const filePath = safeDecode(href)

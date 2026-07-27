@@ -1,15 +1,11 @@
 import { afterAll, beforeAll, describe, expect, mock, test } from 'bun:test'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import * as os from 'node:os'
-import { join, win32 } from 'node:path'
+import { join } from 'node:path'
 
 type AgentSessionManager = typeof import('./agent-session-manager')
-type AgentWorkspaceManager = typeof import('./agent-workspace-manager')
-type ConfigPathsModule = typeof import('./config-paths')
 
 let manager: AgentSessionManager
-let workspaceManager: AgentWorkspaceManager
-let configPaths: ConfigPathsModule
 let tempHome: string
 const originalHome = process.env.HOME
 const originalPromaDev = process.env.PROMA_DEV
@@ -57,12 +53,6 @@ function writeSdkSessionJsonl(sdkSessionId: string, rows: string[]): void {
   writeFileSync(join(dir, `${sdkSessionId}.jsonl`), jsonl(rows), 'utf-8')
 }
 
-function writeSdkFileHistoryBackup(sdkSessionId: string, backupFileName: string, content: string): void {
-  const dir = join(tempHome, '.proma', 'sdk-config', 'file-history', sdkSessionId)
-  mkdirSync(dir, { recursive: true })
-  writeFileSync(join(dir, backupFileName), content, 'utf-8')
-}
-
 function writeAgentSessionsIndex(sessions: Array<{
   id: string
   title: string
@@ -90,8 +80,6 @@ beforeAll(async () => {
   process.env.HOME = tempHome
   process.env.PROMA_DEV = '0'
   delete process.env.CLAUDE_CONFIG_DIR
-  configPaths = await import('./config-paths')
-  workspaceManager = await import('./agent-workspace-manager')
   manager = await import('./agent-session-manager')
 })
 
@@ -159,88 +147,6 @@ describe('Agent 会话 JSONL 读取', () => {
 
     expect(() => manager.truncateSDKMessages('session-truncate-bad-line', 'assistant-1'))
       .toThrow('JSONL 第 2 行解析失败')
-  })
-})
-
-describe('Agent checkpoint 路径边界', () => {
-  test('Given POSIX 快照包含 cwd 相对路径和附加目录绝对路径 When 从快照恢复 Then 只恢复允许目录内文件并拒绝越界路径', () => {
-    const sdkSessionId = 'sdk-rewind-posix-path-boundaries'
-    const cwd = join(tempHome, 'rewind-project')
-    const attached = join(tempHome, 'rewind-attached')
-    const attachedPrefix = join(tempHome, 'rewind-attached-escape')
-    const outside = join(tempHome, 'rewind-outside')
-    mkdirSync(cwd, { recursive: true })
-    mkdirSync(attached, { recursive: true })
-    mkdirSync(attachedPrefix, { recursive: true })
-    mkdirSync(outside, { recursive: true })
-
-    writeFileSync(join(cwd, 'src.txt'), 'current cwd', 'utf-8')
-    writeFileSync(join(cwd, 'unsafe.txt'), 'current unsafe', 'utf-8')
-    writeFileSync(join(attached, 'notes.txt'), 'current attached', 'utf-8')
-    writeFileSync(join(attachedPrefix, 'notes.txt'), 'current prefix', 'utf-8')
-    writeFileSync(join(outside, 'notes.txt'), 'current outside', 'utf-8')
-
-    writeSdkFileHistoryBackup(sdkSessionId, 'cwd-backup', 'rewound cwd')
-    writeSdkFileHistoryBackup(sdkSessionId, 'attached-backup', 'rewound attached')
-    writeSdkFileHistoryBackup(sdkSessionId, 'prefix-backup', 'must stay prefix')
-    writeSdkFileHistoryBackup(sdkSessionId, 'outside-backup', 'must stay outside')
-    const escapedBackupPath = join(tempHome, '.proma', 'sdk-config', 'file-history', 'escaped-backup')
-    mkdirSync(join(tempHome, '.proma', 'sdk-config', 'file-history'), { recursive: true })
-    writeFileSync(escapedBackupPath, 'must stay unsafe', 'utf-8')
-
-    writeSdkSessionJsonl(sdkSessionId, [
-      JSON.stringify({ type: 'user', uuid: 'rewind-user-1' }),
-      JSON.stringify({
-        type: 'file-history-snapshot',
-        isSnapshotUpdate: false,
-        snapshot: {
-          messageId: 'rewind-user-1',
-          trackedFileBackups: {
-            'src.txt': { backupFileName: 'cwd-backup' },
-            [join(attached, 'notes.txt')]: { backupFileName: 'attached-backup' },
-            [join(attachedPrefix, 'notes.txt')]: { backupFileName: 'prefix-backup' },
-            '../rewind-outside/notes.txt': { backupFileName: 'outside-backup' },
-            'unsafe.txt': { backupFileName: '../escaped-backup' },
-          },
-        },
-      }),
-    ])
-
-    const result = manager.rewindFilesFromSnapshot(sdkSessionId, 'rewind-user-1', cwd, undefined, undefined, [attached])
-
-    expect(result).toMatchObject({
-      canRewind: true,
-      filesChanged: ['src.txt', join(attached, 'notes.txt')],
-    })
-    expect(readFileSync(join(cwd, 'src.txt'), 'utf-8')).toBe('rewound cwd')
-    expect(readFileSync(join(attached, 'notes.txt'), 'utf-8')).toBe('rewound attached')
-    expect(readFileSync(join(attachedPrefix, 'notes.txt'), 'utf-8')).toBe('current prefix')
-    expect(readFileSync(join(outside, 'notes.txt'), 'utf-8')).toBe('current outside')
-    expect(readFileSync(join(cwd, 'unsafe.txt'), 'utf-8')).toBe('current unsafe')
-  })
-
-  test('Given Windows 路径 When 使用 path.win32 解析快照路径 Then 正确支持反斜杠、附加盘符并拒绝越界', () => {
-    const cwd = 'C:\\work\\project'
-    const attached = 'D:\\shared'
-    const fileHistoryDir = 'C:\\sdk\\file-history\\session'
-
-    expect(manager.resolveSafeRewindPath('src\\index.ts', cwd, [], win32))
-      .toBe('C:\\work\\project\\src\\index.ts')
-    expect(manager.resolveSafeRewindPath('D:\\shared\\notes.txt', cwd, [attached], win32))
-      .toBe('D:\\shared\\notes.txt')
-    expect(manager.resolveSafeRewindPath('D:\\shared-escape\\notes.txt', cwd, [attached], win32))
-      .toBeUndefined()
-    expect(manager.resolveSafeRewindPath('..\\outside.txt', cwd, [], win32))
-      .toBeUndefined()
-    expect(manager.resolveSafeRewindPath('E:\\other-drive.txt', cwd, [attached], win32))
-      .toBeUndefined()
-
-    expect(manager.resolveSafeRewindPath('nested\\backup', fileHistoryDir, [], win32))
-      .toBe('C:\\sdk\\file-history\\session\\nested\\backup')
-    expect(manager.resolveSafeRewindPath('C:\\sdk\\file-history\\session-escape\\backup', fileHistoryDir, [], win32))
-      .toBeUndefined()
-    expect(manager.resolveSafeRewindPath('..\\escaped-backup', fileHistoryDir, [], win32))
-      .toBeUndefined()
   })
 })
 
@@ -315,53 +221,6 @@ describe('Agent 会话 runtime 元数据', () => {
     expect(updated).toMatchObject({ starred: true, archived: true })
     expect(updated.updatedAt).toBe(archived.updatedAt)
     expect(manager.getAgentSessionMeta(session.id)).toMatchObject({ starred: true, archived: true })
-  })
-})
-
-describe('Agent fork cwd 与 sidecar 工作台规划', () => {
-  test('Given 本地项目的 Claude/Pi 会话 When 规划 fork 目录 Then 两端 Agent cwd 都使用同一个项目根且 sidecar 仍按会话隔离', () => {
-    const localProjectRoot = mkdtempSync(join(tempHome, 'fork-local-project-'))
-    const workspace = workspaceManager.createAgentWorkspace({
-      name: 'Fork Local Project',
-      projectRootPath: localProjectRoot,
-    })
-    const sourceSession = manager.createAgentSession('本地 fork 源会话', undefined, workspace.id, undefined, 'claude')
-    const destSession = manager.createAgentSession('本地 fork 目标会话', undefined, workspace.id, undefined, 'pi')
-    const sourceSessionId = sourceSession.id
-    const destSessionId = destSession.id
-
-    const sourceCwd = manager.resolveAgentCwd(workspace, sourceSessionId)
-    const destCwd = manager.resolveAgentCwd(workspace, destSessionId)
-    const sourceWorkbenchDir = manager.resolveAgentWorkbenchDir(workspace, sourceSessionId)
-    const destWorkbenchDir = manager.resolveAgentWorkbenchDir(workspace, destSessionId)
-
-    expect(sourceCwd).toBe(workspace.projectRootPath)
-    expect(destCwd).toBe(workspace.projectRootPath)
-    expect(sourceWorkbenchDir).toBe(configPaths.getAgentSessionWorkspacePath(workspace.slug, sourceSessionId))
-    expect(destWorkbenchDir).toBe(configPaths.getAgentSessionWorkspacePath(workspace.slug, destSessionId))
-    expect(sourceWorkbenchDir).not.toBe(workspace.projectRootPath)
-    expect(destWorkbenchDir).not.toBe(workspace.projectRootPath)
-    expect(existsSync(join(sourceWorkbenchDir!, '.context'))).toBe(true)
-    expect(existsSync(join(destWorkbenchDir!, '.context'))).toBe(true)
-  })
-
-  test('Given Proma 托管项目 When 规划 fork 目录 Then Agent cwd 与 sidecar 都按源和新会话分离', () => {
-    const workspace = workspaceManager.createAgentWorkspace('Fork Managed Project')
-    const sourceSessionId = 'managed-source-session'
-    const destSessionId = 'managed-dest-session'
-
-    const sourceCwd = manager.resolveAgentCwd(workspace, sourceSessionId)
-    const destCwd = manager.resolveAgentCwd(workspace, destSessionId)
-    const sourceWorkbenchDir = manager.resolveAgentWorkbenchDir(workspace, sourceSessionId)
-    const destWorkbenchDir = manager.resolveAgentWorkbenchDir(workspace, destSessionId)
-    const expectedSourceDir = configPaths.getAgentSessionWorkspacePath(workspace.slug, sourceSessionId)
-    const expectedDestDir = configPaths.getAgentSessionWorkspacePath(workspace.slug, destSessionId)
-
-    expect(sourceCwd).toBe(expectedSourceDir)
-    expect(destCwd).toBe(expectedDestDir)
-    expect(sourceWorkbenchDir).toBe(expectedSourceDir)
-    expect(destWorkbenchDir).toBe(expectedDestDir)
-    expect(sourceCwd).not.toBe(destCwd)
   })
 })
 

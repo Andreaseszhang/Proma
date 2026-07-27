@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test'
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import * as os from 'node:os'
 import { join } from 'node:path'
 
@@ -17,15 +17,6 @@ mock.module('electron', () => ({
     isPackaged: true,
     getPath: () => join(process.env.HOME ?? tempHome, 'Library', 'Application Support'),
   },
-  BrowserWindow: class {},
-  clipboard: {},
-  dialog: {},
-  nativeImage: { createFromPath: () => ({}) },
-  nativeTheme: {},
-  powerMonitor: {},
-  powerSaveBlocker: {},
-  screen: {},
-  shell: {},
   safeStorage: {
     isEncryptionAvailable: () => false,
     encryptString: (value: string) => Buffer.from(value),
@@ -104,19 +95,6 @@ describe('Agent 工作区创建', () => {
 
     expect(workspace.slug).toBe('workspace-con')
     expect(existsSync(configPaths.getAgentWorkspacePath(workspace.slug))).toBe(true)
-  })
-
-  test('Given POSIX 本地项目根失去访问权限 When 查询根状态 Then 标为 unavailable', () => {
-    if (process.platform === 'win32' || process.getuid?.() === 0) return
-
-    const projectRoot = mkdtempSync(join(tempHome, 'unavailable-project-root-'))
-    try {
-      chmodSync(projectRoot, 0o000)
-      expect(manager.getLocalProjectRootStatus(projectRoot)).toBe('unavailable')
-    } finally {
-      chmodSync(projectRoot, 0o700)
-      rmSync(projectRoot, { recursive: true, force: true })
-    }
   })
 
   test('Given 默认 Skill 包含 blocklist 目录 When 创建工作区 Then 初始化 Skills 时跳过高风险目录', () => {

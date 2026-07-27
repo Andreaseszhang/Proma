@@ -1059,6 +1059,8 @@ interface ErrorMessageProps {
   onRetryInNewSession?: () => void
   /** 压缩上下文回调（仅 prompt_too_long 错误使用） */
   onCompact?: () => void
+  onRelinkProjectRoot?: () => void
+  onRestoreProjectRoot?: () => void
 }
 
 interface AssistantErrorTailProps {

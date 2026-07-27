@@ -1,11 +1,15 @@
 import { afterAll, beforeAll, describe, expect, mock, test } from 'bun:test'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import * as os from 'node:os'
 import { join, win32 } from 'node:path'
 
 type AgentSessionManager = typeof import('./agent-session-manager')
+type AgentWorkspaceManager = typeof import('./agent-workspace-manager')
+type ConfigPathsModule = typeof import('./config-paths')
 
 let manager: AgentSessionManager
+let workspaceManager: AgentWorkspaceManager
+let configPaths: ConfigPathsModule
 let tempHome: string
 const originalHome = process.env.HOME
 const originalPromaDev = process.env.PROMA_DEV
@@ -86,6 +90,8 @@ beforeAll(async () => {
   process.env.HOME = tempHome
   process.env.PROMA_DEV = '0'
   delete process.env.CLAUDE_CONFIG_DIR
+  configPaths = await import('./config-paths')
+  workspaceManager = await import('./agent-workspace-manager')
   manager = await import('./agent-session-manager')
 })
 
@@ -339,7 +345,7 @@ describe('Agent fork cwd 与 sidecar 工作台规划', () => {
     expect(existsSync(join(destWorkbenchDir!, '.context'))).toBe(true)
   })
 
-  test('Given Proma 托管项目 When 规划 fork 目录 Then Agent cwd 与 sidecar 都按源/新会话分离', () => {
+  test('Given Proma 托管项目 When 规划 fork 目录 Then Agent cwd 与 sidecar 都按源和新会话分离', () => {
     const workspace = workspaceManager.createAgentWorkspace('Fork Managed Project')
     const sourceSessionId = 'managed-source-session'
     const destSessionId = 'managed-dest-session'

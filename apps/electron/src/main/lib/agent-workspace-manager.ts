@@ -6,7 +6,7 @@
  * - 工作区目录：~/.proma/agent-workspaces/{slug}/（Agent 的 cwd）
  */
 
-import { readFileSync, writeFileSync, existsSync, readdirSync, cpSync, mkdirSync, statSync, openSync, readSync, closeSync, realpathSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, readdirSync, cpSync, mkdirSync, statSync, openSync, readSync, closeSync, realpathSync, accessSync, constants } from 'node:fs'
 import type { Dirent } from 'node:fs'
 import { rmSyncWithRetry, renameWithRetry } from './fs-retry'
 import { writeJsonFileAtomic, readJsonFileSafe } from './safe-file'
@@ -169,7 +169,9 @@ export function getLocalProjectRootStatus(projectRootPath: string | undefined): 
   if (!existsSync(projectRootPath)) return 'missing'
 
   try {
-    return statSync(projectRootPath).isDirectory() ? 'available' : 'not_directory'
+    if (!statSync(projectRootPath).isDirectory()) return 'not_directory'
+    accessSync(projectRootPath, constants.R_OK | constants.W_OK | constants.X_OK)
+    return 'available'
   } catch {
     return 'unavailable'
   }
@@ -270,6 +272,9 @@ export function createAgentWorkspace(input: string | CreateAgentWorkspaceInput):
       if (!statSync(normalizedProjectRootPath).isDirectory()) {
         throw new Error('选择的路径不是文件夹')
       }
+      if (getLocalProjectRootStatus(normalizedProjectRootPath) !== 'available') {
+        throw new Error('选择的文件夹不可访问')
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : '无法访问选择的文件夹'
       throw new Error(`项目文件夹无效: ${message}`)
@@ -354,6 +359,9 @@ export function relinkAgentWorkspaceProjectRoot(id: string, projectRootPath: str
     normalizedProjectRootPath = realpathSync(resolve(projectRootPath))
     if (!statSync(normalizedProjectRootPath).isDirectory()) {
       throw new Error('选择的路径不是文件夹')
+    }
+    if (getLocalProjectRootStatus(normalizedProjectRootPath) !== 'available') {
+      throw new Error('选择的文件夹不可访问')
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : '无法访问选择的文件夹'

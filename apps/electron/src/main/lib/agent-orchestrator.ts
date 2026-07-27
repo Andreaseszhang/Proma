@@ -874,10 +874,11 @@ export class AgentOrchestrator {
    * 通过 EventBus 分发 AgentEvent，通过 callbacks 发送控制信号。
    */
   async sendMessage(input: AgentSendInput, callbacks: SessionCallbacks): Promise<void> {
-    const { sessionId, userMessage, channelId, modelId, agentRuntime: inputAgentRuntime, workspaceId, additionalDirectories, customMcpServers, permissionModeOverride, mentionedSkills, mentionedMcpServers, mentionedSessionIds, automationContext, retryOfErrorUuid } = input
+    const { sessionId, userMessage, channelId, modelId, agentRuntime: inputAgentRuntime, workspaceId: requestedWorkspaceId, additionalDirectories, customMcpServers, permissionModeOverride, mentionedSkills, mentionedMcpServers, mentionedSessionIds, automationContext, retryOfErrorUuid } = input
     const stderrChunks: string[] = []
     const streamStartedAt = input.startedAt ?? Date.now()
     let userMessagePersisted = false
+    let sessionMeta = getAgentSessionMeta(sessionId)
 
     const persistInitialUserMessage = (): void => {
       if (userMessagePersisted) return
@@ -948,6 +949,21 @@ export class AgentOrchestrator {
       callbacks.onError(errorContent)
       callbacks.onComplete([], { startedAt: streamStartedAt })
     }
+
+    // 会话元数据是运行项目的权威来源。渲染端的当前项目只是导航状态，不能
+    // 覆盖已存在会话的项目归属，否则会把 Agent cwd 指到另一个用户项目根。
+    const sessionWorkspaceId = sessionMeta?.workspaceId
+    if (sessionWorkspaceId && requestedWorkspaceId && requestedWorkspaceId !== sessionWorkspaceId) {
+      reportPreflightError({
+        code: 'unknown_error',
+        title: '会话项目不匹配',
+        message: '当前会话所属项目与请求项目不一致，已拒绝执行以避免访问错误的项目目录。',
+        actions: [],
+        canRetry: false,
+      })
+      return
+    }
+    const workspaceId = sessionWorkspaceId ?? requestedWorkspaceId
 
     // 本地项目根由用户管理。根目录被删除、替换为文件或无法访问时，绝不能
     // 进入 SDK/Agent 初始化链路，以免后续文件工具通过 mkdir 间接重建该目录。
@@ -1055,7 +1071,6 @@ export class AgentOrchestrator {
     }
 
     const appSettings = getSettings()
-    let sessionMeta = getAgentSessionMeta(sessionId)
     // 历史会话缺失 runtime 时按 Claude 兼容；新会话创建时已持久化其默认 runtime。
     const previousAgentRuntime = normalizeAgentRuntime(sessionMeta?.agentRuntime ?? 'claude')
     const agentRuntime = normalizeAgentRuntime(inputAgentRuntime ?? sessionMeta?.agentRuntime ?? 'claude')

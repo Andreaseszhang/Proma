@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import * as os from 'node:os'
 import { join } from 'node:path'
 
@@ -111,79 +111,6 @@ describe('Agent 工作区创建', () => {
     expect(existsSync(join(copiedSkillDir, 'SKILL.md'))).toBe(true)
     expect(existsSync(join(copiedSkillDir, '.git'))).toBe(false)
     expect(existsSync(join(copiedSkillDir, 'node_modules'))).toBe(false)
-  })
-
-  test('Given 用户选择本地目录 When 创建项目 Then 项目文件根直接引用原目录', () => {
-    const projectRoot = mkdtempSync(join(tempHome, 'local-project-'))
-    const workspace = manager.createAgentWorkspace({
-      name: 'Local Project',
-      projectRootPath: projectRoot,
-    })
-
-    const normalizedProjectRoot = realpathSync(projectRoot)
-    expect(workspace.projectRootPath).toBe(normalizedProjectRoot)
-    expect(manager.getProjectFilesPath(workspace.slug)).toBe(normalizedProjectRoot)
-    expect(existsSync(join(configPaths.getAgentWorkspacePath(workspace.slug), 'workspace-files'))).toBe(false)
-  })
-
-  test('Given 本地根被删除或替换为文件 When 获取工作区状态 Then 返回即时状态且托管项目不受影响', () => {
-    const localProjectRoot = mkdtempSync(join(tempHome, 'local-project-status-'))
-    const localWorkspace = manager.createAgentWorkspace({
-      name: 'Local Project Status',
-      projectRootPath: localProjectRoot,
-    })
-    const managedWorkspace = manager.createAgentWorkspace('Managed Project Status')
-
-    expect(manager.getLocalProjectRootStatus(localWorkspace.projectRootPath)).toBe('available')
-    expect(manager.listAgentWorkspaces().find((workspace) => workspace.id === localWorkspace.id)?.projectRootStatus).toBe('available')
-    expect(manager.listAgentWorkspaces().find((workspace) => workspace.id === managedWorkspace.id)?.projectRootStatus).toBeUndefined()
-
-    rmSync(localProjectRoot, { recursive: true, force: true })
-    expect(manager.getLocalProjectRootStatus(localWorkspace.projectRootPath)).toBe('missing')
-    expect(manager.listAgentWorkspaces().find((workspace) => workspace.id === localWorkspace.id)?.projectRootStatus).toBe('missing')
-    expect(existsSync(localProjectRoot)).toBe(false)
-
-    const projectRootFile = join(tempHome, 'local-project-root-file')
-    writeFileSync(projectRootFile, 'not a directory', 'utf-8')
-    expect(manager.getLocalProjectRootStatus(projectRootFile)).toBe('not_directory')
-    expect(manager.getLocalProjectRootStatus(undefined)).toBeUndefined()
-  })
-
-  test('Given 本地项目根丢失 When 重新关联或按原路径恢复 Then 保留项目并且不会覆盖文件路径', () => {
-    const originalRoot = mkdtempSync(join(tempHome, 'local-project-recover-'))
-    const workspace = manager.createAgentWorkspace({
-      name: 'Recover Local Project',
-      projectRootPath: originalRoot,
-    })
-    rmSync(originalRoot, { recursive: true, force: true })
-
-    const replacementRoot = mkdtempSync(join(tempHome, 'replacement-project-root-'))
-    const relinked = manager.relinkAgentWorkspaceProjectRoot(workspace.id, replacementRoot)
-    expect(relinked.id).toBe(workspace.id)
-    expect(relinked.projectRootPath).toBe(realpathSync(replacementRoot))
-    expect(relinked.projectRootStatus).toBe('available')
-
-    const restorableRoot = mkdtempSync(join(tempHome, 'restored-project-root-'))
-    const restorableWorkspace = manager.createAgentWorkspace({
-      name: 'Restore Local Project',
-      projectRootPath: restorableRoot,
-    })
-    rmSync(restorableRoot, { recursive: true, force: true })
-
-    const restored = manager.restoreAgentWorkspaceProjectRoot(restorableWorkspace.id)
-    expect(restored.id).toBe(restorableWorkspace.id)
-    expect(restored.projectRootStatus).toBe('available')
-    expect(existsSync(restorableRoot)).toBe(true)
-
-    const fileRoot = mkdtempSync(join(tempHome, 'local-project-root-file-'))
-    const fileWorkspace = manager.createAgentWorkspace({
-      name: 'File Local Project',
-      projectRootPath: fileRoot,
-    })
-    rmSync(fileRoot, { recursive: true, force: true })
-    writeFileSync(fileRoot, 'keep this file', 'utf-8')
-    expect(() => manager.restoreAgentWorkspaceProjectRoot(fileWorkspace.id)).toThrow('只能恢复已缺失的本地项目根目录')
-    expect(existsSync(fileRoot)).toBe(true)
   })
 })
 

@@ -5,7 +5,7 @@
  */
 
 import { ipcMain, nativeTheme, shell, dialog, BrowserWindow, app, clipboard, nativeImage } from 'electron'
-import { basename, join, resolve, sep, dirname } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { existsSync, realpathSync, rmSync, readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -342,7 +342,12 @@ function getAuthorizedRoots(options?: FileAccessOptions): string[] {
 
 function isUnderRoot(resolvedPath: string, root: string): boolean {
   const resolvedRoot = realpathOrResolve(root)
-  return resolvedPath === resolvedRoot || resolvedPath.startsWith(resolvedRoot + sep)
+  const relativePath = relative(resolvedRoot, resolvedPath)
+  return relativePath === '' || (
+    relativePath !== '..'
+    && !relativePath.startsWith(`..${sep}`)
+    && !isAbsolute(relativePath)
+  )
 }
 
 function isPathAllowed(filePath: string, options?: FileAccessOptions): boolean {
@@ -2127,6 +2132,19 @@ export function registerIpcHandlers(): void {
         .filter((automation) => automation.workspaceId === id)
         .map((automation) => automation.id)
       const deletedProjectRoot = deletingWorkspace.projectRootPath
+      const removedDingTalkBindings = dingtalkBridgeManager.removeBindingsForDeletedWorkspace(id, affectedSessionIds)
+      const removedWeChatBindings = wechatBridge.removeBindingsForDeletedWorkspace(id, affectedSessionIds)
+      const removedFeishuBindings = feishuBridgeManager.removeBindingsForDeletedWorkspace(id, affectedSessionIds)
+
+      if (removedDingTalkBindings > 0) {
+        console.log(`[项目删除] 已移除 ${removedDingTalkBindings} 条钉钉聊天绑定`)
+      }
+      if (removedWeChatBindings > 0) {
+        console.log(`[项目删除] 已移除 ${removedWeChatBindings} 条微信聊天绑定`)
+      }
+      if (removedFeishuBindings > 0) {
+        console.log(`[项目删除] 已移除 ${removedFeishuBindings} 条飞书聊天绑定`)
+      }
 
       for (const sessionId of affectedSessionIds) {
         if (isAgentSessionActive(sessionId)) {
@@ -2139,10 +2157,6 @@ export function registerIpcHandlers(): void {
       }
       if (affectedAutomationIds.length > 0) {
         broadcastAutomationsChanged()
-      }
-      const removedFeishuBindings = feishuBridgeManager.removeBindingsForDeletedWorkspace(id, affectedSessionIds)
-      if (removedFeishuBindings > 0) {
-        console.log(`[项目删除] 已移除 ${removedFeishuBindings} 条飞书聊天绑定`)
       }
       deleteAgentWorkspace(id)
 

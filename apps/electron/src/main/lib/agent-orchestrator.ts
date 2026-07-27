@@ -17,7 +17,7 @@
 import { randomUUID } from 'node:crypto'
 import { homedir } from 'node:os'
 import { join, dirname } from 'node:path'
-import { existsSync, mkdirSync } from 'node:fs'
+import { accessSync, constants, existsSync, mkdirSync, realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { app } from 'electron'
 import type { AgentRuntime, AgentSendInput, AgentMessage, AgentGenerateTitleInput, AgentProviderAdapter, AgentSessionMeta, CodexOAuthCredentials, TypedError, RetryAttempt, SDKMessage, SDKAssistantMessage, AgentStreamPayload, RewindSessionResult, ProviderType } from '@proma/shared'
@@ -28,6 +28,7 @@ import {
   THINKING_SIGNATURE_ERROR_MESSAGE,
   THINKING_SIGNATURE_ERROR_TITLE,
   isPersistableSDKSystemMessage,
+  normalizePathForCompare,
   normalizeMcpTransportType,
   inferAgentSdkContextWindow,
   inferReasoningTransport,
@@ -380,6 +381,34 @@ function buildPiAdditionalDirectoriesPrompt(directories: string[]): string {
 如需读取或修改这些目录中的内容，请直接使用绝对路径，不要先复制到当前工作目录。
 ${directoryLines}
 </attached_directories>`
+}
+
+const LOCAL_PROJECT_ROOT_UNAVAILABLE_CODE = 'local_project_root_unavailable'
+
+function createLocalProjectRootUnavailableError(projectRootPath: string, status?: string): Error {
+  const error = new Error(
+    `本地项目根目录不可用: 本地项目根目录不存在或无法访问：${projectRootPath}。请在 Proma 中重新选择项目文件夹。`,
+  ) as Error & { code?: string; details?: string[] }
+  error.code = LOCAL_PROJECT_ROOT_UNAVAILABLE_CODE
+  error.details = status ? [`目录状态: ${status}`] : undefined
+  return error
+}
+
+/** 验证本地项目根，并返回用于跨会话比较的真实规范化路径。 */
+function resolveLocalProjectRootForRewind(projectRootPath: string): string {
+  const status = getLocalProjectRootStatus(projectRootPath)
+  if (status !== 'available') {
+    throw createLocalProjectRootUnavailableError(projectRootPath, status)
+  }
+
+  try {
+    accessSync(projectRootPath, constants.R_OK | constants.W_OK | constants.X_OK)
+    const realRoot = realpathSync(projectRootPath)
+    const normalizedRoot = normalizePathForCompare(realRoot) || realRoot
+    return process.platform === 'win32' ? normalizedRoot.toLowerCase() : normalizedRoot
+  } catch {
+    throw createLocalProjectRootUnavailableError(projectRootPath, 'unavailable')
+  }
 }
 
 // ===== AgentOrchestrator =====
@@ -2512,6 +2541,29 @@ export class AgentOrchestrator {
     return this.activeSessions.has(sessionId)
   }
 
+  /** 同一个真实本地项目根只能由一个运行中会话执行文件回退。 */
+  private hasOtherActiveSessionForLocalProjectRoot(sessionId: string, localProjectRoot: string): boolean {
+    for (const activeSessionId of this.activeSessions.keys()) {
+      if (activeSessionId === sessionId) continue
+
+      const activeSessionMeta = getAgentSessionMeta(activeSessionId)
+      if (!activeSessionMeta?.workspaceId) continue
+
+      const activeWorkspace = getAgentWorkspace(activeSessionMeta.workspaceId)
+      if (!activeWorkspace?.projectRootPath) continue
+
+      try {
+        if (resolveLocalProjectRootForRewind(activeWorkspace.projectRootPath) === localProjectRoot) {
+          return true
+        }
+      } catch {
+        // 运行中的会话已通过启动时校验；若其根后来不可用，无法安全比较，跳过即可。
+      }
+    }
+
+    return false
+  }
+
   /**
    * 运行中动态切换会话的权限模式
    *
@@ -2558,6 +2610,17 @@ export class AgentOrchestrator {
       throw new Error('会话没有 SDK session ID，无法回退')
     }
 
+    const workspace = sessionMeta.workspaceId
+      ? getAgentWorkspace(sessionMeta.workspaceId)
+      : undefined
+    const localProjectRoot = workspace?.projectRootPath
+      ? resolveLocalProjectRootForRewind(workspace.projectRootPath)
+      : undefined
+
+    if (localProjectRoot && this.hasOtherActiveSessionForLocalProjectRoot(sessionId, localProjectRoot)) {
+      throw new Error('同一项目的其他会话正在运行，请先停止同项目的其他会话后再回退文件')
+    }
+
     // Pi 使用原生树状 session 导出一个持久 artifact；不能复用 Claude snapshot
     // 或仅截断 renderer JSONL，否则下一轮 resume 会重新加载被舍弃的上下文。
     if (sessionMeta.agentRuntime === 'pi') {
@@ -2575,12 +2638,9 @@ export class AgentOrchestrator {
     // 0.5 从 SDK session JSONL 解析对应的 user message UUID（rewindFiles 需要）
     let projectDir: string | undefined
     let workspaceSlug: string | undefined
-    if (sessionMeta.workspaceId) {
-      const ws = getAgentWorkspace(sessionMeta.workspaceId)
-      if (ws) {
-        workspaceSlug = ws.slug
-        projectDir = ws.projectRootPath ?? getAgentSessionWorkspacePath(ws.slug, sessionMeta.id)
-      }
+    if (workspace) {
+      workspaceSlug = workspace.slug
+      projectDir = workspace.projectRootPath ?? getAgentSessionWorkspacePath(workspace.slug, sessionMeta.id)
     }
     const userMessageUuid = resolveUserUuidFromSDK(sessionMeta.sdkSessionId, assistantMessageUuid, projectDir, sessionMeta.forkSourceSdkSessionId)
     console.log(`[Agent 编排] 回退: 解析 user uuid=${userMessageUuid || '未找到'} (assistant uuid=${assistantMessageUuid}, forkSource=${sessionMeta.forkSourceSdkSessionId ?? 'none'})`)

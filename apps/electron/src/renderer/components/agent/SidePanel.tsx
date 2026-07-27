@@ -136,6 +136,7 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
   const currentWorkspaceId = sessions.find((session) => session.id === sessionId)?.workspaceId ?? selectedWorkspaceId
   const currentWorkspace = workspaces.find((workspace) => workspace.id === currentWorkspaceId)
   const workspaceSlug = currentWorkspace?.slug ?? null
+  const projectRootPath = currentWorkspace?.projectRootPath ?? null
   const projectRootSourceLabel = currentWorkspace?.projectRootPath ? '本地目录' : 'Proma 托管'
   const isProjectRootUnavailable = Boolean(
     currentWorkspace?.projectRootPath
@@ -378,12 +379,24 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
   // 工作区文件目录路径
   const [workspaceFilesPath, setWorkspaceFilesPath] = React.useState<string | null>(null)
   React.useEffect(() => {
-    if (!workspaceSlug) {
-      setWorkspaceFilesPath(null)
-      return
+    let disposed = false
+
+    // 在相同 slug 重新关联本地目录时，先清除旧路径，避免旧目录短暂继续可见或被使用。
+    setWorkspaceFilesPath(null)
+    if (!workspaceSlug) return
+
+    window.electronAPI.getWorkspaceFilesPath(workspaceSlug)
+      .then((path) => {
+        if (!disposed) setWorkspaceFilesPath(path)
+      })
+      .catch(() => {
+        if (!disposed) setWorkspaceFilesPath(null)
+      })
+
+    return () => {
+      disposed = true
     }
-    window.electronAPI.getWorkspaceFilesPath(workspaceSlug).then(setWorkspaceFilesPath).catch(() => setWorkspaceFilesPath(null))
-  }, [workspaceSlug])
+  }, [workspaceSlug, projectRootPath])
 
   const worktreeRepoPathsMemo = React.useMemo(
     () => [sessionPath, workspaceFilesPath, ...extraPathsMemo].filter(Boolean) as string[],

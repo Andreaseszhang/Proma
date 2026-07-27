@@ -797,17 +797,29 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
   }, [sessionId, currentWorkspaceId, setSessionPathMap])
 
   // 获取工作区共享文件目录路径（@ 引用时需要搜索）
-  const workspaceSlug = workspaces.find((w) => w.id === currentWorkspaceId)?.slug ?? null
+  const currentWorkspace = workspaces.find((workspace) => workspace.id === currentWorkspaceId)
+  const workspaceSlug = currentWorkspace?.slug ?? null
+  const projectRootPath = currentWorkspace?.projectRootPath ?? null
   React.useEffect(() => {
-    if (!workspaceSlug) {
-      setWorkspaceFilesPath(null)
-      return
-    }
+    let disposed = false
+
+    // 同一项目重新关联本地根时 slug 保持不变，必须立即废弃旧路径与旧请求结果。
+    setWorkspaceFilesPath(null)
+    if (!workspaceSlug) return
+
     window.electronAPI
       .getWorkspaceFilesPath(workspaceSlug)
-      .then(setWorkspaceFilesPath)
-      .catch(() => setWorkspaceFilesPath(null))
-  }, [workspaceSlug])
+      .then((path) => {
+        if (!disposed) setWorkspaceFilesPath(path)
+      })
+      .catch(() => {
+        if (!disposed) setWorkspaceFilesPath(null)
+      })
+
+    return () => {
+      disposed = true
+    }
+  }, [workspaceSlug, projectRootPath])
 
   // 获取工作区级附加文件（@ 引用和路径解析都需要）
   React.useEffect(() => {

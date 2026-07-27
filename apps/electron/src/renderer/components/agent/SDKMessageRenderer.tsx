@@ -54,8 +54,7 @@ import { formatMessageTime } from '@/components/chat/ChatMessageItem'
 import { getModelLogo, resolveModelDisplayName, resolveModelProvider } from '@/lib/model-logo'
 import { userProfileAtom } from '@/atoms/user-profile'
 import { channelsAtom, modelSelectorOpenAtom } from '@/atoms/chat-atoms'
-import { agentSessionPendingFilesAtom } from '@/atoms/agent-atoms'
-import { agentSessionsAtom } from '@/atoms/agent-atoms'
+import { agentSessionPendingFilesAtom, agentSessionsAtom, agentWorkspacesAtom } from '@/atoms/agent-atoms'
 import { activeSessionIdAtom } from '@/atoms/tab-atoms'
 import { automationsAtom, automationFormAtom, automationToDraft } from '@/atoms/automation-atoms'
 import { activeViewAtom } from '@/atoms/active-view'
@@ -1048,6 +1047,10 @@ function UserInputMessage({ message }: { message: SDKUserMessage }): React.React
 
 // ===== 错误消息渲染 =====
 
+function shouldOfferProjectRootRestore(projectRootStatus: string | undefined): boolean {
+  return projectRootStatus === 'missing'
+}
+
 interface ErrorMessageProps {
   message: SDKAssistantMessage
   /** 重试回调（在当前会话内重试） */
@@ -1108,6 +1111,12 @@ export function AssistantErrorTail({
     : undefined
   const isPromptTooLong = errorCode === 'prompt_too_long'
   const isLocalProjectRootUnavailable = errorCode === 'local_project_root_unavailable'
+  const activeSessionId = useAtomValue(activeSessionIdAtom)
+  const sessions = useAtomValue(agentSessionsAtom)
+  const workspaces = useAtomValue(agentWorkspacesAtom)
+  const activeWorkspaceId = sessions.find((session) => session.id === activeSessionId)?.workspaceId
+  const projectRootStatus = workspaces.find((workspace) => workspace.id === activeWorkspaceId)?.projectRootStatus
+  const canRestoreProjectRoot = shouldOfferProjectRootRestore(projectRootStatus)
 
   const setEnvDialogOpen = useSetAtom(environmentCheckDialogOpenAtom)
   const setSettingsOpen = useSetAtom(settingsOpenAtom)
@@ -1187,7 +1196,9 @@ export function AssistantErrorTail({
 
   const hasStructuredActions = displayedErrorActions.length > 0
   const hasLegacyActions = !!(onRetry || onRetryInNewSession || (isPromptTooLong && onCompact))
-  const hasProjectRootActions = isLocalProjectRootUnavailable && !!(onRelinkProjectRoot || onRestoreProjectRoot)
+  const hasProjectRootActions = isLocalProjectRootUnavailable && !!(
+    onRelinkProjectRoot || (canRestoreProjectRoot && onRestoreProjectRoot)
+  )
   const hasActions = hasStructuredActions || hasLegacyActions || hasProjectRootActions
 
   // tail 模式：给出上边距 + 顶部细边分隔线，让它视觉上是「正文之后的一段警告」而不是「消息本身」
@@ -1242,7 +1253,7 @@ export function AssistantErrorTail({
                   重新选择文件夹
                 </Button>
               )}
-              {onRestoreProjectRoot && (
+              {canRestoreProjectRoot && onRestoreProjectRoot && (
                 <Button size="sm" variant="outline" onClick={onRestoreProjectRoot}>
                   <FolderPlus className="size-3.5 mr-1.5" />
                   在原路径新建空文件夹

@@ -1,7 +1,7 @@
 ---
 name: proma-coach
 description: Proma 使用顾问，主动把用户在 Proma/Agent/Skill/Chat 工具/工作区里的摩擦、疑惑、重复解释和低效流程，转成更顺手的使用方式或合适的知识维护动作。触发要积极：用户表达不满、困惑、重复提醒、"为什么没用/不会自动/又要我说"、"算了，我自己来"、"你上次不是说..."、"你又忘了"、"以后都这样/能不能记住/少让我选/下次自动"、询问 Proma 怎么用更好、某事能不能固化、该用 Agent 还是 Chat 工具、有没有现成 Skill、Skill 为什么没触发、想优化已有 Skill description、想减少步骤/降低认知负担/让 Proma 更懂自己的偏好时，都应触发。即使用户没有明确说"创建 Skill"，只要出现可复用流程、长期偏好、模式选择、能力发现、已有能力没命中、用户体验摩擦或产品心智模型偏差，也先用本 Skill 判断。Coach 不直接替下游干活；它负责诊断真实痛点，按 CLAUDE.md / Memory / Skills / 会话级 Context / 工作区级 Context 五层知识架构检查已有沉淀，主动设计最小维护方案或路由到 skill-creator/find-skills/tool-builder/automation，并在方案不合适时直接挑战用户。普通一次性任务不打断，但只要有"以后还会遇到"或"Proma 应该更懂我"的信号，就宁可触发后判断不沉淀，也不要错过。
-version: "1.0.4"
+version: "1.0.5"
 ---
 
 # Proma Coach
@@ -167,7 +167,7 @@ Proma 给用户提供的核心能力：
 
 **L3 全量搜索**（信号明确涉及 Context 或长期分析时）：
 6. 检查会话级 `.context/`
-7. 检查工作区级 `workspace-files/.context/` 及本地文档
+7. 检查工作区级 Context（以系统提示提供的绝对路径为准：空白项目为 `workspace-files/.context/`，本地项目为项目根目录下的 `.context/`）及相关本地文档
 
 不要为了"显得完整"而每次都做 L3 全量搜索——L1 足够覆盖大多数场景。如果 L1 确认没有任何相关沉淀，直接进入 Step 3。
 

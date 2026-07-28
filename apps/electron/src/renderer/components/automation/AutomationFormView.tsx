@@ -40,6 +40,7 @@ import { activeViewAtom, agentSkillsTabAtom } from '@/atoms/active-view'
 import { settingsOpenAtom, settingsTabAtom } from '@/atoms/settings-tab'
 import { useOpenSession } from '@/hooks/useOpenSession'
 import { MarkdownRichEditor } from '@/components/diff/MarkdownRichEditor'
+import { LocalProjectBadge } from '@/components/agent/LocalProjectBadge'
 import type {
   AutomationFeishuNotificationTarget,
   AutomationNotificationTarget,
@@ -1072,7 +1073,15 @@ export function AutomationFormView(): React.ReactElement | null {
                 <SelectTrigger><SelectValue placeholder="选择工作区" /></SelectTrigger>
                 <SelectContent>
                   {workspaces.map((ws) => (
-                    <SelectItem key={ws.id} value={ws.id}>{ws.name}</SelectItem>
+                    <SelectItem key={ws.id} value={ws.id}>
+                      <span className="flex items-center gap-1.5">
+                        <span>{ws.name}</span>
+                        <LocalProjectBadge
+                          projectRootPath={ws.projectRootPath}
+                          projectRootStatus={ws.projectRootStatus}
+                        />
+                      </span>
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>

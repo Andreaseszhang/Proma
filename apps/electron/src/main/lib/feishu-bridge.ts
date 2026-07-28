@@ -34,6 +34,7 @@ import { createAgentSession, listAgentSessions, getAgentSessionMeta } from './ag
 import {
   listAgentWorkspacesByUpdatedAt,
   getAgentWorkspace,
+  getProjectFilesPath,
   getWorkspaceCapabilities,
 } from './agent-workspace-manager'
 import { getFeishuBotBindingsPath, getFeishuBotMetadataPath } from './config-paths'
@@ -1445,14 +1446,13 @@ class FeishuBridge {
         lines.push('**Skills**: 无')
       }
 
-      // 工作区文件列表（递归，体现文件夹-文件层级）
-      const { resolveWorkspaceFilesDir: resolveWsFilesDir } = await import('./config-paths')
-      const wsPath = resolveWsFilesDir(workspace.slug)
+      // 项目根目录文件列表（递归，体现文件夹-文件层级）
+      const projectRoot = getProjectFilesPath(workspace.slug)
       try {
-        const treeLines = buildFileTree(wsPath, { dirIcon: '', fileIcon: '' })
+        const treeLines = buildFileTree(projectRoot, { dirIcon: '', fileIcon: '' })
         if (treeLines.length > 0) {
           lines.push('')
-          lines.push('**工作区文件**:')
+          lines.push(`**项目文件**（项目根目录: \`${projectRoot}\`）:`)
           for (const l of treeLines) {
             lines.push(`  ${l}`)
           }

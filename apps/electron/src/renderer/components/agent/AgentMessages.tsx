@@ -197,6 +197,8 @@ interface AgentMessagesProps {
   stoppedByUser?: boolean
   onRetry?: () => void
   onRetryInNewSession?: () => void
+  onRelinkProjectRoot?: () => void
+  onRestoreProjectRoot?: () => void
   onFork?: (upToMessageUuid: string) => void
   onRewind?: (assistantMessageUuid: string) => void
   onCompact?: () => void
@@ -493,7 +495,7 @@ function AgentRunningIndicator({ startedAt }: { startedAt?: number }): React.Rea
   )
 }
 
-export function AgentMessages({ sessionId, sessionModelId, messagesLoaded, persistedSDKMessages, streaming, streamState, liveMessages, sessionPath, attachedDirs, stoppedByUser, onRetry, onRetryInNewSession, onFork, onRewind, onCompact }: AgentMessagesProps): React.ReactElement {
+export function AgentMessages({ sessionId, sessionModelId, messagesLoaded, persistedSDKMessages, streaming, streamState, liveMessages, sessionPath, attachedDirs, stoppedByUser, onRetry, onRetryInNewSession, onRelinkProjectRoot, onRestoreProjectRoot, onFork, onRewind, onCompact }: AgentMessagesProps): React.ReactElement {
   const userProfile = useAtomValue(userProfileAtom)
   const setMinimapCache = useSetAtom(tabMinimapCacheAtom)
   const channels = useAtomValue(channelsAtom)
@@ -748,6 +750,8 @@ export function AgentMessages({ sessionId, sessionModelId, messagesLoaded, persi
                     onRewind={shouldDisableActions ? undefined : onRewind}
                     onRetry={shouldDisableActions ? undefined : onRetry}
                     onRetryInNewSession={shouldDisableActions ? undefined : onRetryInNewSession}
+                    onRelinkProjectRoot={shouldDisableActions ? undefined : onRelinkProjectRoot}
+                    onRestoreProjectRoot={shouldDisableActions ? undefined : onRestoreProjectRoot}
                     onCompact={shouldDisableActions ? undefined : onCompact}
                     isStreaming={isLive || undefined}
                     stoppedByUser={isLastAssistantTurn || undefined}

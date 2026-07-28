@@ -21,6 +21,7 @@ import {
   agentSidePanelOpenAtom,
   currentAgentSessionIdAtom,
   currentAgentWorkspaceIdAtom,
+  agentSessionsAtom,
   agentWorkspacesAtom,
 } from '@/atoms/agent-atoms'
 import { agentSideChatMapAtom, conversationsAtom, conversationDraftsAtom, selectedModelAtom } from '@/atoms/chat-atoms'
@@ -60,7 +61,9 @@ import { SelectionActionPopover } from '@/components/selection/SelectionActionPo
 import { SELECTION_ACTION_POPOVER_SELECTOR } from '@/lib/quoted-selection'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { ImageLightbox } from '@/components/ui/image-lightbox'
+import { LocalProjectBadge } from '@/components/agent/LocalProjectBadge'
 import { openScratchInSplit } from './scratch-pad-opener'
+import { resolveScratchPadExportWorkspaceId } from '@/lib/scratch-pad-export-context'
 
 const MAX_SCRATCH_PAD_QUOTED_CHARS = 2000
 
@@ -241,14 +244,10 @@ function ScratchPadEditor({ variant }: ScratchPadEditorProps): React.ReactElemen
 
   // 导出目标上下文
   const workspaces = useAtomValue(agentWorkspacesAtom)
+  const agentSessions = useAtomValue(agentSessionsAtom)
   const currentWorkspaceId = useAtomValue(currentAgentWorkspaceIdAtom)
   const tabs = useAtomValue(tabsAtom)
   const activeTabId = useAtomValue(activeTabIdAtom)
-
-  const currentWorkspace = React.useMemo(
-    () => workspaces.find((w) => w.id === currentWorkspaceId) ?? null,
-    [workspaces, currentWorkspaceId],
-  )
 
   const activeSessionId = React.useMemo(() => {
     const activeTab = tabs.find((t) => t.id === activeTabId)
@@ -256,6 +255,16 @@ function ScratchPadEditor({ variant }: ScratchPadEditorProps): React.ReactElemen
     const agentTab = [...tabs].reverse().find((t) => t.type === 'agent')
     return agentTab?.sessionId ?? null
   }, [tabs, activeTabId])
+
+  const exportWorkspaceId = React.useMemo(
+    () => resolveScratchPadExportWorkspaceId(activeSessionId, agentSessions, currentWorkspaceId),
+    [activeSessionId, agentSessions, currentWorkspaceId],
+  )
+
+  const currentWorkspace = React.useMemo(
+    () => workspaces.find((w) => w.id === exportWorkspaceId) ?? null,
+    [workspaces, exportWorkspaceId],
+  )
 
   const activeSessionTitle = React.useMemo(() => {
     const agentTab = tabs.find((t) => t.sessionId === activeSessionId && t.type === 'agent')
@@ -488,8 +497,8 @@ function ScratchPadEditor({ variant }: ScratchPadEditorProps): React.ReactElemen
 
       try {
         let dirPath: string | null = null
-        if (target === 'session' && activeSessionId && currentWorkspaceId) {
-          dirPath = await window.electronAPI.getAgentSessionPath(currentWorkspaceId, activeSessionId)
+        if (target === 'session' && activeSessionId && exportWorkspaceId) {
+          dirPath = await window.electronAPI.getAgentSessionPath(exportWorkspaceId, activeSessionId)
         } else if (target === 'workspace' && currentWorkspace?.slug) {
           dirPath = await window.electronAPI.getWorkspaceFilesPath(currentWorkspace.slug)
         }
@@ -499,7 +508,7 @@ function ScratchPadEditor({ variant }: ScratchPadEditorProps): React.ReactElemen
         console.error('[ScratchPad] 导出失败:', err)
       }
     },
-    [editor, activeSessionId, currentWorkspaceId, currentWorkspace],
+    [editor, activeSessionId, exportWorkspaceId, currentWorkspace],
   )
 
   const handleBrowseExport = React.useCallback(async () => {
@@ -741,9 +750,13 @@ function ScratchPadEditor({ variant }: ScratchPadEditorProps): React.ReactElemen
               disabled={!currentWorkspace}
               className="flex flex-col items-start"
             >
-              <span className="text-xs">保存到工作区目录</span>
-              <span className="text-[10px] text-muted-foreground">
-                {currentWorkspace?.name ?? '无当前工作区'}
+              <span className="text-xs">保存到项目根目录</span>
+              <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                <span>{currentWorkspace?.name ?? '无当前工作区'}</span>
+                <LocalProjectBadge
+                  projectRootPath={currentWorkspace?.projectRootPath}
+                  projectRootStatus={currentWorkspace?.projectRootStatus}
+                />
               </span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />

@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
+import { LocalProjectBadge } from './LocalProjectBadge'
 import type { AgentWorkspace, AgentSessionMeta } from '@proma/shared'
 
 interface MoveSessionDialogProps {
@@ -98,7 +99,13 @@ export function MoveSessionDialog({
             <SelectContent>
               {availableWorkspaces.map((ws) => (
                 <SelectItem key={ws.id} value={ws.id}>
-                  {ws.name}
+                  <span className="flex items-center gap-1.5">
+                    <span>{ws.name}</span>
+                    <LocalProjectBadge
+                      projectRootPath={ws.projectRootPath}
+                      projectRootStatus={ws.projectRootStatus}
+                    />
+                  </span>
                 </SelectItem>
               ))}
             </SelectContent>

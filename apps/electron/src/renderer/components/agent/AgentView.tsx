@@ -1317,7 +1317,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
     const workspace = workspaces.find((w) => w.id === currentWorkspaceId)
     if (!workspace) {
       toast.warning('暂时无法发送附件', {
-        description: '当前 Agent 会话没有绑定有效工作区。请在顶部选择工作区，或新建 Agent 会话后重新上传。',
+        description: '当前 Agent 会话没有绑定有效项目。请在顶部选择项目，或新建 Agent 会话后重新上传。',
       })
       return null
     }
@@ -1404,7 +1404,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
       } catch (error) {
         console.error('[AgentView] 保存附件到 session 失败:', error)
         toast.error('附件保存失败', {
-          description: '请确认当前工作区可用，或新建 Agent 会话后重新上传。',
+          description: '请确认当前项目可用，或新建 Agent 会话后重新上传。',
         })
         return null
       }
@@ -1412,7 +1412,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
 
     if (allRefs.length === 0) {
       toast.error('附件没有成功加入消息', {
-        description: '请重新上传文件，或切换到有效工作区后再试。',
+        description: '请重新上传文件，或切换到有效项目后再试。',
       })
       return null
     }

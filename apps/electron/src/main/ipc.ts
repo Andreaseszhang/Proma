@@ -2984,7 +2984,7 @@ export function registerIpcHandlers(): void {
         return []
       }
       if (!isPathAllowed(safePath, normalizeFileAccessOptions(access))) {
-        throw new Error('访问路径超出 Agent 工作区范围')
+        throw new Error('访问路径超出当前会话的授权范围')
       }
 
       const entries: FileEntry[] = []
@@ -3025,7 +3025,7 @@ export function registerIpcHandlers(): void {
 
       const safePath = resolve(filePath)
       if (!isPathAllowed(safePath, normalizeFileAccessOptions(access))) {
-        throw new Error('访问路径超出 Agent 工作区范围')
+        throw new Error('访问路径超出当前会话的授权范围')
       }
 
       rmSync(safePath, { recursive: true, force: true })
@@ -3041,7 +3041,7 @@ export function registerIpcHandlers(): void {
 
       const safePath = resolve(filePath)
       if (!isPathAllowed(safePath, normalizeFileAccessOptions(access))) {
-        throw new Error('访问路径超出 Agent 工作区范围')
+        throw new Error('访问路径超出当前会话的授权范围')
       }
 
       await shell.openPath(safePath)
@@ -3093,7 +3093,7 @@ export function registerIpcHandlers(): void {
 
       const safePath = resolve(filePath)
       if (!isPathAllowed(safePath, normalizeFileAccessOptions(access))) {
-        throw new Error('访问路径超出 Agent 工作区范围')
+        throw new Error('访问路径超出当前会话的授权范围')
       }
 
       shell.showItemInFolder(safePath)
@@ -3108,7 +3108,7 @@ export function registerIpcHandlers(): void {
         throw new Error('当前仅支持在 macOS 终端中打开文件夹')
       }
       if (!isPathAllowed(folderPath)) {
-        throw new Error('访问路径超出 Agent 工作区范围')
+        throw new Error('访问路径超出当前会话的授权范围')
       }
 
       const safePath = realpathSync(resolve(folderPath))
@@ -3271,7 +3271,7 @@ export function registerIpcHandlers(): void {
 
       const safePath = resolve(filePath)
       if (!isPathAllowed(safePath, normalizeFileAccessOptions(access))) {
-        throw new Error('访问路径超出 Agent 工作区范围')
+        throw new Error('访问路径超出当前会话的授权范围')
       }
 
       const newPath = join(dirname(safePath), newName)
@@ -3290,7 +3290,7 @@ export function registerIpcHandlers(): void {
       const safeTarget = resolve(targetDir)
       const options = normalizeFileAccessOptions(access)
       if (!isPathAllowed(safePath, options) || !isPathAllowed(safeTarget, options)) {
-        throw new Error('访问路径超出 Agent 工作区范围')
+        throw new Error('访问路径超出当前会话的授权范围')
       }
 
       const newPath = movePathSafely(safePath, safeTarget)

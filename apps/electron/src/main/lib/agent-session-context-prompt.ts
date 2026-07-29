@@ -211,5 +211,5 @@ export function buildReferencedSessionsPrompt(
 
   if (sessionBlocks.length === 0) return ''
 
-  return `<referenced_sessions>\n用户在消息中明确引用了以下同工作区 Agent 会话。${buildReferencedSessionsHistoryInstruction(workspaceSlug)}\n${sessionBlocks.join('\n\n')}\n</referenced_sessions>`
+  return `<referenced_sessions>\n用户在消息中明确引用了以下同项目 Agent 会话。${buildReferencedSessionsHistoryInstruction(workspaceSlug)}\n${sessionBlocks.join('\n\n')}\n</referenced_sessions>`
 }

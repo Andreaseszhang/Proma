@@ -850,7 +850,7 @@ class WeChatBridge {
     }
     const workspace = binding.workspaceId ? getAgentWorkspace(binding.workspaceId) : undefined
     if (!workspace) {
-      await this.client.sendText(chatId, '⚠️ 当前未设置工作区，无法保存附件', contextToken)
+      await this.client.sendText(chatId, '⚠️ 当前未设置项目，无法保存附件', contextToken)
       return
     }
 

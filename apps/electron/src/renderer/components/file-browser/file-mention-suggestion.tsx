@@ -39,7 +39,7 @@ export function createFileMentionSuggestion(
         console.warn('[FileMention] workspacePath is null, mention disabled')
         if (!missingWorkspaceToastShown) {
           toast.warning('暂时无法引用文件', {
-            description: '当前 Agent 会话没有可用的工作区路径。请在顶部选择工作区，或新建 Agent 会话后重试。',
+            description: '当前 Agent 会话没有可用的项目路径。请在顶部选择项目，或新建 Agent 会话后重试。',
           })
           missingWorkspaceToastShown = true
         }

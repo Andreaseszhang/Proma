@@ -50,7 +50,7 @@ import { getFetchFn } from './proxy-fetch'
 import { getEffectiveProxyUrl } from './proxy-settings-service'
 import { appendSDKMessages, updateAgentSessionMeta, getAgentSessionMeta, getAgentSessionMessages, truncateSDKMessages, removeSDKErrorMessage, resolveUserUuidFromSDK, rewindFilesFromSnapshot, rewindPiAgentSession, ensureClaudeSessionSettings, resolveAgentCwd, getAgentCwdMode } from './agent-session-manager'
 import { getAgentWorkspace, getLocalProjectRootStatus, getProjectFilesPath, getWorkspaceMcpConfig, ensurePluginManifest, getWorkspaceAutoMemoryDir, getWorkspaceAttachedDirectories, getWorkspaceAttachedFiles } from './agent-workspace-manager'
-import { getAgentWorkspacePath, getAgentSessionWorkspacePath, getSdkConfigDir, getWorkspaceSkillsDir } from './config-paths'
+import { getAgentWorkspacePath, getAgentSessionWorkspacePath, getConfigDir, getSdkConfigDir, getWorkspaceSkillsDir } from './config-paths'
 import { getRuntimeStatus } from './runtime-init'
 import { getSettings } from './settings-service'
 import { buildSystemPrompt, buildDynamicContext } from './agent-prompt-builder'
@@ -496,6 +496,9 @@ export class AgentOrchestrator {
       CLAUDE_CODE_ATTRIBUTION_HEADER: '0',
       // 配置隔离：让 SDK 使用独立的配置目录，不读取用户的 ~/.claude.json
       CLAUDE_CONFIG_DIR: getSdkConfigDir(),
+      // Proma 的全局配置目录与当前项目状态，供 Claude Hooks 等受控子进程使用。
+      PROMA_HOME: getConfigDir(),
+      PROMA_NOWLEDGE_MEM_ENABLED: '0',
     }
 
     // 认证方式按 provider 分支
@@ -1255,6 +1258,9 @@ export class AgentOrchestrator {
         agentCwd = resolveAgentCwd(ws, sessionId, sessionMeta?.agentCwdMode) ?? homedir()
         workspaceSlug = ws.slug
         workspace = ws
+        sdkEnv.PROMA_WORKSPACE_DIR = getAgentWorkspacePath(ws.slug)
+        sdkEnv.PROMA_WORKSPACE_SLUG = ws.slug
+        sdkEnv.PROMA_NOWLEDGE_MEM_ENABLED = getWorkspaceMcpConfig(ws.slug).servers['nowledge-mem']?.enabled ? '1' : '0'
         console.log(`[Agent 编排] 使用 ${getAgentCwdMode(sessionMeta)} cwd: ${agentCwd} (${ws.name}/${sessionId})`)
 
         if (agentRuntime === 'claude') {
@@ -1623,6 +1629,7 @@ export class AgentOrchestrator {
         workspaceName: workspace?.name,
         workspaceSlug,
         sessionId,
+        agentCwd,
         permissionMode: initialPermissionMode,
         collaborationAvailable,
         currentModelId: selectedModelId,

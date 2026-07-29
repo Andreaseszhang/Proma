@@ -419,7 +419,7 @@ export class BridgeCommandHandler {
 
     if (orphans.length > 0) {
       lines.push('')
-      lines.push('【未分配工作区】')
+      lines.push('【未分配项目】')
       for (const s of orphans) {
         const globalIdx = sessions.indexOf(s) + 1
         const marker = binding?.sessionId === s.id ? ' ← 当前' : ''
@@ -486,16 +486,16 @@ export class BridgeCommandHandler {
     // 无参数 → 列出
     if (!arg) {
       if (workspaces.length === 0) {
-        await this.send(chatId, '暂无工作区。', contextData)
+        await this.send(chatId, '暂无项目。', contextData)
         return
       }
-      const lines = ['📋 工作区列表:']
+      const lines = ['📋 项目列表:']
       workspaces.forEach((w, i) => {
         const marker = w.id === currentWorkspaceId ? ' ← 当前' : ''
         lines.push(`  ${i + 1}. ${w.name}${marker}`)
       })
       lines.push('')
-      lines.push('使用 /workspace <序号或名称> 切换')
+      lines.push('使用 /workspace <序号或名称> 切换项目')
       await this.send(chatId, lines.join('\n'), contextData)
       return
     }
@@ -510,7 +510,7 @@ export class BridgeCommandHandler {
 
     if (!match) {
       const available = workspaces.map((w, i) => `${i + 1}. ${w.name}`).join(', ')
-      await this.send(chatId, `未找到工作区 "${arg}"。可用: ${available}`, contextData)
+      await this.send(chatId, `未找到项目 "${arg}"。可用: ${available}`, contextData)
       return
     }
 
@@ -530,7 +530,7 @@ export class BridgeCommandHandler {
       .filter((s) => s.workspaceId === match.id)
       .slice(0, 5)
 
-    const lines = [`✅ 已切换到工作区: ${match.name}`]
+    const lines = [`✅ 已切换到项目: ${match.name}`]
     if (recentSessions.length > 0) {
       lines.push('')
       lines.push('最近会话:')
@@ -541,7 +541,7 @@ export class BridgeCommandHandler {
       lines.push('')
       lines.push('使用 /switch <序号> 切换，或发送消息自动创建新会话')
     } else {
-      lines.push('该工作区暂无会话，发送消息将自动创建。')
+      lines.push('该项目暂无会话，发送消息将自动创建。')
     }
 
     await this.send(chatId, lines.join('\n'), contextData)
@@ -569,7 +569,7 @@ export class BridgeCommandHandler {
     const workspaceId = binding?.workspaceId
     const workspace = workspaceId ? getAgentWorkspace(workspaceId) : undefined
     if (workspace) {
-      lines.push(`工作区: ${workspace.name} (${workspace.slug})`)
+      lines.push(`项目: ${workspace.name} (${workspace.slug})`)
 
       // MCP Servers
       const capabilities = getWorkspaceCapabilities(workspace.slug)
@@ -623,7 +623,7 @@ export class BridgeCommandHandler {
         }
       }
     } else {
-      lines.push('工作区: 未设置')
+      lines.push('项目: 未设置')
     }
 
     await this.send(chatId, lines.join('\n'), contextData)

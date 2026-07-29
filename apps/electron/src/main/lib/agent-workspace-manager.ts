@@ -119,7 +119,7 @@ function writeIndex(index: AgentWorkspacesIndex): void {
     writeJsonFileAtomic(indexPath, index)
   } catch (error) {
     console.error('[Agent 工作区] 写入索引文件失败:', error)
-    throw new Error('写入 Agent 工作区索引失败')
+    throw new Error('写入项目配置索引失败')
   }
 }
 
@@ -258,7 +258,7 @@ export function createAgentWorkspace(input: string | CreateAgentWorkspaceInput):
 
   const duplicate = index.workspaces.find((w) => w.name === name)
   if (duplicate) {
-    throw new Error(`工作区名称「${name}」已存在`)
+    throw new Error(`项目名称「${name}」已存在`)
   }
 
   const existingSlugs = new Set(index.workspaces.map((w) => w.slug))
@@ -325,14 +325,14 @@ export function updateAgentWorkspace(
   const idx = index.workspaces.findIndex((w) => w.id === id)
 
   if (idx === -1) {
-    throw new Error(`Agent 工作区不存在: ${id}`)
+    throw new Error(`项目不存在: ${id}`)
   }
 
   const existing = index.workspaces[idx]!
 
   const duplicate = index.workspaces.find((w) => w.id !== id && w.name === updates.name)
   if (duplicate) {
-    throw new Error(`工作区名称「${updates.name}」已存在`)
+    throw new Error(`项目名称「${updates.name}」已存在`)
   }
 
   const updated: AgentWorkspace = {
@@ -352,7 +352,7 @@ export function updateAgentWorkspace(
 export function relinkAgentWorkspaceProjectRoot(id: string, projectRootPath: string): AgentWorkspace {
   const index = readIndex()
   const idx = index.workspaces.findIndex((workspace) => workspace.id === id)
-  if (idx === -1) throw new Error(`Agent 工作区不存在: ${id}`)
+  if (idx === -1) throw new Error(`项目不存在: ${id}`)
 
   let normalizedProjectRootPath: string
   try {
@@ -383,7 +383,7 @@ export function relinkAgentWorkspaceProjectRoot(id: string, projectRootPath: str
 export function restoreAgentWorkspaceProjectRoot(id: string): AgentWorkspace {
   const index = readIndex()
   const idx = index.workspaces.findIndex((workspace) => workspace.id === id)
-  if (idx === -1) throw new Error(`Agent 工作区不存在: ${id}`)
+  if (idx === -1) throw new Error(`项目不存在: ${id}`)
 
   const workspace = index.workspaces[idx]!
   if (!workspace.projectRootPath) throw new Error('该项目不是本地项目')
@@ -403,7 +403,7 @@ export function deleteAgentWorkspace(id: string): void {
   const idx = index.workspaces.findIndex((w) => w.id === id)
 
   if (idx === -1) {
-    throw new Error(`Agent 工作区不存在: ${id}`)
+    throw new Error(`项目不存在: ${id}`)
   }
 
   const target = index.workspaces[idx]!
@@ -418,7 +418,7 @@ export function deleteAgentWorkspace(id: string): void {
   const workspaceDir = resolve(join(workspacesRoot, target.slug))
   const relativePath = relative(workspacesRoot, workspaceDir)
   if (!relativePath || relativePath.startsWith('..') || isAbsolute(relativePath)) {
-    throw new Error(`工作区目录路径异常，已跳过删除: ${workspaceDir}`)
+    throw new Error(`项目配置目录路径异常，已跳过删除: ${workspaceDir}`)
   }
 
   // 先移除索引条目并落盘，再删目录：
@@ -448,20 +448,20 @@ export function ensureDefaultWorkspace(): AgentWorkspace {
     const now = Date.now()
     defaultWs = {
       id: randomUUID(),
-      name: '默认工作区',
+      name: '默认项目',
       slug: 'default',
       createdAt: now,
       updatedAt: now,
     }
 
     getAgentWorkspacePath('default')
-    ensurePluginManifest('default', '默认工作区')
+    ensurePluginManifest('default', '默认项目')
     copyDefaultSkills('default')
 
     index.workspaces.push(defaultWs)
     writeIndex(index)
 
-    console.log('[Agent 工作区] 已创建默认工作区')
+    console.log('[Agent 工作区] 已创建默认项目')
   } else {
     // 迁移兼容：确保已有默认工作区包含 plugin manifest
     ensurePluginManifest(defaultWs.slug, defaultWs.name)
@@ -915,7 +915,7 @@ export function importSkillFromWorkspace(
   const sourcePath = resolveSkillDir(sourceSlug, skillSlug)
 
   if (!sourcePath) {
-    throw new Error(`源工作区中不存在 Skill: ${skillSlug}`)
+    throw new Error(`来源项目中不存在 Skill: ${skillSlug}`)
   }
 
   // P0 修复：复制前校验源 SKILL.md 存在，避免产生孤立目录
@@ -928,7 +928,7 @@ export function importSkillFromWorkspace(
   const targetInactivePath = join(getInactiveSkillsDir(targetSlug), skillSlug)
 
   if (existsSync(targetPath) || existsSync(targetInactivePath)) {
-    throw new Error(`当前工作区已存在同名 Skill: ${skillSlug}`)
+    throw new Error(`当前项目已存在同名 Skill: ${skillSlug}`)
   }
 
   cpSync(sourcePath, targetPath, { recursive: true })
@@ -971,17 +971,17 @@ export function updateSkillFromSource(
       : null
 
   if (!targetPath) {
-    throw new Error(`当前工作区中不存在 Skill: ${skillSlug}`)
+    throw new Error(`当前项目中不存在 Skill: ${skillSlug}`)
   }
 
   const existingSource = readSkillImportSource(targetPath)
   if (!existingSource) {
-    throw new Error(`Skill ${skillSlug} 不是从其他工作区导入的，无法从源更新`)
+    throw new Error(`Skill ${skillSlug} 不是从其他项目导入的，无法从源更新`)
   }
 
   const sourcePath = resolveSkillDir(existingSource.sourceWorkspaceSlug, skillSlug)
   if (!sourcePath) {
-    throw new Error(`源工作区中不再存在 Skill: ${skillSlug}（来源: ${existingSource.sourceWorkspaceName}）`)
+    throw new Error(`来源项目中不再存在 Skill: ${skillSlug}（来源: ${existingSource.sourceWorkspaceName}）`)
   }
 
   if (!existsSync(join(sourcePath, 'SKILL.md'))) {

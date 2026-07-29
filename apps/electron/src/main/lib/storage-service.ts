@@ -638,7 +638,7 @@ async function cleanupOrphanWorkspaces(): Promise<CleanupResult> {
       } catch { /* skip */ }
     }
   } catch (e) {
-    errors.push(`清理孤儿工作区目录失败: ${e}`)
+    errors.push(`清理孤儿项目配置目录失败: ${e}`)
   }
 
   return { freedBytes, deletedCount, errors }

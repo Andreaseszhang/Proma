@@ -456,7 +456,7 @@ function createLocalProjectRootUnavailableError(projectRootPath: string, status?
 function resolveSafeWorkspaceFilePath(workspaceRoot: string, filename: string): string {
   const hasParentTraversal = filename.split(/[\\/]+/).some((segment) => segment === '..')
   if (!filename || isAbsolute(filename) || win32.isAbsolute(filename) || hasParentTraversal) {
-    throw new Error(`工作区文件名不安全，拒绝保存: ${filename}`)
+    throw new Error(`项目文件名不安全，拒绝保存: ${filename}`)
   }
 
   const resolvedRoot = resolve(workspaceRoot)
@@ -467,7 +467,7 @@ function resolveSafeWorkspaceFilePath(workspaceRoot: string, filename: string): 
     || isAbsolute(pathWithinRoot)
 
   if (!pathWithinRoot || escapesRoot) {
-    throw new Error(`工作区文件名不安全，拒绝保存: ${filename}`)
+    throw new Error(`项目文件名不安全，拒绝保存: ${filename}`)
   }
 
   return targetPath
@@ -526,7 +526,7 @@ export function saveFilesToWorkspaceFiles(input: AgentSaveWorkspaceFilesInput): 
     mkdirSync(dirname(targetPath), { recursive: true })
 
     if (file.data.length * 0.75 > MAX_ATTACHMENT_SIZE) {
-      console.warn(`[Agent 服务] 工作区文件超过 100MB 限制，跳过: ${file.filename} (预估 ${(file.data.length * 0.75 / 1024 / 1024).toFixed(1)}MB)`)
+      console.warn(`[Agent 服务] 项目文件超过 100MB 限制，跳过: ${file.filename} (预估 ${(file.data.length * 0.75 / 1024 / 1024).toFixed(1)}MB)`)
       continue
     }
 

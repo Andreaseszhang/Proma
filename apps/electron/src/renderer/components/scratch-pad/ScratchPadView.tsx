@@ -645,7 +645,7 @@ function ScratchPadEditor({ variant }: ScratchPadEditorProps): React.ReactElemen
                 <div className="min-w-0 flex-1">
                   <h1 className="text-xl font-semibold tracking-normal text-foreground">草稿页</h1>
                   <p className="mt-1 text-[13px] leading-5 text-muted-foreground">
-                    临时记录内容、整理 Todo、暂存剪贴板文本，稍后再导出到会话或工作区。
+                    临时记录内容、整理 Todo、暂存剪贴板文本，稍后再导出到会话或项目。
                   </p>
                 </div>
                 <Tooltip>
@@ -752,7 +752,7 @@ function ScratchPadEditor({ variant }: ScratchPadEditorProps): React.ReactElemen
             >
               <span className="text-xs">保存到项目根目录</span>
               <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                <span>{currentWorkspace?.name ?? '无当前工作区'}</span>
+                <span>{currentWorkspace?.name ?? '无当前项目'}</span>
                 <LocalProjectBadge
                   projectRootPath={currentWorkspace?.projectRootPath}
                   projectRootStatus={currentWorkspace?.projectRootStatus}

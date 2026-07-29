@@ -416,7 +416,7 @@ class DingTalkBridge {
     // 先验证 workspace 是否有效，避免 ensureBinding 创建孤儿 binding
     const preCheckWorkspaceId = this.botConfig.defaultWorkspaceId ?? getSettings().agentWorkspaceId ?? ''
     if (!preCheckWorkspaceId || !getAgentWorkspace(preCheckWorkspaceId)) {
-      await this.replyTextViaWebhook(data.sessionWebhook, '⚠️ 当前未设置工作区，无法保存图片')
+      await this.replyTextViaWebhook(data.sessionWebhook, '⚠️ 当前未设置项目，无法保存图片')
       return
     }
 
@@ -427,7 +427,7 @@ class DingTalkBridge {
     }
     const workspace = getAgentWorkspace(binding.workspaceId)
     if (!workspace) {
-      await this.replyTextViaWebhook(data.sessionWebhook, '⚠️ 当前未设置工作区，无法保存图片')
+      await this.replyTextViaWebhook(data.sessionWebhook, '⚠️ 当前未设置项目，无法保存图片')
       return
     }
 

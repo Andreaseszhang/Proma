@@ -96,6 +96,10 @@ const EMPTY_FILE_RESULT: FileSearchResult = {
   workspaceEntries: [],
 };
 
+// 文件检索会在主进程递归扫描目录。保留一个很短的尾随节流来合并连续输入，
+// 但不再维护另一份延迟 query 状态，以免 CJK 输入期间请求与界面 query 脱节。
+const FILE_SEARCH_DEBOUNCE_MS = 120;
+
 function getRootMenuItems(): RootMenuItem[] {
   return [
     {
@@ -244,6 +248,7 @@ const AgentCommandMenu = React.forwardRef<
   React.useEffect(() => {
     let disposed = false;
     let retryTimer: number | null = null;
+    let fileSearchTimer: number | null = null;
 
     if (page === "root") {
       setLoading(false);
@@ -348,10 +353,20 @@ const AgentCommandMenu = React.forwardRef<
       }
     };
 
-    void loadPage();
+    if (page === "files" && fileSearchQuery) {
+      setLoading(true);
+      fileSearchTimer = window.setTimeout(() => {
+        fileSearchTimer = null;
+        if (!disposed) void loadPage();
+      }, FILE_SEARCH_DEBOUNCE_MS);
+    } else {
+      void loadPage();
+    }
+
     return () => {
       disposed = true;
       if (retryTimer !== null) window.clearTimeout(retryTimer);
+      if (fileSearchTimer !== null) window.clearTimeout(fileSearchTimer);
     };
   }, [
     page,

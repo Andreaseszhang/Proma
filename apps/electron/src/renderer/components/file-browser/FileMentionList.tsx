@@ -173,10 +173,16 @@ export const FileMentionList = React.forwardRef<FileMentionRef, FileMentionListP
     const [storedMenuWidth, setStoredMenuWidth] = useAtom(fileMentionMenuWidthAtom)
     const viewportWidth = typeof window === 'undefined' ? 1024 : window.innerWidth
     const menuWidth = clampFileMentionMenuWidth(storedMenuWidth, viewportWidth)
+    const resizeCleanupRef = React.useRef<(() => void) | null>(null)
+
+    React.useEffect(() => () => {
+      resizeCleanupRef.current?.()
+    }, [])
 
     const handleResizeMouseDown = React.useCallback((event: React.MouseEvent<HTMLDivElement>) => {
       event.preventDefault()
       event.stopPropagation()
+      resizeCleanupRef.current?.()
       const startX = event.clientX
       const startWidth = menuWidth
       let latestClientX = startX
@@ -198,16 +204,24 @@ export const FileMentionList = React.forwardRef<FileMentionRef, FileMentionListP
         })
       }
 
-      const onMouseUp = () => {
+      const cleanup = () => {
         if (rafId) {
           cancelAnimationFrame(rafId)
           rafId = 0
         }
-        applyWidth()
         document.removeEventListener('mousemove', onMouseMove)
         document.removeEventListener('mouseup', onMouseUp)
+        if (resizeCleanupRef.current === cleanup) {
+          resizeCleanupRef.current = null
+        }
       }
 
+      const onMouseUp = () => {
+        applyWidth()
+        cleanup()
+      }
+
+      resizeCleanupRef.current = cleanup
       document.addEventListener('mousemove', onMouseMove)
       document.addEventListener('mouseup', onMouseUp)
     }, [menuWidth, setStoredMenuWidth])

@@ -13,8 +13,10 @@
  */
 
 import * as React from 'react'
+import { useAtom } from 'jotai'
 import { cn } from '@/lib/utils'
 import type { FileIndexEntry } from '@proma/shared'
+import { clampFileMentionMenuWidth, fileMentionMenuWidthAtom } from '@/atoms/file-mention-menu'
 import { FileTypeIcon } from './FileTypeIcon'
 import { ChevronRight } from 'lucide-react'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
@@ -168,6 +170,58 @@ function getTreeNodeStateKey(node: Pick<FileTreeNode, 'source' | 'treePath'>): s
 
 export const FileMentionList = React.forwardRef<FileMentionRef, FileMentionListProps>(
   function FileMentionList({ sessionEntries, workspaceEntries, onSelect, onBack, embedded = false }, ref) {
+    const [storedMenuWidth, setStoredMenuWidth] = useAtom(fileMentionMenuWidthAtom)
+    const viewportWidth = typeof window === 'undefined' ? 1024 : window.innerWidth
+    const menuWidth = clampFileMentionMenuWidth(storedMenuWidth, viewportWidth)
+
+    const handleResizeMouseDown = React.useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+      event.preventDefault()
+      event.stopPropagation()
+      const startX = event.clientX
+      const startWidth = menuWidth
+      let latestClientX = startX
+      let rafId = 0
+
+      const applyWidth = () => {
+        setStoredMenuWidth(clampFileMentionMenuWidth(
+          startWidth + latestClientX - startX,
+          window.innerWidth,
+        ))
+      }
+
+      const onMouseMove = (moveEvent: MouseEvent) => {
+        latestClientX = moveEvent.clientX
+        if (rafId) return
+        rafId = requestAnimationFrame(() => {
+          rafId = 0
+          applyWidth()
+        })
+      }
+
+      const onMouseUp = () => {
+        if (rafId) {
+          cancelAnimationFrame(rafId)
+          rafId = 0
+        }
+        applyWidth()
+        document.removeEventListener('mousemove', onMouseMove)
+        document.removeEventListener('mouseup', onMouseUp)
+      }
+
+      document.addEventListener('mousemove', onMouseMove)
+      document.addEventListener('mouseup', onMouseUp)
+    }, [menuWidth, setStoredMenuWidth])
+
+    const resizeHandle = (
+      <div
+        role="separator"
+        aria-label="调整文件菜单宽度"
+        aria-orientation="vertical"
+        className="absolute inset-y-0 right-0 z-10 w-1.5 cursor-col-resize touch-none hover:bg-primary/20 active:bg-primary/30"
+        onMouseDown={handleResizeMouseDown}
+      />
+    )
+
     // 构建一棵连续树；项目与会话来源只通过 badge 区分，不形成两个列表。
     const tree = React.useMemo(
       () => buildFileMentionTree([...workspaceEntries, ...sessionEntries]),
@@ -298,12 +352,20 @@ export const FileMentionList = React.forwardRef<FileMentionRef, FileMentionListP
     // 无匹配结果
     if (!hasResults) {
       return (
-        <div className={cn(!embedded && 'rounded-lg border bg-popover shadow-lg', 'overflow-hidden min-w-[260px]')}>
+        <div
+          className={cn(
+            !embedded && 'rounded-lg border bg-popover shadow-lg',
+            embedded ? 'w-full min-w-0' : 'min-w-[260px]',
+            'relative overflow-hidden',
+          )}
+          style={embedded ? undefined : { width: `${menuWidth}px`, maxWidth: 'calc(100vw - 1rem)' }}
+        >
           <div className="flex items-center justify-between gap-2 px-2.5 py-1.5 text-[11px] font-medium bg-primary/10 text-primary border-b border-border/50">
             <span>文件</span>
             <span className="font-normal text-muted-foreground">Esc 关闭 · Enter 选中</span>
           </div>
           <div className="p-2 text-[11px] text-muted-foreground">无匹配文件</div>
+          {resizeHandle}
         </div>
       )
     }
@@ -315,9 +377,10 @@ export const FileMentionList = React.forwardRef<FileMentionRef, FileMentionListP
         ref={containerRef}
         className={cn(
           !embedded && 'rounded-lg border bg-popover shadow-lg',
-          embedded ? 'max-h-none min-w-0' : 'max-h-[360px] min-w-[260px]',
-          'overflow-y-auto',
+          embedded ? 'w-full max-h-none min-w-0' : 'max-h-[360px] min-w-[260px]',
+          'relative overflow-y-auto',
         )}
+        style={embedded ? undefined : { width: `${menuWidth}px`, maxWidth: 'calc(100vw - 1rem)' }}
       >
         <div className="flex items-center px-2.5 py-1.5 text-[11px] font-medium bg-primary/10 text-primary border-b border-border/50">
           <span>文件</span>
@@ -331,6 +394,7 @@ export const FileMentionList = React.forwardRef<FileMentionRef, FileMentionListP
           onToggle={toggleExpand}
           setSelectedIndex={handleSetIndex}
         />
+        {resizeHandle}
       </div>
       </MentionErrorBoundary>
       </TooltipProvider>
@@ -453,7 +517,7 @@ function TreeNodeList({
 
           {/* 路径（当路径不等于文件名时显示） */}
           {node.path !== node.name && (
-            <span className="text-[10px] text-muted-foreground/60 truncate max-w-[140px] shrink-[2]">
+            <span className="text-[10px] text-muted-foreground/60 truncate max-w-[min(42%,24rem)] shrink-[2]">
               {node.path}
             </span>
           )}

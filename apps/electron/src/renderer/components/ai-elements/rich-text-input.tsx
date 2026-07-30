@@ -30,6 +30,7 @@ import { htmlToMarkdown } from '@/lib/markdown-rich-text'
 import { resolveMentionSuggestionChar } from './mention-utils'
 import { richTextRenderingEnabledAtom } from '@/atoms/ui-preferences'
 import { createAgentCommandSuggestion, type AgentCommandActions } from '@/components/agent/agent-command-suggestion'
+import { createFileMentionSuggestion } from '@/components/file-browser/file-mention-suggestion'
 import { shouldConvertClipboardTextToAttachment } from '@/lib/clipboard-text-attachment'
 import {
   VOICE_DICTATION_INSERT_EVENT,
@@ -218,6 +219,8 @@ export function RichTextInput({
   // / 菜单中的回调必须始终指向当前 Agent 会话，避免切换会话后执行旧闭包。
   const commandActionsRef = useRef<AgentCommandActions>(commandActions ?? {})
   commandActionsRef.current = commandActions ?? {}
+  const fileMentionActiveRef = useRef(false)
+  const fileMentionItemCountRef = useRef(0)
 
   // 是否启用 Mention 功能：Agent 首帧可能尚未拿到路径/slug/id，但扩展必须先注册。
   const hasMentionSupport = enableMentions ?? (workspacePath !== undefined || workspaceSlug !== undefined)
@@ -246,6 +249,17 @@ export function RichTextInput({
       attachedDirsRef,
       sessionAttachedDirsRef,
       commandActionsRef,
+    ),
+    [],
+  )
+
+  const fileMentionSuggestion = useMemo(
+    () => createFileMentionSuggestion(
+      workspacePathRef,
+      fileMentionActiveRef,
+      attachedDirsRef,
+      fileMentionItemCountRef,
+      sessionAttachedDirsRef,
     ),
     [],
   )
@@ -294,7 +308,7 @@ export function RichTextInput({
         emptyEditorClass: 'is-editor-empty',
       }),
       // Mention 扩展：启用时注册，路径/slug 后续通过 ref 异步更新
-      // Mention 节点只由 / 统一命令菜单插入；历史草稿中的旧 token 继续渲染。
+      // @ 文件与 / 统一命令菜单分别使用同一 Mention 节点协议。
       // 纯文本模式下仍然保留，确保引用功能可用
       ...(hasMentionSupport ? [
         Mention.extend({
@@ -365,7 +379,7 @@ export function RichTextInput({
               `${char === '@' ? '@' : ''}${label}`,
             ]
           },
-          suggestions: [commandSuggestion],
+          suggestions: [fileMentionSuggestion, commandSuggestion],
         }),
       ] : []),
     ],
@@ -374,7 +388,7 @@ export function RichTextInput({
     editorProps: {
       attributes: {
         class: cn(
-          'prose dark:prose-invert max-w-none focus:outline-none',
+          'prose dark:prose-invert max-w-none cursor-text focus:outline-none',
           'min-h-[101px] w-full text-[15px] leading-[1.6]',
           '[&>*:first-child]:mt-0 [&>*:last-child]:mb-0',
           '[&_pre]:rounded-md [&_pre]:p-3',
@@ -716,7 +730,7 @@ export function RichTextInput({
       onKeyDownCapture={(event) => forwardSessionQuickSwitchKeyEvent(event, 'keydown')}
       onKeyUpCapture={(event) => forwardSessionQuickSwitchKeyEvent(event, 'keyup')}
       className={cn(
-        'rich-text-input relative w-full overflow-y-auto overscroll-contain scrollbar-thin transition-[max-height] duration-200 ease-in-out',
+        'rich-text-input relative w-full cursor-text overflow-y-auto overscroll-contain scrollbar-thin transition-[max-height] duration-200 ease-in-out',
         isManuallyCollapsed
           ? 'max-h-[101px]'
           : isExpanded ? 'max-h-[500px]' : 'max-h-[200px]',
@@ -731,7 +745,7 @@ export function RichTextInput({
           <TooltipTrigger asChild>
             <button
               type="button"
-              className="sticky bottom-1 float-right mr-2 z-10 p-0.5 rounded hover:bg-muted/80 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+              className="sticky bottom-1 float-right mr-2 z-10 cursor-pointer p-0.5 rounded hover:bg-muted/80 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
               onClick={() => setIsManuallyCollapsed((prev) => !prev)}
             >
               {isManuallyCollapsed ? (

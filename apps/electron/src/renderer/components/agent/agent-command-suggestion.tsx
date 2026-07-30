@@ -1,4 +1,5 @@
 import * as React from "react";
+import { useAtom } from "jotai";
 import { ReactRenderer } from "@tiptap/react";
 import type { SuggestionOptions, SuggestionProps } from "@tiptap/suggestion";
 import {
@@ -22,6 +23,7 @@ import type {
 import { FileMentionList } from "@/components/file-browser/FileMentionList";
 import type { FileMentionRef } from "@/components/file-browser/FileMentionList";
 import { resolveFileMentionPath } from "@/components/file-browser/file-mention-path";
+import { fileMentionMenuWidthAtom } from "@/atoms/file-mention-menu";
 import { cn } from "@/lib/utils";
 import {
   createMentionPopup,
@@ -32,6 +34,7 @@ import {
   buildPlanningReferenceItems,
   filterCommandMenuItems,
   formatSessionReferenceDescription,
+  getCommandMenuIndexById,
   getCommandMenuChildQuery,
   getNextCommandMenuIndex,
   shouldOpenSlashCommandMenu,
@@ -206,7 +209,9 @@ const AgentCommandMenu = React.forwardRef<
   ref,
 ) {
   const [page, setPage] = React.useState<CommandPage>("root");
-  const [selectedIndex, setSelectedIndex] = React.useState(0);
+  const [rootSelectedId, setRootSelectedId] = React.useState<string | null>(null);
+  const [childSelectedIndex, setChildSelectedIndex] = React.useState(0);
+  const [fileMentionMenuWidth] = useAtom(fileMentionMenuWidthAtom);
   const [loading, setLoading] = React.useState(false);
   const [skills, setSkills] = React.useState<ReferenceMenuItem[]>([]);
   const [tools, setTools] = React.useState<ReferenceMenuItem[]>([]);
@@ -229,7 +234,7 @@ const AgentCommandMenu = React.forwardRef<
   const menuScrollRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
-    setSelectedIndex(0);
+    if (page !== "root") setChildSelectedIndex(0);
   }, [page, query]);
 
   React.useEffect(() => {
@@ -381,6 +386,8 @@ const AgentCommandMenu = React.forwardRef<
     () => filterCommandMenuItems(getRootMenuItems(), query),
     [query],
   );
+  const rootSelectedIndex = getCommandMenuIndexById(rootItems, rootSelectedId);
+  const selectedIndex = page === "root" ? rootSelectedIndex : childSelectedIndex;
   const referenceItems = React.useMemo(() => {
     const source =
       page === "skills" ? skills : page === "tools" ? tools : sessions;
@@ -391,6 +398,7 @@ const AgentCommandMenu = React.forwardRef<
   const selectRootItem = React.useCallback(
     (item: RootMenuItem): void => {
       if (item.disabled) return;
+      setRootSelectedId(item.id);
       if (item.kind === "page") {
         setPageEntryQuery(query);
         setPage(item.id as CommandPage);
@@ -415,6 +423,18 @@ const AgentCommandMenu = React.forwardRef<
     [onInsertMention, page],
   );
 
+  const selectMenuIndex = React.useCallback((index: number): void => {
+    if (page === "root") {
+      setRootSelectedId(rootItems[index]?.id ?? null);
+      return;
+    }
+    setChildSelectedIndex(index);
+  }, [page, rootItems]);
+
+  const returnToRoot = React.useCallback((): void => {
+    setPage("root");
+  }, []);
+
   React.useImperativeHandle(
     ref,
     () => ({
@@ -423,7 +443,7 @@ const AgentCommandMenu = React.forwardRef<
           const handled = fileListRef.current?.onKeyDown({ event }) ?? false;
           if (!handled && event.key === "ArrowLeft") {
             event.preventDefault();
-            setPage("root");
+            returnToRoot();
             return true;
           }
           return handled;
@@ -431,20 +451,16 @@ const AgentCommandMenu = React.forwardRef<
 
         const items = page === "root" ? rootItems : referenceItems;
         if (event.key === "ArrowUp") {
-          setSelectedIndex((current) =>
-            getNextCommandMenuIndex(current, -1, items.length),
-          );
+          selectMenuIndex(getNextCommandMenuIndex(selectedIndex, -1, items.length));
           return true;
         }
         if (event.key === "ArrowDown") {
-          setSelectedIndex((current) =>
-            getNextCommandMenuIndex(current, 1, items.length),
-          );
+          selectMenuIndex(getNextCommandMenuIndex(selectedIndex, 1, items.length));
           return true;
         }
         if (event.key === "ArrowLeft") {
           if (page !== "root") {
-            setPage("root");
+            returnToRoot();
             return true;
           }
           return false;
@@ -466,6 +482,8 @@ const AgentCommandMenu = React.forwardRef<
       selectedIndex,
       selectRootItem,
       selectReferenceItem,
+      selectMenuIndex,
+      returnToRoot,
     ],
   );
 
@@ -493,7 +511,11 @@ const AgentCommandMenu = React.forwardRef<
 
   return (
     <div
-      className="w-[min(21rem,calc(100vw-2rem))] overflow-hidden rounded-lg bg-popover shadow-lg"
+      className={cn(
+        "overflow-hidden rounded-lg bg-popover shadow-lg",
+        isFilePage ? "max-w-[calc(100vw-1rem)]" : "w-[min(21rem,calc(100vw-2rem))]",
+      )}
+      style={isFilePage ? { width: `${fileMentionMenuWidth}px` } : undefined}
       role="dialog"
       aria-label="Agent 命令菜单"
     >
@@ -505,7 +527,7 @@ const AgentCommandMenu = React.forwardRef<
             className="-my-2 -ml-2 flex size-10 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-accent-foreground"
             onMouseDown={(event) => {
               event.preventDefault();
-              setPage("root");
+              returnToRoot();
             }}
           >
             <ChevronLeft className="size-3.5" />
@@ -537,7 +559,7 @@ const AgentCommandMenu = React.forwardRef<
                   file.name,
                 )
               }
-              onBack={() => setPage("root")}
+              onBack={returnToRoot}
               embedded
             />
           ) : (
@@ -577,7 +599,7 @@ const AgentCommandMenu = React.forwardRef<
                       !selected && !disabled && "hover:bg-accent/60",
                       disabled && "cursor-not-allowed opacity-45",
                     )}
-                    onMouseEnter={() => setSelectedIndex(index)}
+                    onMouseEnter={() => selectMenuIndex(index)}
                     onMouseDown={(event) => {
                       event.preventDefault();
                       if (page === "root") selectRootItem(rootItem);
@@ -665,6 +687,8 @@ export function createAgentCommandSuggestion(
     render: () => {
       let renderer: ReactRenderer<AgentCommandMenuRef> | null = null;
       let popup: HTMLDivElement | null = null;
+      let resizeObserver: ResizeObserver | null = null;
+      let latestClientRect: (() => DOMRect | null) | null | undefined = null;
       let blurHandler: (() => void) | null = null;
       let editorDom: HTMLElement | null = null;
       let activeProps: SuggestionProps<SlashSuggestionItem> | null = null;
@@ -699,6 +723,10 @@ export function createAgentCommandSuggestion(
         });
       };
 
+      const anchorPopup = (): void => {
+        positionPopup(popup, latestClientRect?.());
+      };
+
       const cleanup = (): void => {
         if (blurHandler && editorDom) {
           editorDom.removeEventListener("blur", blurHandler, true);
@@ -706,6 +734,9 @@ export function createAgentCommandSuggestion(
         }
         editorDom = null;
         activeProps = null;
+        resizeObserver?.disconnect();
+        resizeObserver = null;
+        latestClientRect = null;
         popup?.remove();
         popup = null;
         renderer?.destroy();
@@ -739,7 +770,10 @@ export function createAgentCommandSuggestion(
             editor: props.editor,
           });
           popup = createMentionPopup(renderer.element);
-          positionPopup(popup, props.clientRect?.());
+          latestClientRect = props.clientRect;
+          anchorPopup();
+          resizeObserver = new ResizeObserver(anchorPopup);
+          resizeObserver.observe(popup);
 
           blurHandler = () => {
             setTimeout(() => {
@@ -750,8 +784,9 @@ export function createAgentCommandSuggestion(
         },
         onUpdate(props) {
           activeProps = props;
+          latestClientRect = props.clientRect;
           renderer?.updateProps(getRendererProps(props));
-          positionPopup(popup, props.clientRect?.());
+          anchorPopup();
         },
         onKeyDown(props) {
           return renderer?.ref?.onKeyDown({ event: props.event }) ?? false;

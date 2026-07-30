@@ -24,6 +24,16 @@ export function getNextCommandMenuIndex(current: number, direction: 1 | -1, item
   return (current + direction + itemCount) % itemCount
 }
 
+/** 根据稳定 ID 恢复根菜单的选中项；筛选结果已变化时回退到第一项。 */
+export function getCommandMenuIndexById(
+  items: Array<Pick<CommandMenuSearchItem, 'id'>>,
+  selectedId: string | null,
+): number {
+  if (!selectedId) return 0
+  const index = items.findIndex((item) => item.id === selectedId)
+  return index === -1 ? 0 : index
+}
+
 export function filterCommandMenuItems<T extends CommandMenuSearchItem>(items: T[], query: string): T[] {
   const normalizedQuery = query.trim().toLocaleLowerCase()
   if (!normalizedQuery) return items

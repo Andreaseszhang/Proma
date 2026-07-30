@@ -4,6 +4,7 @@ import { findSuggestionMatch } from '@tiptap/suggestion'
 import {
   filterCommandMenuItems,
   formatSessionReferenceDescription,
+  getCommandMenuIndexById,
   getCommandMenuChildQuery,
   getNextCommandMenuIndex,
   shouldOpenSlashCommandMenu,
@@ -45,6 +46,19 @@ describe('Agent command menu navigation', () => {
 
   test('keeps the selection at zero when there are no choices', () => {
     expect(getNextCommandMenuIndex(0, 1, 0)).toBe(0)
+  })
+
+  test('restores a root menu selection by ID after leaving a child page', () => {
+    const items = [
+      { id: 'skills' },
+      { id: 'sessions' },
+      { id: 'files' },
+      { id: 'tools' },
+    ]
+
+    expect(getCommandMenuIndexById(items, 'sessions')).toBe(1)
+    expect(getCommandMenuIndexById(items, 'files')).toBe(2)
+    expect(getCommandMenuIndexById(items, 'missing')).toBe(0)
   })
 
   test('filters entries by id, label, or supporting description', () => {

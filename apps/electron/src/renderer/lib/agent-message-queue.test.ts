@@ -42,15 +42,32 @@ describe('parseQueuedMessageMentions', () => {
       `&calendar_event:event-456::${encodeURIComponent('产品评审')}`,
     ].join(' '))).toEqual([
       { type: 'text', value: '请处理 ' },
-      { type: 'planning-reference', referenceType: 'todo', id: 'todo-123', label: '输入框改造' },
+      { type: 'reference', referenceType: 'todo', id: 'todo-123', label: '输入框改造' },
       { type: 'text', value: ' 并准备 ' },
-      { type: 'planning-reference', referenceType: 'calendar_event', id: 'event-456', label: '产品评审' },
+      { type: 'reference', referenceType: 'calendar_event', id: 'event-456', label: '产品评审' },
+    ])
+  })
+
+  test('uses semantic chips for file, Skill, MCP, and session references', () => {
+    expect(getQueuedMessageDisplayParts([
+      '@file:notes/brief.md',
+      '/skill:brainstorming',
+      '#mcp:playwright',
+      `&session:session-789::${encodeURIComponent('修复引用显示')}`,
+    ].join(' '))).toEqual([
+      { type: 'reference', referenceType: 'file', id: 'notes/brief.md', label: 'brief.md' },
+      { type: 'text', value: ' ' },
+      { type: 'reference', referenceType: 'skill', id: 'brainstorming', label: 'brainstorming' },
+      { type: 'text', value: ' ' },
+      { type: 'reference', referenceType: 'mcp', id: 'playwright', label: 'playwright' },
+      { type: 'text', value: ' ' },
+      { type: 'reference', referenceType: 'session', id: 'session-789', label: '修复引用显示' },
     ])
   })
 
   test('falls back to a compact reference label when legacy messages have no title', () => {
     expect(getQueuedMessageDisplayParts('&todo:todo-123')).toEqual([
-      { type: 'planning-reference', referenceType: 'todo', id: 'todo-123', label: 'Todo todo-123' },
+      { type: 'reference', referenceType: 'todo', id: 'todo-123', label: 'Todo todo-123' },
     ])
   })
 })

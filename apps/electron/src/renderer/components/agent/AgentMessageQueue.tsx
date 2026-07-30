@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { CalendarDays, Clock3, CornerDownLeft, GripVertical, ListTodo, Paperclip, Quote, Trash2, Undo2 } from 'lucide-react'
+import { CalendarDays, Clock3, CornerDownLeft, FileText, GripVertical, ListTodo, MessageSquareText, Paperclip, Quote, Server, Sparkles, Trash2, Undo2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
@@ -160,6 +160,15 @@ export function AgentMessageQueue({
   )
 }
 
+const QUEUED_REFERENCE_STYLES = {
+  file: { icon: FileText, className: 'bg-primary/10 text-primary' },
+  skill: { icon: Sparkles, className: 'bg-[hsl(270_60%_60%/0.15)] text-[hsl(270_60%_50%)]' },
+  mcp: { icon: Server, className: 'bg-[hsl(160_60%_45%/0.15)] text-[hsl(160_60%_35%)]' },
+  session: { icon: MessageSquareText, className: 'bg-[hsl(200_80%_50%/0.14)] text-[hsl(200_80%_40%)]' },
+  todo: { icon: ListTodo, className: 'bg-amber-500/15 text-amber-800 dark:text-amber-200' },
+  calendar_event: { icon: CalendarDays, className: 'bg-cyan-500/15 text-cyan-800 dark:text-cyan-200' },
+} as const
+
 function QueuedMessagePreview({ text }: { text: string }): React.ReactElement {
   if (!text) return <div className="line-clamp-2">仅附件</div>
 
@@ -168,15 +177,13 @@ function QueuedMessagePreview({ text }: { text: string }): React.ReactElement {
       {getQueuedMessageDisplayParts(text).map((part, index) => {
         if (part.type === 'text') return <React.Fragment key={index}>{part.value}</React.Fragment>
 
-        const Icon = part.referenceType === 'todo' ? ListTodo : CalendarDays
+        const { icon: Icon, className } = QUEUED_REFERENCE_STYLES[part.referenceType]
         return (
           <span
             key={`${part.referenceType}:${part.id}:${index}`}
             className={cn(
               'mx-0.5 inline-flex max-w-full items-center gap-1 rounded px-1.5 py-0.5 align-baseline text-[12px] font-medium whitespace-nowrap',
-              part.referenceType === 'todo'
-                ? 'bg-amber-500/15 text-amber-800 dark:text-amber-200'
-                : 'bg-cyan-500/15 text-cyan-800 dark:text-cyan-200',
+              className,
             )}
             title={part.label}
           >

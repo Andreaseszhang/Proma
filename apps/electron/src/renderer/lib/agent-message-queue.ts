@@ -95,12 +95,14 @@ export interface QueuedMessageSendPayload {
   mentions: ParsedQueuedMessageMentions
 }
 
-/** 队列预览专用片段：保留原始消息用于发送，同时把规划协议渲染为可读引用。 */
+/** 队列预览专用片段：保留原始消息用于发送，同时把引用协议渲染为可读芯片。 */
+export type QueuedMessageReferenceType = 'file' | 'skill' | 'mcp' | 'session' | 'todo' | 'calendar_event'
+
 export type QueuedMessageDisplayPart =
   | { type: 'text'; value: string }
   | {
-      type: 'planning-reference'
-      referenceType: 'todo' | 'calendar_event'
+      type: 'reference'
+      referenceType: QueuedMessageReferenceType
       id: string
       label: string
     }
@@ -128,7 +130,7 @@ export function queuedTextToParagraphHtml(text: string): string {
 
 
 const REF_PATTERN = /\/skill:(?<skill>\S+)|#mcp:(?<mcp>\S+)|&session:(?<session>[A-Za-z0-9-]+)(?:(?:~|::)\S+)?|&todo:(?<todo>[A-Za-z0-9-]+)(?:(?:~|::)\S+)?|&calendar_event:(?<calendarEvent>[A-Za-z0-9-]+)(?:(?:~|::)\S+)?/g
-const PLANNING_REFERENCE_PATTERN = /&(?<referenceType>todo|calendar_event):(?<id>[A-Za-z0-9-]+)(?:(?:~|::)(?<label>\S+))?/g
+const DISPLAY_REFERENCE_PATTERN = /@file:(?<file>\S+)|\/skill:(?<skill>\S+)|#mcp:(?<mcp>\S+)|&session:(?<session>[A-Za-z0-9-]+)(?:(?:~|::)(?<sessionLabel>\S+))?|&todo:(?<todo>[A-Za-z0-9-]+)(?:(?:~|::)(?<todoLabel>\S+))?|&calendar_event:(?<calendarEvent>[A-Za-z0-9-]+)(?:(?:~|::)(?<calendarEventLabel>\S+))?/g
 
 function decodeReferenceLabel(value: string): string {
   try {
@@ -139,31 +141,62 @@ function decodeReferenceLabel(value: string): string {
 }
 
 /**
- * 将排队消息中的 Todo / 日程协议转换为展示片段。
+ * 将排队消息中的文件、Skill、MCP、会话和规划协议转换为展示片段。
  * `item.text` 仍完整保留，发送时继续通过 parseQueuedMessageMentions 提取原始 ID。
  */
 export function getQueuedMessageDisplayParts(text: string): QueuedMessageDisplayPart[] {
   const parts: QueuedMessageDisplayPart[] = []
   let lastIndex = 0
 
-  for (const match of text.matchAll(PLANNING_REFERENCE_PATTERN)) {
+  for (const match of text.matchAll(DISPLAY_REFERENCE_PATTERN)) {
     if (match.index > lastIndex) {
       parts.push({ type: 'text', value: text.slice(lastIndex, match.index) })
     }
 
-    const referenceType = match.groups?.referenceType
-    const id = match.groups?.id
-    if (referenceType !== 'todo' && referenceType !== 'calendar_event' || !id) continue
+    const groups = match.groups ?? {}
+    let referenceType: QueuedMessageReferenceType
+    let id: string
+    let rawLabel: string | undefined
 
-    const rawLabel = match.groups?.label
-    parts.push({
-      type: 'planning-reference',
-      referenceType,
-      id,
-      label: rawLabel
-        ? decodeReferenceLabel(rawLabel)
-        : `${referenceType === 'todo' ? 'Todo' : '日程'} ${id.slice(0, 8)}`,
-    })
+    if (groups.file) {
+      referenceType = 'file'
+      id = groups.file
+    } else if (groups.skill) {
+      referenceType = 'skill'
+      id = groups.skill
+    } else if (groups.mcp) {
+      referenceType = 'mcp'
+      id = groups.mcp
+    } else if (groups.session) {
+      referenceType = 'session'
+      id = groups.session
+      rawLabel = groups.sessionLabel
+    } else if (groups.todo) {
+      referenceType = 'todo'
+      id = groups.todo
+      rawLabel = groups.todoLabel
+    } else if (groups.calendarEvent) {
+      referenceType = 'calendar_event'
+      id = groups.calendarEvent
+      rawLabel = groups.calendarEventLabel
+    } else {
+      continue
+    }
+
+    const decodedId = decodeReferenceLabel(id)
+    const label = rawLabel
+      ? decodeReferenceLabel(rawLabel)
+      : referenceType === 'file'
+        ? (decodedId.split(/[\\/]/).pop() || decodedId)
+        : referenceType === 'session'
+          ? `会话 ${id.slice(0, 8)}`
+          : referenceType === 'todo'
+            ? `Todo ${id.slice(0, 8)}`
+            : referenceType === 'calendar_event'
+              ? `日程 ${id.slice(0, 8)}`
+              : decodedId
+
+    parts.push({ type: 'reference', referenceType, id, label })
     lastIndex = match.index + match[0].length
   }
 

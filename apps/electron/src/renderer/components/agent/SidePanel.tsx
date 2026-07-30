@@ -225,6 +225,49 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
     }
   }, [sessionId, setAttachedFilesMap])
 
+  const attachSessionDir = React.useCallback(async (dirPath: string) => {
+    const updated = await window.electronAPI.attachDirectory({ sessionId, directoryPath: dirPath })
+    setAttachedDirsMap((prev) => {
+      const map = new Map(prev)
+      map.set(sessionId, updated)
+      return map
+    })
+  }, [sessionId, setAttachedDirsMap])
+
+  const handleAttachSessionFolder = React.useCallback(async () => {
+    try {
+      const result = await window.electronAPI.openFolderDialog()
+      if (result) await attachSessionDir(result.path)
+    } catch (error) {
+      console.error('[SidePanel] 附加会话文件夹失败:', error)
+    }
+  }, [attachSessionDir])
+
+  const handleSessionFoldersDropped = React.useCallback(async (folderPaths: string[]) => {
+    for (const dirPath of folderPaths) {
+      try { await attachSessionDir(dirPath) } catch (error) {
+        console.error('[SidePanel] 拖拽附加会话文件夹失败:', error)
+      }
+    }
+  }, [attachSessionDir])
+
+  const attachSessionFile = React.useCallback(async (filePath: string) => {
+    const updated = await window.electronAPI.attachFile({ sessionId, filePath })
+    setAttachedFilesMap((prev) => {
+      const map = new Map(prev)
+      map.set(sessionId, updated)
+      return map
+    })
+  }, [sessionId, setAttachedFilesMap])
+
+  const handleSessionFilesAttached = React.useCallback(async (filePaths: string[]) => {
+    for (const filePath of filePaths) {
+      try { await attachSessionFile(filePath) } catch (error) {
+        console.error('[SidePanel] 附加会话文件失败:', error)
+      }
+    }
+  }, [attachSessionFile])
+
   // === 工作区级：附加/移除目录 ===
 
   const attachWorkspaceDir = React.useCallback(async (dirPath: string) => {
@@ -566,6 +609,17 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
                       onAddToChat={handleAddToChat}
                       onFilePreview={handleFilePreview}
                     />
+                    {showSessionFiles && workspaceSlug && (
+                      <FileDropZone
+                        workspaceSlug={workspaceSlug}
+                        sessionId={sessionId}
+                        target="session"
+                        onFilesUploaded={handleFilesUploaded}
+                        onFilesAttached={handleSessionFilesAttached}
+                        onAttachFolder={handleAttachSessionFolder}
+                        onFoldersDropped={handleSessionFoldersDropped}
+                      />
+                    )}
                     {showProjectFiles && !isProjectRootUnavailable && workspaceSlug && (
                       <FileDropZone
                         workspaceSlug={workspaceSlug}

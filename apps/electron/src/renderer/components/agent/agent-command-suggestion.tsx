@@ -221,15 +221,10 @@ const AgentCommandMenu = React.forwardRef<
     React.useState<FileSearchResult>(EMPTY_FILE_RESULT);
   const [sessionSearchQuery, setSessionSearchQuery] = React.useState(query);
   const [pageEntryQuery, setPageEntryQuery] = React.useState("");
-  const [debouncedFileSearchQuery, setDebouncedFileSearchQuery] =
-    React.useState("");
   const pageQuery = page === "root"
     ? query
     : getCommandMenuChildQuery(query, pageEntryQuery);
   const fileSearchQuery = page === "files" ? pageQuery.trim() : "";
-  const activeFileSearchQuery = page === "files" && fileSearchQuery
-    ? debouncedFileSearchQuery
-    : "";
   const fileListRef = React.useRef<FileMentionRef>(null);
   const menuScrollRef = React.useRef<HTMLDivElement>(null);
 
@@ -245,19 +240,6 @@ const AgentCommandMenu = React.forwardRef<
     }, 250);
     return () => window.clearTimeout(timer);
   }, [page, pageQuery]);
-
-  React.useEffect(() => {
-    if (page !== "files") return;
-    if (!fileSearchQuery) {
-      setDebouncedFileSearchQuery("");
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      setDebouncedFileSearchQuery(fileSearchQuery);
-    }, 250);
-    return () => window.clearTimeout(timer);
-  }, [page, fileSearchQuery]);
 
   React.useEffect(() => {
     let disposed = false;
@@ -346,7 +328,7 @@ const AgentCommandMenu = React.forwardRef<
         const sessionAttachedDirs = sessionAttachedDirsRef.current ?? [];
         const result = await window.electronAPI.searchWorkspaceFiles(
           workspacePath,
-          activeFileSearchQuery,
+          fileSearchQuery,
           200,
           attachedDirs.length > 0 ? attachedDirs : undefined,
           sessionAttachedDirs.length > 0 ? sessionAttachedDirs : undefined,
@@ -374,7 +356,7 @@ const AgentCommandMenu = React.forwardRef<
   }, [
     page,
     sessionSearchQuery,
-    activeFileSearchQuery,
+    fileSearchQuery,
     workspacePathRef,
     currentSessionIdRef,
     workspaceSlugRef,

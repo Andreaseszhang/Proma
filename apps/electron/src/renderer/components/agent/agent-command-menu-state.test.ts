@@ -80,6 +80,11 @@ describe('Agent command menu navigation', () => {
     expect(getCommandMenuChildQuery('README', '文件')).toBe('README')
   })
 
+  test('keeps Chinese file queries intact after entering the files page', () => {
+    expect(getCommandMenuChildQuery('引用文件刘浩帆报告', '引用文件')).toBe('刘浩帆报告')
+    expect(getCommandMenuChildQuery('刘浩帆报告', '')).toBe('刘浩帆报告')
+  })
+
   test('only accepts a valid active slash token', () => {
     expect(shouldOpenSlashCommandMenu('/')).toBe(true)
     expect(shouldOpenSlashCommandMenu('/引')).toBe(true)

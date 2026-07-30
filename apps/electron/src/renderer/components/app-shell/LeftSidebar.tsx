@@ -2687,7 +2687,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       <div className={cn('w-full flex-shrink-0 titlebar-drag-region', isMac ? 'h-[30px]' : 'h-1')} />
 
       {/* 模式切换器 + 搜索 + 折叠按钮 */}
-      <div className="titlebar-no-drag flex items-start gap-1.5 px-3">
+      <div className="titlebar-drag-region flex items-start gap-1.5 px-3">
         <div className="flex-1 min-w-0">
           <ModeSwitcher />
         </div>

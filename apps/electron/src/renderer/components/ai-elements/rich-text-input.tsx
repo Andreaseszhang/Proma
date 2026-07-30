@@ -388,7 +388,7 @@ export function RichTextInput({
     editorProps: {
       attributes: {
         class: cn(
-          'prose dark:prose-invert max-w-none cursor-text focus:outline-none',
+          'prose dark:prose-invert max-w-none focus:outline-none',
           'min-h-[101px] w-full text-[15px] leading-[1.6]',
           '[&>*:first-child]:mt-0 [&>*:last-child]:mb-0',
           '[&_pre]:rounded-md [&_pre]:p-3',
@@ -730,7 +730,7 @@ export function RichTextInput({
       onKeyDownCapture={(event) => forwardSessionQuickSwitchKeyEvent(event, 'keydown')}
       onKeyUpCapture={(event) => forwardSessionQuickSwitchKeyEvent(event, 'keyup')}
       className={cn(
-        'rich-text-input relative w-full cursor-text overflow-y-auto overscroll-contain scrollbar-thin transition-[max-height] duration-200 ease-in-out',
+        'rich-text-input relative w-full overflow-y-auto overscroll-contain scrollbar-thin transition-[max-height] duration-200 ease-in-out',
         isManuallyCollapsed
           ? 'max-h-[101px]'
           : isExpanded ? 'max-h-[500px]' : 'max-h-[200px]',
@@ -745,7 +745,7 @@ export function RichTextInput({
           <TooltipTrigger asChild>
             <button
               type="button"
-              className="sticky bottom-1 float-right mr-2 z-10 cursor-pointer p-0.5 rounded hover:bg-muted/80 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+              className="sticky bottom-1 float-right mr-2 z-10 p-0.5 rounded hover:bg-muted/80 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
               onClick={() => setIsManuallyCollapsed((prev) => !prev)}
             >
               {isManuallyCollapsed ? (

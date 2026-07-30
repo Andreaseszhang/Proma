@@ -1,5 +1,8 @@
 import { describe, expect, test } from 'bun:test'
-import { parseQueuedMessageMentions } from './agent-message-queue'
+import {
+  getQueuedMessageDisplayParts,
+  parseQueuedMessageMentions,
+} from './agent-message-queue'
 
 describe('parseQueuedMessageMentions', () => {
   test('strips persisted display labels while preserving named reference ids', () => {
@@ -29,5 +32,25 @@ describe('parseQueuedMessageMentions', () => {
       mentionedTodoIds: ['todo-123'],
       mentionedCalendarEventIds: [],
     })
+  })
+
+  test('uses named planning references for queue preview without changing the send protocol', () => {
+    expect(getQueuedMessageDisplayParts([
+      '请处理',
+      `&todo:todo-123::${encodeURIComponent('输入框改造')}`,
+      '并准备',
+      `&calendar_event:event-456::${encodeURIComponent('产品评审')}`,
+    ].join(' '))).toEqual([
+      { type: 'text', value: '请处理 ' },
+      { type: 'planning-reference', referenceType: 'todo', id: 'todo-123', label: '输入框改造' },
+      { type: 'text', value: ' 并准备 ' },
+      { type: 'planning-reference', referenceType: 'calendar_event', id: 'event-456', label: '产品评审' },
+    ])
+  })
+
+  test('falls back to a compact reference label when legacy messages have no title', () => {
+    expect(getQueuedMessageDisplayParts('&todo:todo-123')).toEqual([
+      { type: 'planning-reference', referenceType: 'todo', id: 'todo-123', label: 'Todo todo-123' },
+    ])
   })
 })

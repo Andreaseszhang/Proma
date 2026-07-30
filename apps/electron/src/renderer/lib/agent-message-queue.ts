@@ -95,6 +95,16 @@ export interface QueuedMessageSendPayload {
   mentions: ParsedQueuedMessageMentions
 }
 
+/** 队列预览专用片段：保留原始消息用于发送，同时把规划协议渲染为可读引用。 */
+export type QueuedMessageDisplayPart =
+  | { type: 'text'; value: string }
+  | {
+      type: 'planning-reference'
+      referenceType: 'todo' | 'calendar_event'
+      id: string
+      label: string
+    }
+
 function escapeHtml(text: string): string {
   return text
     .replace(/&/g, '&amp;')
@@ -118,6 +128,51 @@ export function queuedTextToParagraphHtml(text: string): string {
 
 
 const REF_PATTERN = /\/skill:(?<skill>\S+)|#mcp:(?<mcp>\S+)|&session:(?<session>[A-Za-z0-9-]+)(?:(?:~|::)\S+)?|&todo:(?<todo>[A-Za-z0-9-]+)(?:(?:~|::)\S+)?|&calendar_event:(?<calendarEvent>[A-Za-z0-9-]+)(?:(?:~|::)\S+)?/g
+const PLANNING_REFERENCE_PATTERN = /&(?<referenceType>todo|calendar_event):(?<id>[A-Za-z0-9-]+)(?:(?:~|::)(?<label>\S+))?/g
+
+function decodeReferenceLabel(value: string): string {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
+/**
+ * 将排队消息中的 Todo / 日程协议转换为展示片段。
+ * `item.text` 仍完整保留，发送时继续通过 parseQueuedMessageMentions 提取原始 ID。
+ */
+export function getQueuedMessageDisplayParts(text: string): QueuedMessageDisplayPart[] {
+  const parts: QueuedMessageDisplayPart[] = []
+  let lastIndex = 0
+
+  for (const match of text.matchAll(PLANNING_REFERENCE_PATTERN)) {
+    if (match.index > lastIndex) {
+      parts.push({ type: 'text', value: text.slice(lastIndex, match.index) })
+    }
+
+    const referenceType = match.groups?.referenceType
+    const id = match.groups?.id
+    if (referenceType !== 'todo' && referenceType !== 'calendar_event' || !id) continue
+
+    const rawLabel = match.groups?.label
+    parts.push({
+      type: 'planning-reference',
+      referenceType,
+      id,
+      label: rawLabel
+        ? decodeReferenceLabel(rawLabel)
+        : `${referenceType === 'todo' ? 'Todo' : '日程'} ${id.slice(0, 8)}`,
+    })
+    lastIndex = match.index + match[0].length
+  }
+
+  if (lastIndex < text.length) {
+    parts.push({ type: 'text', value: text.slice(lastIndex) })
+  }
+
+  return parts.length > 0 ? parts : [{ type: 'text', value: text }]
+}
 
 export function parseQueuedMessageMentions(text: string): ParsedQueuedMessageMentions {
   const mentionedSkills: string[] = []

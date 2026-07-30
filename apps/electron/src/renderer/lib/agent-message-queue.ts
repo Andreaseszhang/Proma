@@ -117,7 +117,7 @@ export function queuedTextToParagraphHtml(text: string): string {
 }
 
 
-const REF_PATTERN = /\/skill:(?<skill>\S+)|#mcp:(?<mcp>\S+)|&session:(?<session>\S+)|&todo:(?<todo>[A-Za-z0-9-]+)|&calendar_event:(?<calendarEvent>[A-Za-z0-9-]+)/g
+const REF_PATTERN = /\/skill:(?<skill>\S+)|#mcp:(?<mcp>\S+)|&session:(?<session>[A-Za-z0-9-]+)(?:(?:~|::)\S+)?|&todo:(?<todo>[A-Za-z0-9-]+)(?:(?:~|::)\S+)?|&calendar_event:(?<calendarEvent>[A-Za-z0-9-]+)(?:(?:~|::)\S+)?/g
 
 export function parseQueuedMessageMentions(text: string): ParsedQueuedMessageMentions {
   const mentionedSkills: string[] = []

@@ -11,7 +11,7 @@ import type { SuggestionOptions } from '@tiptap/suggestion'
 import { CalendarDays, ListTodo, MessageSquareText, Sparkles, Server } from 'lucide-react'
 import { MentionList } from './MentionList'
 import type { MentionListRef } from './MentionList'
-import { createMentionPopup, positionPopup, isSuggestionTriggerPresent, shouldSuppressEscTrigger, shouldClearEscSuppressionOnExit, type EscSuppressedTrigger } from './mention-popup-utils'
+import { createLatestSuggestionRequestGuard, createMentionPopup, positionPopup, isSuggestionTriggerPresent, shouldSuppressEscTrigger, shouldClearEscSuppressionOnExit, type EscSuppressedTrigger } from './mention-popup-utils'
 import type { AgentSessionReferenceSearchResult } from '@proma/shared'
 import {
   buildPlanningReferenceItems,
@@ -54,6 +54,7 @@ function createMentionSuggestion<T>(
   // 直到用户重新触发（片段结束或内容变化）才恢复正常。
   // 用文本而非位置判断：删除触发符前的字符导致位置移动时，片段仍延续，继续抑制。
   let suppressedTrigger: EscSuppressedTrigger | null = null
+  const requestGuard = createLatestSuggestionRequestGuard<T>()
 
   return {
     char: config.char,
@@ -64,12 +65,16 @@ function createMentionSuggestion<T>(
     allowedPrefixes: null,
 
     items: async ({ query }): Promise<T[]> => {
+      const requestId = requestGuard.startRequest()
       const slug = workspaceSlugRef.current
-      if (config.requiresContext !== false && !slug) return []
+      if (config.requiresContext !== false && !slug) return requestGuard.attachResult(requestId, [])
       try {
-        return await config.fetchItems(slug ?? '', (query ?? '').toLowerCase())
+        return requestGuard.attachResult(
+          requestId,
+          await config.fetchItems(slug ?? '', (query ?? '').toLowerCase()),
+        )
       } catch {
-        return []
+        return requestGuard.attachResult(requestId, [])
       }
     },
 
@@ -78,9 +83,6 @@ function createMentionSuggestion<T>(
       let popup: HTMLDivElement | null = null
       let blurHandler: (() => void) | null = null
       let editorDom: HTMLElement | null = null
-      // 当前弹窗对应的触发符位置；onUpdate 校验 range 一致才更新，
-      // 避免过期 update（前一个触发片段的慢查询在弹窗创建后返回）覆盖当前弹窗。
-      let popupTriggerFrom: number | null = null
 
       function cleanup() {
         if (blurHandler && editorDom) {
@@ -90,7 +92,6 @@ function createMentionSuggestion<T>(
         editorDom = null
         mentionActiveRef.current = false
         mentionItemCountRef.current = 0
-        popupTriggerFrom = null
         popup?.remove()
         popup = null
         renderer?.destroy()
@@ -99,6 +100,9 @@ function createMentionSuggestion<T>(
 
       return {
         onStart(props) {
+          if (!requestGuard.isLatest(props.items)) {
+            return
+          }
           if (popup || renderer) {
             cleanup()
           }
@@ -119,7 +123,6 @@ function createMentionSuggestion<T>(
           mentionActiveRef.current = true
           mentionItemCountRef.current = props.items.length
           editorDom = props.editor.view.dom
-          popupTriggerFrom = props.range.from
           renderer = new ReactRenderer(MentionList, {
             props: {
               items: props.items,
@@ -148,9 +151,8 @@ function createMentionSuggestion<T>(
         },
 
         onUpdate(props) {
-          // 过期 update：本次查询对应的触发片段与当前弹窗不一致（如第一个触发片段的
-          // 慢查询在当前弹窗创建后才返回）→ 忽略，避免弹窗被旧结果覆盖。
-          if (popupTriggerFrom !== null && props.range.from !== popupTriggerFrom) {
+          // 仅允许最新异步请求更新弹窗。
+          if (!requestGuard.isLatest(props.items)) {
             return
           }
           mentionItemCountRef.current = props.items.length
@@ -176,6 +178,10 @@ function createMentionSuggestion<T>(
         },
 
         onExit(props) {
+          // TipTap 会在 await items() 后才调用 onExit；旧请求不能清理新弹窗。
+          if (requestGuard.isStale(props.items)) {
+            return
+          }
           // 被抑制的触发符已从文档中删除 → 清除抑制，让用户重新输入触发符时恢复正常弹窗
           if (suppressedTrigger && shouldClearEscSuppressionOnExit(suppressedTrigger, props.editor, props.range, config.char)) {
             suppressedTrigger = null

@@ -13,7 +13,7 @@ import { toast } from 'sonner'
 import { FileMentionList } from './FileMentionList'
 import type { FileMentionRef } from './FileMentionList'
 import type { FileIndexEntry } from '@proma/shared'
-import { createMentionPopup, positionPopup, isSuggestionTriggerPresent, shouldSuppressEscTrigger, shouldClearEscSuppressionOnExit, type EscSuppressedTrigger } from '@/components/agent/mention-popup-utils'
+import { createLatestSuggestionRequestGuard, createMentionPopup, positionPopup, isSuggestionTriggerPresent, shouldSuppressEscTrigger, shouldClearEscSuppressionOnExit, type EscSuppressedTrigger } from '@/components/agent/mention-popup-utils'
 import { resolveFileMentionPath } from './file-mention-path'
 
 type MentionSelection = Pick<FileIndexEntry, 'name' | 'path' | 'type' | 'source'>
@@ -32,6 +32,7 @@ export function createFileMentionSuggestion(
   // 直到用户重新触发（片段结束或内容变化）才恢复正常。
   // 用文本而非位置判断：删除触发符前的字符导致位置移动时，片段仍延续，继续抑制。
   let suppressedTrigger: EscSuppressedTrigger | null = null
+  const requestGuard = createLatestSuggestionRequestGuard<FileIndexEntry>()
 
   return {
     char: '@',
@@ -39,6 +40,7 @@ export function createFileMentionSuggestion(
     allowedPrefixes: null,
 
     items: async ({ query }): Promise<FileIndexEntry[]> => {
+      const requestId = requestGuard.startRequest()
       const wsPath = workspacePathRef.current
       if (!wsPath) {
         console.warn('[FileMention] workspacePath is null, mention disabled')
@@ -48,7 +50,7 @@ export function createFileMentionSuggestion(
           })
           missingWorkspaceToastShown = true
         }
-        return []
+        return requestGuard.attachResult(requestId, [])
       }
       missingWorkspaceToastShown = false
 
@@ -63,10 +65,10 @@ export function createFileMentionSuggestion(
           additionalPaths.length > 0 ? additionalPaths : undefined,
           sessionPaths.length > 0 ? sessionPaths : undefined,
         )
-        return result.entries
+        return requestGuard.attachResult(requestId, result.entries)
       } catch(e) {
         console.error('[FileMention] search failed:', e)
-        return []
+        return requestGuard.attachResult(requestId, [])
       }
     },
 
@@ -77,9 +79,6 @@ export function createFileMentionSuggestion(
       let latestClientRect: (() => DOMRect | null) | null | undefined = null
       let blurHandler: (() => void) | null = null
       let editorRef: SuggestionProps<FileIndexEntry>['editor'] | null = null
-      // 当前弹窗对应的触发符位置；onUpdate 校验 range 一致才更新，
-      // 避免过期 update（第一个 @ 片段的慢搜索在第二个 @ 弹窗创建后返回）污染弹窗。
-      let popupTriggerFrom: number | null = null
 
       // 用本次查询的 props.items 按 source 分组渲染弹窗，
       // 避免共享闭包 lastResult 被并发 view.update（第一个 @ 片段延续的慢搜索）
@@ -119,7 +118,6 @@ export function createFileMentionSuggestion(
         editorRef = null
         mentionActiveRef.current = false
         if (mentionItemCountRef) mentionItemCountRef.current = 0
-        popupTriggerFrom = null
         latestClientRect = null
         resizeObserver?.disconnect()
         resizeObserver = null
@@ -131,6 +129,9 @@ export function createFileMentionSuggestion(
 
       return {
         onStart(props) {
+          if (!requestGuard.isLatest(props.items)) {
+            return
+          }
           // 防御竞态：如果上一次弹窗未被正确清理，先清理残留
           if (popup || renderer) {
             cleanup()
@@ -152,7 +153,6 @@ export function createFileMentionSuggestion(
           mentionActiveRef.current = true
           if (mentionItemCountRef) mentionItemCountRef.current = props.items.length
           editorRef = props.editor
-          popupTriggerFrom = props.range.from
 
           try {
             latestClientRect = props.clientRect
@@ -182,9 +182,7 @@ export function createFileMentionSuggestion(
         },
 
         onUpdate(props) {
-          // 过期 update：本次查询对应的触发片段与当前弹窗不一致（如第一个 @ 的慢搜索
-          // 在第二个 @ 弹窗创建后才返回）→ 忽略，避免弹窗被旧结果覆盖（"无匹配文件"）。
-          if (popupTriggerFrom !== null && props.range.from !== popupTriggerFrom) {
+          if (!requestGuard.isLatest(props.items)) {
             return
           }
           if (mentionItemCountRef) mentionItemCountRef.current = props.items.length
@@ -217,6 +215,10 @@ export function createFileMentionSuggestion(
         },
 
         onExit(props) {
+          // TipTap 会在 await items() 后才调用 onExit；旧请求不能清理新弹窗。
+          if (requestGuard.isStale(props.items)) {
+            return
+          }
           // 被抑制的触发符已从文档中删除 → 清除抑制，让用户重新输入触发符时恢复正常弹窗
           if (suppressedTrigger && shouldClearEscSuppressionOnExit(suppressedTrigger, props.editor, props.range, '@')) {
             suppressedTrigger = null

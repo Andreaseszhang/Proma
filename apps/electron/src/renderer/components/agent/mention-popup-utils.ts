@@ -81,6 +81,33 @@ export function shouldClearEscSuppressionOnExit(
   return !editor.state.doc.textBetween(from, to, '', '').startsWith(char)
 }
 
+/**
+ * TipTap 会并发等待每次 items() 的异步结果。请求编号在发起时递增，因此旧请求即使
+ * 最后返回，也无法覆盖当前触发符或当前 query 的弹窗。
+ */
+export function createLatestSuggestionRequestGuard<T>() {
+  let latestRequestId = 0
+  const requestIds = new WeakMap<T[], number>()
+
+  return {
+    startRequest(): number {
+      latestRequestId += 1
+      return latestRequestId
+    },
+    attachResult(requestId: number, items: T[]): T[] {
+      requestIds.set(items, requestId)
+      return items
+    },
+    isLatest(items: T[]): boolean {
+      return requestIds.get(items) === latestRequestId
+    },
+    isStale(items: T[]): boolean {
+      const requestId = requestIds.get(items)
+      return requestId !== undefined && requestId !== latestRequestId
+    },
+  }
+}
+
 /** 创建弹窗容器并挂载到 body */
 export function createMentionPopup(content: HTMLElement): HTMLDivElement {
   const popup = document.createElement('div')

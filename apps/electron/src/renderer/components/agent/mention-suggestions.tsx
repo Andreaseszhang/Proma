@@ -78,6 +78,9 @@ function createMentionSuggestion<T>(
       let popup: HTMLDivElement | null = null
       let blurHandler: (() => void) | null = null
       let editorDom: HTMLElement | null = null
+      // 当前弹窗对应的触发符位置；onUpdate 校验 range 一致才更新，
+      // 避免过期 update（前一个触发片段的慢查询在弹窗创建后返回）覆盖当前弹窗。
+      let popupTriggerFrom: number | null = null
 
       function cleanup() {
         if (blurHandler && editorDom) {
@@ -87,6 +90,7 @@ function createMentionSuggestion<T>(
         editorDom = null
         mentionActiveRef.current = false
         mentionItemCountRef.current = 0
+        popupTriggerFrom = null
         popup?.remove()
         popup = null
         renderer?.destroy()
@@ -115,6 +119,7 @@ function createMentionSuggestion<T>(
           mentionActiveRef.current = true
           mentionItemCountRef.current = props.items.length
           editorDom = props.editor.view.dom
+          popupTriggerFrom = props.range.from
           renderer = new ReactRenderer(MentionList, {
             props: {
               items: props.items,
@@ -143,6 +148,11 @@ function createMentionSuggestion<T>(
         },
 
         onUpdate(props) {
+          // 过期 update：本次查询对应的触发片段与当前弹窗不一致（如第一个触发片段的
+          // 慢查询在当前弹窗创建后才返回）→ 忽略，避免弹窗被旧结果覆盖。
+          if (popupTriggerFrom !== null && props.range.from !== popupTriggerFrom) {
+            return
+          }
           mentionItemCountRef.current = props.items.length
           renderer?.updateProps({
             items: props.items,

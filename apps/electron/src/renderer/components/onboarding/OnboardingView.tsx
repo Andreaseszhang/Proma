@@ -50,11 +50,11 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-[#fbf9f6] md:flex-row">
       {/* ===== 左侧：Hopper 海景画作 ===== */}
-      <div className="relative h-44 shrink-0 overflow-hidden md:h-auto md:w-[52%]">
+      <div className="relative h-56 shrink-0 overflow-hidden bg-[#d9e0e4] md:h-auto md:w-[58%]">
         <img
           src={roomsByTheSea}
           alt="Edward Hopper 风格的海景房间"
-          className="absolute inset-0 h-full w-full object-cover object-[85%_center]"
+          className="absolute inset-0 h-full w-full object-contain object-center"
         />
         {/* 光感渐变遮罩 */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/5 to-black/15 md:bg-gradient-to-tr md:from-black/60 md:via-transparent md:to-black/20" />
@@ -110,7 +110,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
             </p>
 
             {/* 主操作 */}
-            <div className="mt-8 space-y-2">
+            <div className="mt-8">
               <button
                 onClick={handleNextFromWelcome}
                 className="flex h-12 w-full items-center justify-center gap-1.5 rounded-sm bg-[#16293c] text-base font-medium text-white shadow-[0_4px_0_rgba(22,41,60,0.35)] transition-all hover:bg-[#1e3a5f] active:translate-y-0.5 active:shadow-none"
@@ -124,9 +124,6 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
                   '开始使用'
                 )}
               </button>
-              <p className="text-center text-xs text-neutral-400">
-                这些内容之后也能在设置中找到，不用担心错过
-              </p>
             </div>
           </div>
         ) : (

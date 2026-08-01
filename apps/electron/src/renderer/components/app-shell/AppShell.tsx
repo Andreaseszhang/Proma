@@ -21,6 +21,7 @@ import { activeViewAtom } from '@/atoms/active-view'
 import { interfaceVariantAtom } from '@/atoms/theme'
 import { settingsOpenAtom } from '@/atoms/settings-tab'
 import { WindowControls } from '@/components/WindowControls'
+import { RefreshCw } from 'lucide-react'
 import { SettingsPanel } from '@/components/settings/SettingsPanel'
 import { detectIsWindows, WINDOW_CONTROLS_INSET_RIGHT } from '@/lib/platform'
 import { cn } from '@/lib/utils'
@@ -57,6 +58,12 @@ export function AppShell({ contextValue }: AppShellProps): React.ReactElement {
   const activeView = useAtomValue(activeViewAtom)
   const showRightPanel = appMode === 'agent' && !!currentSessionId && !automationForm.open && activeView !== 'planning' && activeView !== 'agent-skills'
   const isWindows = React.useMemo(() => detectIsWindows(), [])
+
+  /** 重置 onboarding：写回 false 并重新加载窗口，便于测试引导流程 */
+  const handleResetOnboarding = React.useCallback(async () => {
+    await window.electronAPI.updateSettings({ onboardingCompleted: false })
+    window.location.reload()
+  }, [])
 
   // 左侧边栏可拖拽宽度
   const [leftSidebarWidth, setLeftSidebarWidth] = useAtom(leftSidebarWidthAtom)
@@ -238,6 +245,15 @@ export function AppShell({ contextValue }: AppShellProps): React.ReactElement {
             <SettingsPanel onClose={() => setSettingsOpen(false)} />
           </div>
         )}
+
+        {/* 右下角：重置 Onboarding（测试用） */}
+        <button
+          onClick={handleResetOnboarding}
+          title="重置 Onboarding（重新进入引导）"
+          className="absolute bottom-4 right-4 z-[70] flex h-9 w-9 items-center justify-center rounded-full border border-neutral-300/70 bg-white/70 text-neutral-500 shadow-sm backdrop-blur-sm transition-all hover:border-[#1b3f2d]/40 hover:bg-white hover:text-[#1b3f2d] dark:border-neutral-700 dark:bg-neutral-900/70 dark:text-neutral-400 dark:hover:text-[#27513a]"
+        >
+          <RefreshCw size={16} />
+        </button>
       </div>
     </AppShellProvider>
   )

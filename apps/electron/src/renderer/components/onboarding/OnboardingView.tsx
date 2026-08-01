@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button'
 import { EnvironmentCheckPanel } from '@/components/environment/EnvironmentCheckPanel'
 import { isShellEnvironmentOkAtom } from '@/atoms/environment'
 import { detectIsWindows } from '@/lib/platform'
-import roomsByTheSea from '@/assets/onboarding/rooms-by-the-sea.jpg'
+import roomsByTheSea from '@/assets/onboarding/rooms-by-the-sea.png'
 import promaMarkWhite from '@/assets/onboarding/proma-mark-white.svg'
 
 interface OnboardingViewProps {
@@ -50,11 +50,11 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
   return (
     <div className="flex h-screen w-full flex-col overflow-hidden bg-[#fbf9f6] md:flex-row">
       {/* ===== 左侧：Hopper 海景画作 ===== */}
-      <div className="relative h-56 shrink-0 overflow-hidden bg-[#d9e0e4] md:h-auto md:w-[58%]">
+      <div className="relative h-56 shrink-0 overflow-hidden bg-[#d9e0e4] md:h-auto md:w-[calc(58%+100px)]">
         <img
           src={roomsByTheSea}
-          alt="Edward Hopper 风格的海景房间"
-          className="absolute inset-0 h-full w-full object-contain object-center"
+          alt="海边的房间画作"
+          className="absolute inset-0 h-full w-full object-cover object-center"
         />
         {/* 光感渐变遮罩 */}
         <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/5 to-black/15 md:bg-gradient-to-tr md:from-black/60 md:via-transparent md:to-black/20" />
@@ -81,7 +81,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
 
         {/* 右下角画作签名装饰 */}
         <div className="absolute bottom-6 right-6 hidden select-none text-[10px] uppercase tracking-widest text-white/50 md:bottom-10 md:right-10 md:block">
-          Rooms by the Sea
+          Cape Ann Granite
         </div>
       </div>
 
@@ -96,7 +96,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
           <div className="w-full max-w-xl px-6 py-10 md:px-10">
             {/* 状态徽章 */}
             <div className="mb-6 flex items-center gap-2.5">
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#1e3a5f] text-white">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#26583d] text-white">
                 <Check size={13} strokeWidth={3} />
               </span>
               <span className="text-sm font-medium text-neutral-500">准备就绪</span>
@@ -113,7 +113,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
             <div className="mt-8">
               <button
                 onClick={handleNextFromWelcome}
-                className="flex h-12 w-full items-center justify-center gap-1.5 rounded-sm bg-[#16293c] text-base font-medium text-white shadow-[0_4px_0_rgba(22,41,60,0.35)] transition-all hover:bg-[#1e3a5f] active:translate-y-0.5 active:shadow-none"
+                className="flex h-12 w-full items-center justify-center gap-1.5 rounded-sm bg-[#1b3f2d] text-base font-medium text-white transition-all hover:bg-[#27513a] active:translate-y-0.5 active:shadow-none"
               >
                 {isWindows ? (
                   <>
@@ -130,7 +130,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
           <div className="w-full max-w-xl px-6 py-10 md:px-10">
             {/* 状态徽章 */}
             <div className="mb-6 flex items-center gap-2.5">
-              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#1e3a5f] text-white">
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-[#26583d] text-white">
                 <Check size={13} strokeWidth={3} />
               </span>
               <span className="text-sm font-medium text-neutral-500">环境检测</span>

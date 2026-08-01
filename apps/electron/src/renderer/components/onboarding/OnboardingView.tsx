@@ -52,10 +52,86 @@ interface GuideFeatureStepProps {
   onBack?: () => void
   /** 左侧展示的界面截图；默认 guideVisual */
   imageSrc?: string
-  /** 指针模式：curve 曲线（默认）、straight 直线、none 不显示 */
-  arrowMode?: 'curve' | 'straight' | 'none'
+  /** 指针模式：curve 曲线（默认）、straight 直线、none 不显示、magnifier 圆形放大镜 */
+  arrowMode?: 'curve' | 'straight' | 'none' | 'magnifier'
   /** 常见问题（每页 3 个） */
   faqs?: Array<{ q: string; a: string }>
+}
+
+interface MagnifierProps {
+  imageSrc: string
+  /** 锚点在图片内的归一化坐标（0-1） */
+  anchorX: number
+  anchorY: number
+  /** 图片在容器内的实际渲染位置 */
+  imgRect: { x: number; y: number; w: number; h: number }
+}
+
+/**
+ * 圆形放大镜：覆盖在图片锚点位置，圈内放大显示被讲解的 UI 元素。
+ *
+ * 原理：在锚点位置放一个圆形裁剪容器（clip-path: circle），
+ * 容器内再渲染同一张图片，但以锚点为中心放大 2 倍，
+ * 视觉效果就像把对应区域的内容放大到圆圈里。
+ */
+function Magnifier({ imageSrc, anchorX, anchorY, imgRect }: MagnifierProps) {
+  const RADIUS = 120 // 放大镜半径（px）
+  const ZOOM = 2.2 // 放大倍数
+
+  const cx = imgRect.x + anchorX * imgRect.w
+  const cy = imgRect.y + anchorY * imgRect.h
+
+  // 内部放大图以锚点为中心：放大图左上角相对放大镜容器的坐标
+  const innerLeft = RADIUS - anchorX * imgRect.w * ZOOM
+  const innerTop = RADIUS - anchorY * imgRect.h * ZOOM
+
+  return (
+    <div
+      className="pointer-events-none absolute z-20"
+      style={{
+        left: cx - RADIUS,
+        top: cy - RADIUS,
+        width: RADIUS * 2,
+        height: RADIUS * 2,
+        clipPath: `circle(${RADIUS}px at ${RADIUS}px ${RADIUS}px)`,
+        overflow: 'hidden',
+        filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.25))',
+      }}
+    >
+      {/* 圈内放大后的图片：以锚点为中心放大 ZOOM 倍 */}
+      <img
+        src={imageSrc}
+        alt=""
+        draggable={false}
+        className="max-w-none"
+        style={{
+          position: 'absolute',
+          left: innerLeft,
+          top: innerTop,
+          width: imgRect.w * ZOOM,
+          height: imgRect.h * ZOOM,
+          transform: 'none',
+          objectFit: 'fill',
+        }}
+      />
+      {/* 圆圈边框 */}
+      <div
+        className="absolute inset-0 rounded-full border-[3px] border-[#1b3f2d]"
+        style={{ clipPath: `circle(${RADIUS}px at ${RADIUS}px ${RADIUS}px)` }}
+      />
+      {/* 放大镜把手装饰（可选） */}
+      <div
+        className="absolute bottom-[-6px] right-[-6px] h-8 w-8 rounded-full border-[4px] border-[#1b3f2d]"
+        style={{
+          clipPath: 'none',
+          background: 'transparent',
+          borderRightColor: 'transparent',
+          borderBottomColor: 'transparent',
+          transform: 'rotate(-45deg)',
+        }}
+      />
+    </div>
+  )
 }
 
 /**
@@ -101,8 +177,18 @@ function GuideFeatureStep({ anchor, title, highlight, paragraphs, nextLabel, onN
           className="max-h-full max-w-full object-contain"
         />
 
+        {/* 圆形放大镜：覆盖在图片对应区域，圈内放大显示被讲解的 UI */}
+        {imgRect && arrowMode === 'magnifier' && (
+          <Magnifier
+            imageSrc={imageSrc}
+            anchorX={anchor.x}
+            anchorY={anchor.y}
+            imgRect={imgRect}
+          />
+        )}
+
         {/* 绿色指针：从图片锚点指向右侧讲解区（curve 曲线 / straight 直线 / none 无） */}
-        {imgRect && arrowMode !== 'none' && (
+        {imgRect && arrowMode !== 'none' && arrowMode !== 'magnifier' && (
           <svg
             className="pointer-events-none absolute inset-y-0 left-0 z-10 h-full w-[calc(100%+70px)]"
             viewBox={`0 0 ${imgRect.x + imgRect.w + 94} ${imgRect.y + imgRect.h + 24}`}
@@ -466,6 +552,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
         {step === 'guide' && (
           <GuideFeatureStep
             anchor={{ x: 0.073, y: 0.049 }}
+            arrowMode="magnifier"
             title="Agent 和 Chat 模式的区别"
             paragraphs={[
               <>左边栏顶部是 Proma 的<b className="font-medium text-neutral-900">模式切换</b>：Agent 与 Chat。</>,
@@ -501,7 +588,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
         {step === 'files' && (
           <GuideFeatureStep
             anchor={{ x: 0.91, y: 0.07 }}
-            arrowMode="none"
+            arrowMode="magnifier"
             title="会话文件和项目文件"
             paragraphs={[
               <>右侧预览面板顶部有<b className="font-medium text-neutral-900">会话文件</b>和<b className="font-medium text-neutral-900">项目文件</b>两个页签。</>,
@@ -533,6 +620,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
         {step === 'project' && (
           <GuideFeatureStep
             anchor={{ x: 0.012, y: 0.22 }}
+            arrowMode="magnifier"
             title="项目的概念"
             paragraphs={[
               <>左侧边栏的<b className="font-medium text-neutral-900">项目</b>是你为特定工作建立的独立空间。</>,

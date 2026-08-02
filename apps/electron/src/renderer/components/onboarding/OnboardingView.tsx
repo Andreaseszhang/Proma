@@ -54,6 +54,8 @@ interface GuideFeatureStepProps {
   imageSrc?: string
   /** 指针模式：curve 曲线（默认）、straight 直线、none 不显示、magnifier 圆形放大镜 */
   arrowMode?: 'curve' | 'straight' | 'none' | 'magnifier'
+  /** 放大镜容器水平偏移（px），仅移动圆圈位置，圈内内容不变 */
+  magnifierOffsetX?: number
   /** 常见问题（每页 3 个） */
   faqs?: Array<{ q: string; a: string }>
 }
@@ -65,6 +67,8 @@ interface MagnifierProps {
   anchorY: number
   /** 图片在容器内的实际渲染位置 */
   imgRect: { x: number; y: number; w: number; h: number }
+  /** 放大镜容器水平偏移（px），仅移动圆圈位置，圈内内容不变 */
+  offsetX?: number
 }
 
 /**
@@ -74,8 +78,8 @@ interface MagnifierProps {
  * 容器内再渲染同一张图片，但以锚点为中心放大 2 倍，
  * 视觉效果就像把对应区域的内容放大到圆圈里。
  */
-function Magnifier({ imageSrc, anchorX, anchorY, imgRect }: MagnifierProps) {
-  const RADIUS = 120 // 放大镜半径（px）
+function Magnifier({ imageSrc, anchorX, anchorY, imgRect, offsetX = 0 }: MagnifierProps) {
+  const RADIUS = 160 // 放大镜半径（px）
   const ZOOM = 2.2 // 放大倍数
 
   const cx = imgRect.x + anchorX * imgRect.w
@@ -89,7 +93,7 @@ function Magnifier({ imageSrc, anchorX, anchorY, imgRect }: MagnifierProps) {
     <div
       className="pointer-events-none absolute z-20"
       style={{
-        left: cx - RADIUS,
+        left: cx - RADIUS + offsetX,
         top: cy - RADIUS,
         width: RADIUS * 2,
         height: RADIUS * 2,
@@ -137,7 +141,7 @@ function Magnifier({ imageSrc, anchorX, anchorY, imgRect }: MagnifierProps) {
 /**
  * 引导科普页：左侧显示界面截图，从锚点画绿色指针指向右侧讲解区。
  */
-function GuideFeatureStep({ anchor, title, highlight, paragraphs, nextLabel, onNext, onBack, imageSrc = guideVisual, arrowMode = 'none', faqs }: GuideFeatureStepProps) {
+function GuideFeatureStep({ anchor, title, highlight, paragraphs, nextLabel, onNext, onBack, imageSrc = guideVisual, arrowMode = 'none', faqs, magnifierOffsetX = 0 }: GuideFeatureStepProps) {
   const imgRef = useRef<HTMLImageElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [imgRect, setImgRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
@@ -184,6 +188,7 @@ function GuideFeatureStep({ anchor, title, highlight, paragraphs, nextLabel, onN
             anchorX={anchor.x}
             anchorY={anchor.y}
             imgRect={imgRect}
+            offsetX={magnifierOffsetX}
           />
         )}
 
@@ -553,6 +558,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
           <GuideFeatureStep
             anchor={{ x: 0.073, y: 0.049 }}
             arrowMode="magnifier"
+            magnifierOffsetX={70}
             title="Agent 和 Chat 模式的区别"
             paragraphs={[
               <>左边栏顶部是 Proma 的<b className="font-medium text-neutral-900">模式切换</b>：Agent 与 Chat。</>,
@@ -621,6 +627,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
           <GuideFeatureStep
             anchor={{ x: 0.012, y: 0.22 }}
             arrowMode="magnifier"
+            magnifierOffsetX={70}
             title="项目的概念"
             paragraphs={[
               <>左侧边栏的<b className="font-medium text-neutral-900">项目</b>是你为特定工作建立的独立空间。</>,

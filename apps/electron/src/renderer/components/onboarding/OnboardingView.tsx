@@ -12,7 +12,8 @@
  *  Step 6：引用功能科普（图：Agent 引用提示）
  *  Step 7：侧边回答科普（图：历史选区问答）
  *  Step 8：子会话科普（图：collaboration 子会话）
- *  Step 9：Windows 环境检测（仅 Windows，其他平台自动跳过）
+ *  Step 9：FAQ 汇总页（按主题分组）
+ *  Step 10：Windows 环境检测（仅 Windows，其他平台自动跳过）
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -30,7 +31,7 @@ import guideSideAnswer from '@/assets/onboarding/guide-side-answer.png'
 import guideSubagent from '@/assets/onboarding/guide-subagent.png'
 import promaMarkWhite from '@/assets/onboarding/proma-mark-white.svg'
 
-type OnboardingStep = 'welcome' | 'guide' | 'files' | 'project' | 'automation' | 'reference' | 'sideanswer' | 'subagent' | 'environment'
+type OnboardingStep = 'welcome' | 'guide' | 'files' | 'project' | 'automation' | 'reference' | 'sideanswer' | 'subagent' | 'faq' | 'environment'
 
 interface OnboardingViewProps {
   onComplete: (openTutorial?: boolean) => void
@@ -40,6 +41,12 @@ interface OnboardingViewProps {
 interface GuideAnchor {
   x: number
   y: number
+}
+
+/** 镜片内截图偏移，单位为镜片直径；正值分别向右、向下移动截图 */
+interface MagnifierImageOffset {
+  x?: number
+  y?: number
 }
 
 interface GuideFeatureStepProps {
@@ -54,11 +61,12 @@ interface GuideFeatureStepProps {
   imageSrc?: string
   /** 指针模式：curve 曲线（默认）、straight 直线、none 不显示、magnifier 圆形放大镜 */
   arrowMode?: 'curve' | 'straight' | 'none' | 'magnifier'
-  /** 放大镜容器水平偏移（px），仅移动圆圈位置，圈内内容不变 */
+  /** 放大镜容器水平偏移（以 320px 镜片为基准，随截图同步缩放） */
   magnifierOffsetX?: number
+  /** 仅移动镜片内的截图，不移动放大镜容器 */
+  magnifierImageOffset?: MagnifierImageOffset
   /** 常见问题（每页 3 个） */
-  faqs?: Array<{ q: string; a: string }>
-}
+  faqs?: Array<{ q: string; a: string }>}
 
 interface MagnifierProps {
   imageSrc: string
@@ -67,8 +75,10 @@ interface MagnifierProps {
   anchorY: number
   /** 图片在容器内的实际渲染位置 */
   imgRect: { x: number; y: number; w: number; h: number }
-  /** 放大镜容器水平偏移（px），仅移动圆圈位置，圈内内容不变 */
+  /** 放大镜容器水平偏移（以 320px 镜片为基准，随截图同步缩放） */
   offsetX?: number
+  /** 仅移动镜片内的截图，不移动放大镜容器 */
+  imageOffset?: MagnifierImageOffset
 }
 
 /**
@@ -78,31 +88,46 @@ interface MagnifierProps {
  * 容器内再渲染同一张图片，但以锚点为中心放大 2 倍，
  * 视觉效果就像把对应区域的内容放大到圆圈里。
  */
-function Magnifier({ imageSrc, anchorX, anchorY, imgRect, offsetX = 0 }: MagnifierProps) {
-  const RADIUS = 160 // 放大镜半径（px）
+function Magnifier({ imageSrc, anchorX, anchorY, imgRect, offsetX = 0, imageOffset = {} }: MagnifierProps) {
   const ZOOM = 2.2 // 放大倍数
+  const SOURCE_CROP_WIDTH = 0.1765 // 每次展示原截图横向约 17.65% 的区域
+  const REFERENCE_DIAMETER = 320
+  const DIAMETER = imgRect.w * ZOOM * SOURCE_CROP_WIDTH
+  const RADIUS = DIAMETER / 2
 
   const cx = imgRect.x + anchorX * imgRect.w
   const cy = imgRect.y + anchorY * imgRect.h
+  const scaledOffsetX = offsetX * (DIAMETER / REFERENCE_DIAMETER)
 
-  // 内部放大图以锚点为中心：放大图左上角相对放大镜容器的坐标
-  const innerLeft = RADIUS - anchorX * imgRect.w * ZOOM
-  const innerTop = RADIUS - anchorY * imgRect.h * ZOOM
+  const zoomedWidth = imgRect.w * ZOOM
+  const zoomedHeight = imgRect.h * ZOOM
+
+  // 默认将取景限制在放大图内，避免透明区域透出底下的原尺寸截图。
+  // 有明确焦点偏移时允许在起始边缘留出镜片底色，以便边缘元素仍可落在镜片中心。
+  const clampToLens = (position: number, contentSize: number) =>
+    Math.min(0, Math.max(DIAMETER - contentSize, position))
+  const applyImageOffset = (position: number, contentSize: number, offset: number) =>
+    Math.max(DIAMETER - contentSize, offset > 0 ? position + offset : Math.min(0, position + offset))
+  const baseLeft = clampToLens(RADIUS - anchorX * zoomedWidth, zoomedWidth)
+  const baseTop = clampToLens(RADIUS - anchorY * zoomedHeight, zoomedHeight)
+  const innerLeft = applyImageOffset(baseLeft, zoomedWidth, (imageOffset.x ?? 0) * DIAMETER)
+  const innerTop = applyImageOffset(baseTop, zoomedHeight, (imageOffset.y ?? 0) * DIAMETER)
 
   return (
     <div
       className="pointer-events-none absolute z-20"
       style={{
-        left: cx - RADIUS + offsetX,
+        left: cx - RADIUS + scaledOffsetX,
         top: cy - RADIUS,
-        width: RADIUS * 2,
-        height: RADIUS * 2,
+        width: DIAMETER,
+        height: DIAMETER,
+        backgroundColor: '#eef4ea',
         clipPath: `circle(${RADIUS}px at ${RADIUS}px ${RADIUS}px)`,
         overflow: 'hidden',
         filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.25))',
       }}
     >
-      {/* 圈内放大后的图片：以锚点为中心放大 ZOOM 倍 */}
+      {/* 圈内放大后的图片：边缘锚点时仍完整覆盖整个圆盘 */}
       <img
         src={imageSrc}
         alt=""
@@ -112,9 +137,8 @@ function Magnifier({ imageSrc, anchorX, anchorY, imgRect, offsetX = 0 }: Magnifi
           position: 'absolute',
           left: innerLeft,
           top: innerTop,
-          width: imgRect.w * ZOOM,
-          height: imgRect.h * ZOOM,
-          transform: 'none',
+          width: zoomedWidth,
+          height: zoomedHeight,
           objectFit: 'fill',
         }}
       />
@@ -141,17 +165,18 @@ function Magnifier({ imageSrc, anchorX, anchorY, imgRect, offsetX = 0 }: Magnifi
 /**
  * 引导科普页：左侧显示界面截图，从锚点画绿色指针指向右侧讲解区。
  */
-function GuideFeatureStep({ anchor, title, highlight, paragraphs, nextLabel, onNext, onBack, imageSrc = guideVisual, arrowMode = 'none', faqs, magnifierOffsetX = 0 }: GuideFeatureStepProps) {
+function GuideFeatureStep({ anchor, title, highlight, paragraphs, nextLabel, onNext, onBack, imageSrc = guideVisual, arrowMode = 'none', magnifierOffsetX = 0, magnifierImageOffset = {} }: GuideFeatureStepProps) {
   const imgRef = useRef<HTMLImageElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [imgRect, setImgRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
-  const [openFaq, setOpenFaq] = useState<number | null>(null)
 
   useEffect(() => {
+    const img = imgRef.current
+    if (!img) return
+
     const update = () => {
-      const img = imgRef.current
       const ctr = containerRef.current
-      if (!img || !ctr) return
+      if (!ctr) return
       const ir = img.getBoundingClientRect()
       const cr = ctr.getBoundingClientRect()
       setImgRect({
@@ -162,9 +187,12 @@ function GuideFeatureStep({ anchor, title, highlight, paragraphs, nextLabel, onN
       })
     }
     update()
+    const resizeObserver = new ResizeObserver(update)
+    resizeObserver.observe(img)
     const t = setTimeout(update, 60)
     window.addEventListener('resize', update)
     return () => {
+      resizeObserver.disconnect()
       clearTimeout(t)
       window.removeEventListener('resize', update)
     }
@@ -189,6 +217,7 @@ function GuideFeatureStep({ anchor, title, highlight, paragraphs, nextLabel, onN
             anchorY={anchor.y}
             imgRect={imgRect}
             offsetX={magnifierOffsetX}
+            imageOffset={magnifierImageOffset}
           />
         )}
 
@@ -263,46 +292,231 @@ function GuideFeatureStep({ anchor, title, highlight, paragraphs, nextLabel, onN
           ))}
         </div>
 
-        {/* 常见问题（可折叠） */}
-        {faqs && faqs.length > 0 && (
-          <div className="mt-8 w-full max-w-lg">
-            <div className="mb-3 text-sm uppercase tracking-[0.25em] text-neutral-400">常见问题</div>
-            <div className="space-y-2">
-              {faqs.map((faq, i) => {
-                const open = openFaq === i
-                return (
-                  <div
-                    key={i}
-                    className="overflow-hidden rounded-sm border border-neutral-200/80 bg-white/70 transition-colors"
+        <div className="mt-10 flex w-full max-w-lg items-center justify-between">
+          {onBack ? (
+            <Button variant="ghost" size="sm" onClick={onBack} className="text-neutral-500">
+              <ChevronLeft className="mr-1 h-4 w-4" />
+              上一个
+            </Button>
+          ) : (
+            <span />
+          )}
+          <button
+            onClick={onNext}
+            className="flex h-12 items-center justify-center gap-1.5 rounded-sm bg-[#1b3f2d] px-8 text-base font-medium text-white transition-all hover:bg-[#27513a] active:translate-y-0.5 active:shadow-none"
+          >
+            {nextLabel}
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** FAQ 主题分组 */
+const FAQ_GROUPS: Array<{ topic: string; items: Array<{ q: string; a: string }> }> = [
+  {
+    topic: 'Agent / Chat',
+    items: [
+      {
+        q: 'Chat 也能完成 Agent 做的事吗？',
+        a: '不能。Chat 适合快速问答，但遇到需要多步规划、调用工具、读写文件的任务，只有 Agent 可以完成。',
+      },
+      {
+        q: '什么时候用 Chat、什么时候用 Agent？',
+        a: '简单问答随手用 Chat；要执行任务、调研、改代码、自动化时用 Agent。拿不准时直接用 Agent，它会判断是否需要多步执行。',
+      },
+      {
+        q: '切换模式会丢失当前对话吗？',
+        a: '不会。Agent 和 Chat 的对话是独立的会话，切换模式不会清除任何内容，你可以随时回来继续。',
+      },
+    ],
+  },
+  {
+    topic: '项目',
+    items: [
+      {
+        q: '项目和文件夹有什么区别？',
+        a: '项目是 Proma 的工作区概念，自带独立的文件、上下文和记忆；文件夹只是存放文件的目录，两者定位不同。',
+      },
+      {
+        q: '项目之间会互相影响吗？',
+        a: '不会。每个项目的文件、Agent 记忆、上下文互相隔离，切换项目不会串内容。',
+      },
+      {
+        q: '可以建多个项目吗？',
+        a: '可以。按工作目标建项目即可，比如每个客户、每个研究方向一个项目，便于长期维护。',
+      },
+    ],
+  },
+  {
+    topic: '文件',
+    items: [
+      {
+        q: '项目文件是本项目所有会话共享的吗？',
+        a: '是的。项目文件属于整个项目，项目内所有会话都可以访问，适合放共享资料、长期文档和项目级 Context。',
+      },
+      {
+        q: '这两个地方分别应该放什么样的文件？',
+        a: '一次性的材料（如临时截图、附件）放会话文件；需要跨会话共享的长期资料（项目文档、共享素材）放项目文件。',
+      },
+    ],
+  },
+  {
+    topic: '自动任务',
+    items: [
+      {
+        q: '自动任务需要一直开着 Proma 吗？',
+        a: '需要 Proma 在运行才会执行。你可以设置触发时间，到时应用会自动运行任务并通知结果。',
+      },
+      {
+        q: '任务执行会占用多少资源？',
+        a: '每个任务按你选的模型独立运行，支持完全权限无人值守，也可以配置运行次数上限和频率控制。',
+      },
+      {
+        q: '任务结果在哪里看？',
+        a: '在自动任务的运行历史里可以看到每次执行的状态、耗时和结果，失败也会记录原因。',
+      },
+    ],
+  },
+  {
+    topic: '引用',
+    items: [
+      {
+        q: '引用和支持拖拽是一回事吗？',
+        a: '是的。你可以把文件或文件夹直接拖进输入框，或点击「添加文件」按钮，都会被作为引用交给 Agent。',
+      },
+      {
+        q: '引用会占用对话上下文吗？',
+        a: '会按需读取。Agent 会先看到文件清单，真正用到内容时才读取，避免一次塞入大量无关内容。',
+      },
+      {
+        q: '可以引用哪些类型的内容？',
+        a: '文件、文件夹、其他会话、待办/日程都可以引用，输入框提示里会显示对应的引用方式。',
+      },
+    ],
+  },
+  {
+    topic: '侧边回答',
+    items: [
+      {
+        q: '侧边回答和普通对话有什么区别？',
+        a: '普通对话是独立问答；侧边回答是围绕你选中的文字展开，右侧面板专门讲解，不打断当前主对话。',
+      },
+      {
+        q: '侧边回答会新建会话吗？',
+        a: '不会新建独立会话，它是当前会话的辅助面板，问答记录仍归属当前上下文。',
+      },
+      {
+        q: '哪些内容可以用侧边回答？',
+        a: '对话消息、搜索选区等可选中文本都可以，选中后打开侧边回答即可。',
+      },
+    ],
+  },
+  {
+    topic: '子会话',
+    items: [
+      {
+        q: '子会话怎么启动？',
+        a: '直接用自然语言说就行，比如「启动 3 个子会话分别研究 A、B、C」，Agent 会自动创建协作子会话。',
+      },
+      {
+        q: '子会话可以指定模型吗？',
+        a: '可以。每个子会话都能指定不同的模型（如 MiniMax、DeepSeek），按任务特点选合适的内核。',
+      },
+      {
+        q: '子会话结果会占用父会话上下文吗？',
+        a: '基本不占。子会话拥有独立上下文，各自研究后再把结论汇总回父会话，节省父会话空间。',
+      },
+    ],
+  },
+]
+
+/**
+ * FAQ 页面：按主题分组展示所有常见问题。
+ */
+function FaqPage({ nextLabel, onNext, onBack }: { nextLabel: string; onNext: () => void; onBack?: () => void }) {
+  const [openGroup, setOpenGroup] = useState<string | null>(null)
+  const [openItem, setOpenItem] = useState<string | null>(null)
+
+  return (
+    <div className="flex h-full w-full items-start justify-center overflow-y-auto px-6 py-12 md:px-12">
+      <div className="w-full max-w-3xl">
+        <h2 className="text-3xl font-light tracking-tight text-neutral-900 md:text-4xl">常见问题</h2>
+        <p className="mt-3 text-base leading-relaxed text-neutral-500">
+          关于 Proma 的高频疑问，按主题整理好了。
+        </p>
+
+        <div className="mt-8 space-y-6">
+          {FAQ_GROUPS.map((group) => {
+            const groupOpen = openGroup === group.topic
+            return (
+              <div key={group.topic} className="rounded-sm border border-neutral-200/80 bg-white/70">
+                <button
+                  onClick={() => setOpenGroup(groupOpen ? null : group.topic)}
+                  className="flex w-full items-center justify-between px-4 py-3.5 text-left"
+                >
+                  <span className="text-base font-medium text-neutral-900">{group.topic}</span>
+                  <span
+                    className={`text-neutral-400 transition-transform duration-200 ${groupOpen ? 'rotate-180' : ''}`}
                   >
-                    <button
-                      onClick={() => setOpenFaq(open ? null : i)}
-                      className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
-                    >
-                      <span className="text-sm font-medium text-neutral-800">{faq.q}</span>
-                      <span
-                        className={`text-neutral-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
-                      >
-                        <ChevronDown size={16} />
-                      </span>
-                    </button>
-                    <div
-                      className={`grid transition-all duration-200 ${
-                        open ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
-                      }`}
-                    >
-                      <div className="overflow-hidden">
-                        <p className="px-4 pb-4 text-sm leading-relaxed text-neutral-600">{faq.a}</p>
-                      </div>
+                    <ChevronDown size={18} />
+                  </span>
+                </button>
+
+                <div
+                  className={`grid transition-all duration-200 ${
+                    groupOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+                  }`}
+                >
+                  <div className="overflow-hidden">
+                    <div className="space-y-1 px-3 pb-3">
+                      {group.items.map((item) => {
+                        const itemOpen = openItem === `${group.topic}::${item.q}`
+                        return (
+                          <div
+                            key={item.q}
+                            className="overflow-hidden rounded-sm border border-neutral-100"
+                          >
+                            <button
+                              onClick={() =>
+                                setOpenItem(itemOpen ? null : `${group.topic}::${item.q}`)
+                              }
+                              className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left"
+                            >
+                              <span className="text-sm text-neutral-700">{item.q}</span>
+                              <span
+                                className={`text-neutral-300 transition-transform duration-200 ${
+                                  itemOpen ? 'rotate-180' : ''
+                                }`}
+                              >
+                                <ChevronDown size={14} />
+                              </span>
+                            </button>
+                            <div
+                              className={`grid transition-all duration-200 ${
+                                itemOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+                              }`}
+                            >
+                              <div className="overflow-hidden">
+                                <p className="px-3 pb-3 text-sm leading-relaxed text-neutral-600">
+                                  {item.a}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
 
-        <div className="mt-10 flex w-full max-w-lg items-center justify-between">
+        <div className="mt-10 flex w-full items-center justify-between">
           {onBack ? (
             <Button variant="ghost" size="sm" onClick={onBack} className="text-neutral-500">
               <ChevronLeft className="mr-1 h-4 w-4" />
@@ -334,6 +548,7 @@ const STEP_LABELS: Array<{ step: OnboardingStep; label: string }> = [
   { step: 'reference', label: '引用' },
   { step: 'sideanswer', label: '侧边回答' },
   { step: 'subagent', label: '子会话' },
+  { step: 'faq', label: 'FAQ' },
 ]
 
 /**
@@ -439,7 +654,8 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
   const handleNextFromAutomation = () => transitionTo('reference')
   const handleNextFromReference = () => transitionTo('sideanswer')
   const handleNextFromSideAnswer = () => transitionTo('subagent')
-  const handleNextFromSubagent = () => {
+  const handleNextFromSubagent = () => transitionTo('faq')
+  const handleNextFromFaq = () => {
     if (isWindows) {
       transitionTo('environment')
     } else {
@@ -470,8 +686,10 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
                   ? 7
                   : step === 'subagent'
                     ? 8
-                    : 9
-  const totalSteps = isWindows ? 9 : 8
+                    : step === 'faq'
+                      ? 9
+                      : 10
+  const totalSteps = isWindows ? 10 : 9
 
   return (
     <div className="relative flex h-screen w-full flex-col overflow-hidden bg-[#fbf9f7] md:flex-row">
@@ -559,6 +777,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
             anchor={{ x: 0.073, y: 0.049 }}
             arrowMode="magnifier"
             magnifierOffsetX={70}
+            magnifierImageOffset={{ x: 0.09, y: 0.33 }}
             title="Agent 和 Chat 模式的区别"
             paragraphs={[
               <>左边栏顶部是 Proma 的<b className="font-medium text-neutral-900">模式切换</b>：Agent 与 Chat。</>,
@@ -574,20 +793,6 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
             nextLabel="下一个"
             onNext={handleNextFromGuide}
             onBack={() => transitionTo('welcome')}
-            faqs={[
-              {
-                q: 'Chat 也能完成 Agent 做的事吗？',
-                a: '不能。Chat 适合快速问答，但遇到需要多步规划、调用工具、读写文件的任务，只有 Agent 可以完成。',
-              },
-              {
-                q: '什么时候用 Chat、什么时候用 Agent？',
-                a: '简单问答随手用 Chat；要执行任务、调研、改代码、自动化时用 Agent。拿不准时直接用 Agent，它会判断是否需要多步执行。',
-              },
-              {
-                q: '切换模式会丢失当前对话吗？',
-                a: '不会。Agent 和 Chat 的对话是独立的会话，切换模式不会清除任何内容，你可以随时回来继续。',
-              },
-            ]}
           />
         )}
 
@@ -610,16 +815,6 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
             nextLabel="下一个"
             onNext={handleNextFromFiles}
             onBack={() => transitionTo('project')}
-            faqs={[
-              {
-                q: '项目文件是本项目所有会话共享的吗？',
-                a: '是的。项目文件属于整个项目，项目内所有会话都可以访问，适合放共享资料、长期文档和项目级 Context。',
-              },
-              {
-                q: '这两个地方分别应该放什么样的文件？',
-                a: '一次性的材料（如临时截图、附件）放会话文件；需要跨会话共享的长期资料（项目文档、共享素材）放项目文件。',
-              },
-            ]}
           />
         )}
 
@@ -628,6 +823,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
             anchor={{ x: 0.012, y: 0.22 }}
             arrowMode="magnifier"
             magnifierOffsetX={70}
+            magnifierImageOffset={{ x: 0.22 }}
             title="项目的概念"
             paragraphs={[
               <>左侧边栏的<b className="font-medium text-neutral-900">项目</b>是你为特定工作建立的独立空间。</>,
@@ -642,20 +838,6 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
             nextLabel="下一个"
             onNext={handleNextFromProject}
             onBack={() => transitionTo('guide')}
-            faqs={[
-              {
-                q: '项目和文件夹有什么区别？',
-                a: '项目是 Proma 的工作区概念，自带独立的文件、上下文和记忆；文件夹只是存放文件的目录，两者定位不同。',
-              },
-              {
-                q: '项目之间会互相影响吗？',
-                a: '不会。每个项目的文件、Agent 记忆、上下文互相隔离，切换项目不会串内容。',
-              },
-              {
-                q: '可以建多个项目吗？',
-                a: '可以。按工作目标建项目即可，比如每个客户、每个研究方向一个项目，便于长期维护。',
-              },
-            ]}
           />
         )}
 
@@ -679,20 +861,6 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
             nextLabel="下一个"
             onNext={handleNextFromAutomation}
             onBack={() => transitionTo('files')}
-            faqs={[
-              {
-                q: '自动任务需要一直开着 Proma 吗？',
-                a: '需要 Proma 在运行才会执行。你可以设置触发时间，到时应用会自动运行任务并通知结果。',
-              },
-              {
-                q: '任务执行会占用多少资源？',
-                a: '每个任务按你选的模型独立运行，支持完全权限无人值守，也可以配置运行次数上限和频率控制。',
-              },
-              {
-                q: '任务结果在哪里看？',
-                a: '在自动任务的运行历史里可以看到每次执行的状态、耗时和结果，失败也会记录原因。',
-              },
-            ]}
           />
         )}
 
@@ -717,20 +885,6 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
             nextLabel="下一个"
             onNext={handleNextFromReference}
             onBack={() => transitionTo('automation')}
-            faqs={[
-              {
-                q: '引用和支持拖拽是一回事吗？',
-                a: '是的。你可以把文件或文件夹直接拖进输入框，或点击「添加文件」按钮，都会被作为引用交给 Agent。',
-              },
-              {
-                q: '引用会占用对话上下文吗？',
-                a: '会按需读取。Agent 会先看到文件清单，真正用到内容时才读取，避免一次塞入大量无关内容。',
-              },
-              {
-                q: '可以引用哪些类型的内容？',
-                a: '文件、文件夹、其他会话、待办/日程都可以引用，输入框提示里会显示对应的引用方式。',
-              },
-            ]}
           />
         )}
 
@@ -750,20 +904,6 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
             nextLabel="下一个"
             onNext={handleNextFromSideAnswer}
             onBack={() => transitionTo('reference')}
-            faqs={[
-              {
-                q: '侧边回答和普通对话有什么区别？',
-                a: '普通对话是独立问答；侧边回答是围绕你选中的文字展开，右侧面板专门讲解，不打断当前主对话。',
-              },
-              {
-                q: '侧边回答会新建会话吗？',
-                a: '不会新建独立会话，它是当前会话的辅助面板，问答记录仍归属当前上下文。',
-              },
-              {
-                q: '哪些内容可以用侧边回答？',
-                a: '对话消息、搜索选区等可选中文本都可以，选中后打开侧边回答即可。',
-              },
-            ]}
           />
         )}
 
@@ -786,23 +926,17 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
                 <b className="font-medium text-neutral-900">既节省父会话的上下文，又能并行干更多的活</b>。
               </>,
             ]}
-            nextLabel={isWindows ? '下一个' : '开始使用'}
+            nextLabel="下一个"
             onNext={handleNextFromSubagent}
             onBack={() => transitionTo('sideanswer')}
-            faqs={[
-              {
-                q: '子会话怎么启动？',
-                a: '直接用自然语言说就行，比如「启动 3 个子会话分别研究 A、B、C」，Agent 会自动创建协作子会话。',
-              },
-              {
-                q: '子会话可以指定模型吗？',
-                a: '可以。每个子会话都能指定不同的模型（如 MiniMax、DeepSeek），按任务特点选合适的内核。',
-              },
-              {
-                q: '子会话结果会占用父会话上下文吗？',
-                a: '基本不占。子会话拥有独立上下文，各自研究后再把结论汇总回父会话，节省父会话空间。',
-              },
-            ]}
+          />
+        )}
+
+        {step === 'faq' && (
+          <FaqPage
+            nextLabel={isWindows ? '下一个' : '开始使用'}
+            onNext={handleNextFromFaq}
+            onBack={() => transitionTo('subagent')}
           />
         )}
 
@@ -831,7 +965,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => transitionTo('subagent')}
+                onClick={() => transitionTo('faq')}
                 className="text-neutral-500"
               >
                 <ChevronLeft className="mr-1 h-4 w-4" />

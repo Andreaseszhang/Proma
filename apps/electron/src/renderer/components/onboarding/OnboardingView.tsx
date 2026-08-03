@@ -216,6 +216,14 @@ function GuideFeatureStep({ anchor, title, highlight, paragraphs, nextLabel, onN
     <div className="flex h-full w-full items-stretch">
       {/* 左侧：界面截图 + 指针 */}
       <div ref={containerRef} className="relative flex h-full w-[calc(58%+80px)] shrink-0 items-center justify-center overflow-visible p-6">
+        {/* 左侧截图的四角定位标记，仅作为视觉边界，不参与图片布局。 */}
+        <div aria-hidden="true" className="pointer-events-none absolute inset-x-6 top-[10%] bottom-[10%] z-0">
+          <span className="absolute left-0 top-0 h-7 w-7 border-l-2 border-t-2 border-[#1b3f2d]/70" />
+          <span className="absolute right-0 top-0 h-7 w-7 border-r-2 border-t-2 border-[#1b3f2d]/70" />
+          <span className="absolute bottom-0 left-0 h-7 w-7 border-b-2 border-l-2 border-[#1b3f2d]/70" />
+          <span className="absolute bottom-0 right-0 h-7 w-7 border-b-2 border-r-2 border-[#1b3f2d]/70" />
+        </div>
+
         <img
           ref={imgRef}
           src={imageSrc}
@@ -772,6 +780,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
           <GuideFeatureStep
             anchor={{ x: 0.91, y: 0.07 }}
             arrowMode="magnifier"
+            magnifierOffsetX={-40}
             highlight="入门篇 · 第 3 步"
             title="会话文件和项目文件"
             paragraphs={[

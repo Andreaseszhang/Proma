@@ -270,6 +270,7 @@ function TodoWorkspace({ standalone = false }: { standalone?: boolean } = {}): R
     input: Omit<Parameters<typeof window.electronAPI.updateTodo>[0], 'id'>,
     savedField?: 'title' | 'notes',
     silentNotesSync = false,
+    savedNotesSnapshot?: string,
   ) => {
     try {
       const updated = await window.electronAPI.updateTodo({ id, ...input })
@@ -284,10 +285,14 @@ function TodoWorkspace({ standalone = false }: { standalone?: boolean } = {}): R
           }
           if (savedField === 'notes') {
             const notes = updated.notes ?? ''
-            detailNotesRef.current = notes
+            const hasNewerNotesDraft = savedNotesSnapshot !== undefined && detailNotesRef.current !== savedNotesSnapshot
             savedDetailNotesRef.current = notes
-            // 自动保存时不回写输入框，避免打断正在输入的内容（主进程会 trim 首尾空白）
-            if (!silentNotesSync) setDetailNotes(notes)
+            // 自动保存完成后，只在用户未继续输入时同步草稿 ref；否则保留新草稿并交给下一次保存。
+            if (!hasNewerNotesDraft) {
+              detailNotesRef.current = notes
+              // 自动保存时不回写输入框，避免打断正在输入的内容（主进程会 trim 首尾空白）
+              if (!silentNotesSync) setDetailNotes(notes)
+            }
           }
         }
       }
@@ -306,6 +311,7 @@ function TodoWorkspace({ standalone = false }: { standalone?: boolean } = {}): R
 
   // —— Todo 标题/描述草稿式自动保存 ——
   const notesSaveTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  const notesSaveInFlightIdsRef = React.useRef(new Set<string>())
   const [notesSaveState, setNotesSaveState] = React.useState<'saving' | 'saved' | null>(null)
   const notesSaveStateTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -323,26 +329,38 @@ function TodoWorkspace({ standalone = false }: { standalone?: boolean } = {}): R
       notesSaveTimerRef.current = null
     }
     const id = selectedTodoIdRef.current
-    if (!id || todoConflict) return
-    const currentTodo = todos.find((todo) => todo.id === id)
-    if (!currentTodo) return
+    const expectedUpdatedAt = todoBaseUpdatedAtRef.current
+    if (!id || !expectedUpdatedAt || todoConflict || notesSaveInFlightIdsRef.current.has(id)) return
     const notes = detailNotesRef.current
     if (notes === savedDetailNotesRef.current) return
+    notesSaveInFlightIdsRef.current.add(id)
+    if (notesSaveStateTimerRef.current) {
+      clearTimeout(notesSaveStateTimerRef.current)
+      notesSaveStateTimerRef.current = null
+    }
     setNotesSaveState('saving')
-    // silentNotesSync=true：仅同步已保存值，不回写输入框，避免打断正在输入的内容
-    void updateTodo(id, { notes, expectedUpdatedAt: currentTodo.updatedAt }, 'notes', true).then((updated) => {
-      if (updated) {
-        setNotesSaveState('saved')
-        showNotesSaved()
-      } else {
+    // 保存时保留草稿快照；请求返回后若用户已继续输入，不覆盖新草稿。
+    void updateTodo(id, { notes, expectedUpdatedAt }, 'notes', true, notes).then((updated) => {
+      notesSaveInFlightIdsRef.current.delete(id)
+      if (selectedTodoIdRef.current !== id) return
+      if (!updated) {
         setNotesSaveState(null)
-        if (notesSaveStateTimerRef.current) {
-          clearTimeout(notesSaveStateTimerRef.current)
-          notesSaveStateTimerRef.current = null
-        }
+        return
       }
+      if (detailNotesRef.current !== savedDetailNotesRef.current) {
+        // 新草稿在本次请求中产生；立即续存，避免 800ms timer 已在请求期间空转后丢失内容。
+        if (!notesSaveTimerRef.current) {
+          notesSaveTimerRef.current = setTimeout(() => {
+            notesSaveTimerRef.current = null
+            saveDetailNotesRef.current()
+          }, 0)
+        }
+        return
+      }
+      setNotesSaveState('saved')
+      showNotesSaved()
     })
-  }, [showNotesSaved, todoConflict, todos, updateTodo])
+  }, [showNotesSaved, todoConflict, updateTodo])
 
   const saveDetailNotesRef = React.useRef(saveDetailNotes)
   saveDetailNotesRef.current = saveDetailNotes

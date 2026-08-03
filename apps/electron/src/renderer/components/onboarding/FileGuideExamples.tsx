@@ -11,6 +11,8 @@ interface FileExampleImageProps {
   imageSrc: string
   alt: string
   anchor: { x: number; y: number }
+  /** 仅控制镜片内截图的放大倍数，不改变与首屏统一的镜片尺寸。 */
+  imageZoom?: number
   /** 水平偏移以 320px 镜片为基准，避免靠近右缘的镜片越出窗口。 */
   offsetX?: number
 }
@@ -18,7 +20,7 @@ interface FileExampleImageProps {
 /**
  * 截图上的标签位置以归一化坐标保存，ResizeObserver 会在容器尺寸变化时重算与首屏一致的镜片大小与取景位置。
  */
-function FileExampleImage({ imageSrc, alt, anchor, offsetX = 0 }: FileExampleImageProps) {
+function FileExampleImage({ imageSrc, alt, anchor, imageZoom = 2.2, offsetX = 0 }: FileExampleImageProps) {
   const frameRef = useRef<HTMLDivElement>(null)
   const [frameSize, setFrameSize] = useState<ImageSize>({ width: 0, height: 0 })
 
@@ -47,16 +49,16 @@ function FileExampleImage({ imageSrc, alt, anchor, offsetX = 0 }: FileExampleIma
   }, [updateFrameSize])
 
   const hasDimensions = frameSize.width > 0 && frameSize.height > 0
-  const zoom = 2.2
+  const lensZoom = 2.2
   const sourceCropWidth = 0.1765
   const referenceDiameter = 320
-  const magnifierDiameter = frameSize.width * zoom * sourceCropWidth
+  const magnifierDiameter = frameSize.width * lensZoom * sourceCropWidth
   const radius = magnifierDiameter / 2
   const focusX = anchor.x * frameSize.width
   const focusY = anchor.y * frameSize.height
   const scaledOffsetX = offsetX * (magnifierDiameter / referenceDiameter)
-  const zoomedWidth = frameSize.width * zoom
-  const zoomedHeight = frameSize.height * zoom
+  const zoomedWidth = frameSize.width * imageZoom
+  const zoomedHeight = frameSize.height * imageZoom
 
   const clampToLens = (position: number, contentSize: number) =>
     Math.min(0, Math.max(magnifierDiameter - contentSize, position))
@@ -136,6 +138,7 @@ export function FileGuideExamples() {
             imageSrc={sessionFilesExample}
             alt="Agent 将 RAG 研究结果写入会话文件的示例"
             anchor={{ x: 0.848, y: 0.071 }}
+            imageZoom={1.9}
           />
           <div>
             <div className="text-xs font-medium uppercase tracking-[0.18em] text-[#1b3f2d]">示例 01 · 会话文件</div>
@@ -167,6 +170,7 @@ export function FileGuideExamples() {
               imageSrc={projectFilesExample}
               alt="Agent 将可复用的研究方法写入项目文件的示例"
               anchor={{ x: 0.942, y: 0.071 }}
+              imageZoom={1.8}
               offsetX={-75}
             />
           </div>

@@ -640,6 +640,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
   const [step, setStep] = useState<OnboardingStep>('welcome')
   const [flash, setFlash] = useState(false)
   const [fading, setFading] = useState(false)
+  const [faqBackStep, setFaqBackStep] = useState<'subagent' | 'sideanswer'>('sideanswer')
   const isWindows = useMemo(() => detectIsWindows(), [])
   const shellOk = useAtomValue(isShellEnvironmentOkAtom)
 
@@ -676,8 +677,15 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
   const handleSkipBeginner = () => transitionTo('subagent')
   const handleNextFromAutomation = () => transitionTo('memory')
   const handleNextFromMemory = () => transitionTo('sideanswer')
-  const handleNextFromSideAnswer = () => transitionTo('faq')
+  const handleNextFromSideAnswer = () => {
+    setFaqBackStep('sideanswer')
+    transitionTo('faq')
+  }
   const handleNextFromSubagent = () => transitionTo('automation')
+  const handleJumpToFaq = () => {
+    setFaqBackStep('subagent')
+    transitionTo('faq')
+  }
   const handleNextFromFaq = () => {
     if (isWindows) {
       transitionTo('environment')
@@ -968,7 +976,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
             highlight="进阶指南 · 第 5 步"
             nextLabel={isWindows ? '下一个' : '开始使用'}
             onNext={handleNextFromFaq}
-            onBack={() => transitionTo('sideanswer')}
+            onBack={() => transitionTo(faqBackStep)}
           />
         )}
 
@@ -1019,12 +1027,12 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
       {/* ===== 底部进度地图（欢迎页不显示） ===== */}
       {step !== 'welcome' && step !== 'environment' && <ProgressMap current={step} />}
 
-      {step === 'guide' && (
+      {(step === 'guide' || step === 'subagent') && (
         <button
-          onClick={handleSkipBeginner}
+          onClick={step === 'guide' ? handleSkipBeginner : handleJumpToFaq}
           className="absolute bottom-5 right-[30px] z-30 flex h-8 items-center gap-1 px-2 text-sm text-neutral-500 transition-colors hover:text-[#1b3f2d]"
         >
-          跳过入门篇
+          {step === 'guide' ? '跳过入门篇' : '跳到 FAQ'}
           <ChevronsRight className="h-4 w-4" />
         </button>
       )}

@@ -1,5 +1,6 @@
 import automationDailyCodeQualityExample from '@/assets/onboarding/guide-automation-daily-code-quality.png'
 import automationYesterdayCommitReviewExample from '@/assets/onboarding/guide-automation-yesterday-commit-review.png'
+import automationCalendarExample from '@/assets/onboarding/guide-automation-calendar.png'
 
 /** 自动任务章节的真实工作流示例；由父页面负责放入章节容器和导航。 */
 export function AutomationGuideExamples() {
@@ -9,7 +10,7 @@ export function AutomationGuideExamples() {
         <div className="text-xs font-medium uppercase tracking-[0.2em] text-[#1b3f2d]">真实示例</div>
         <h2 className="mt-4 text-3xl font-light tracking-tight text-neutral-900 md:text-4xl">让每天的代码质量检查自动运行</h2>
         <p className="mt-4 text-base leading-[1.7] text-neutral-600 md:text-lg">
-          安排好时间后，Agent 会按时检查昨天的新提交，并把结果留在执行会话里。
+          安排好时间后，Proma 会打开新的 Agent 会话，检查昨天的新提交并把结果留在其中。Proma 需要保持打开，才能在设定时间执行。
         </p>
       </div>
 
@@ -34,9 +35,9 @@ export function AutomationGuideExamples() {
         <article className="grid gap-10 border-t border-[#1b3f2d]/15 pt-10 lg:grid-cols-[22rem_minmax(0,1fr)] lg:items-center">
           <div className="min-w-0 lg:order-1">
             <div className="text-xs font-medium uppercase tracking-[0.18em] text-[#1b3f2d]">示例 02 · 执行</div>
-            <h3 className="mt-3 text-2xl font-medium text-neutral-900 md:text-3xl">到点后，自动审查昨天的新提交</h3>
+            <h3 className="mt-3 text-2xl font-medium text-neutral-900 md:text-3xl">Agent 会在你设定的时间自动打开新会话工作</h3>
             <p className="mt-4 text-base leading-[1.7] text-neutral-600 md:text-lg">
-              任务触发后，Agent 在会话中找到昨天新增的两条提交，读取它们的 diff 并开始质量审查。审查过程和结果都会留在这段会话里。
+              到点后，Agent 会读取昨天的两条提交及其 diff，完成代码质量审查；过程和结果都会留在新会话里。
             </p>
             <div className="mt-5 border-l-2 border-[#1b3f2d]/35 pl-4">
               <div className="text-base font-medium text-[#1b3f2d]">这样告诉 Agent</div>
@@ -46,6 +47,19 @@ export function AutomationGuideExamples() {
           <figure className="min-w-0 overflow-hidden rounded-lg bg-[#f6f8f3] shadow-[0_14px_30px_rgba(27,63,45,0.12)] lg:order-2">
             <img src={automationYesterdayCommitReviewExample} alt="自动任务触发后 Agent 审查昨天两条新提交的执行会话" className="block h-auto w-full" />
           </figure>
+        </article>
+
+        <article className="grid gap-10 border-t border-[#1b3f2d]/15 pt-10 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-center">
+          <figure className="min-w-0 overflow-hidden rounded-lg bg-[#f6f8f3] shadow-[0_14px_30px_rgba(27,63,45,0.12)]">
+            <img src={automationCalendarExample} alt="日程表中每天 09:00 显示扫描代码质量自动任务" className="block h-auto w-full" />
+          </figure>
+          <div className="min-w-0">
+            <div className="text-xs font-medium uppercase tracking-[0.18em] text-[#1b3f2d]">示例 03 · 查看</div>
+            <h3 className="mt-3 text-2xl font-medium text-neutral-900 md:text-3xl">在日程表里查看自动任务</h3>
+            <p className="mt-4 text-base leading-[1.7] text-neutral-600 md:text-lg">
+              创建后，你的自动任务会显示在日程表里。像每天 09:00 的“扫描代码质量”，会按计划显示在这一周的对应时间段。
+            </p>
+          </div>
         </article>
       </div>
     </>

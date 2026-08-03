@@ -68,8 +68,6 @@ interface GuideFeatureStepProps {
   magnifierImageOffset?: MagnifierImageOffset
   /** 左侧截图右缘需要隐藏的 CSS 像素数 */
   imageRightCrop?: number
-  /** 仅在 Agent / Chat 介绍页显示，直接前往进阶篇 */
-  onSkip?: () => void
 }
 
 interface MagnifierProps {
@@ -166,14 +164,14 @@ function Magnifier({ imageSrc, anchorX, anchorY, imgRect, offsetX = 0, imageOffs
   )
 }
 
-/** 章节标记：标题左侧的章节文字，右侧延伸一条细线到定位圆点。 */
+/** 章节标记：标题上方，左侧为线条与圆点，右侧为章节文字。 */
 function ChapterMarker({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mb-6 flex w-full max-w-lg items-center gap-4 text-sm font-medium tracking-[0.08em] text-[#1b3f2d]">
-      <span className="shrink-0 whitespace-nowrap">{children}</span>
+    <div className="mb-6 flex w-full max-w-lg self-start items-center justify-end gap-4 text-sm font-medium tracking-[0.08em] text-[#1b3f2d]">
       <span className="relative h-px flex-1 bg-[#1b3f2d]/25">
-        <span className="absolute right-0 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-[#1b3f2d]" />
+        <span className="absolute left-0 top-1/2 h-1.5 w-1.5 -translate-y-1/2 rounded-full bg-[#1b3f2d]" />
       </span>
+      <span className="shrink-0 whitespace-nowrap">{children}</span>
     </div>
   )
 }
@@ -181,7 +179,7 @@ function ChapterMarker({ children }: { children: React.ReactNode }) {
 /**
  * 引导科普页：左侧显示界面截图，从锚点画绿色指针指向右侧讲解区。
  */
-function GuideFeatureStep({ anchor, title, highlight, paragraphs, nextLabel, onNext, onBack, onSkip, imageSrc = guideVisual, arrowMode = 'none', magnifierOffsetX = 0, magnifierImageOffset = {}, imageRightCrop = 0 }: GuideFeatureStepProps) {
+function GuideFeatureStep({ anchor, title, highlight, paragraphs, nextLabel, onNext, onBack, imageSrc = guideVisual, arrowMode = 'none', magnifierOffsetX = 0, magnifierImageOffset = {}, imageRightCrop = 0 }: GuideFeatureStepProps) {
   const imgRef = useRef<HTMLImageElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [imgRect, setImgRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
@@ -321,24 +319,13 @@ function GuideFeatureStep({ anchor, title, highlight, paragraphs, nextLabel, onN
           ) : (
             <span />
           )}
-          <div className="flex items-center gap-3">
-            {onSkip && (
-              <button
-                onClick={onSkip}
-                className="flex h-8 items-center gap-1 px-2 text-sm text-neutral-500 transition-colors hover:text-[#1b3f2d]"
-              >
-                跳过入门篇
-                <ChevronsRight className="h-4 w-4" />
-              </button>
-            )}
-            <button
-              onClick={onNext}
-              className="flex h-14 items-center justify-center gap-1.5 rounded-md bg-[#1b3f2d] px-9 text-base font-medium text-white shadow-[0_8px_18px_rgba(27,63,45,0.14)] transition-all hover:bg-[#27513a] active:translate-y-0.5 active:shadow-none"
-            >
-              {nextLabel}
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
+          <button
+            onClick={onNext}
+            className="flex h-14 items-center justify-center gap-1.5 rounded-md bg-[#1b3f2d] px-9 text-base font-medium text-white shadow-[0_8px_18px_rgba(27,63,45,0.14)] transition-all hover:bg-[#27513a] active:translate-y-0.5 active:shadow-none"
+          >
+            {nextLabel}
+            <ChevronRight className="h-4 w-4" />
+          </button>
         </div>
       </div>
     </div>
@@ -674,13 +661,6 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
 
   return (
     <div className="relative flex h-screen w-full flex-col overflow-hidden bg-[#fbf9f7] md:flex-row">
-      {step !== 'welcome' && (
-        <div aria-hidden="true" className="pointer-events-none absolute left-5 top-5 z-30 flex items-center gap-2">
-          <span className="h-4 w-4 rounded-full bg-[#f26c63]" />
-          <span className="h-4 w-4 rounded-full bg-[#f6bc42]" />
-          <span className="h-4 w-4 rounded-full bg-[#65be6a]" />
-        </div>
-      )}
 
       {/* ===== 左侧：画作（仅欢迎页显示，引导页清屏） ===== */}
       {step === 'welcome' && (
@@ -769,7 +749,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
             arrowMode="magnifier"
             magnifierOffsetX={70}
             magnifierImageOffset={{ x: 0.09, y: 0.33 }}
-            highlight="入门指南 · 第 1 步"
+            highlight="入门篇 · 第 1 步"
             title="Agent 和 Chat 模式的区别"
             paragraphs={[
               <>左边栏顶部是 Proma 的<b className="font-medium text-neutral-900">模式切换</b>：Agent 与 Chat。</>,
@@ -785,7 +765,6 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
             nextLabel="下一个"
             onNext={handleNextFromGuide}
             onBack={() => transitionTo('welcome')}
-            onSkip={handleSkipBeginner}
           />
         )}
 
@@ -793,7 +772,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
           <GuideFeatureStep
             anchor={{ x: 0.91, y: 0.07 }}
             arrowMode="magnifier"
-            highlight="入门指南 · 第 3 步"
+            highlight="入门篇 · 第 3 步"
             title="会话文件和项目文件"
             paragraphs={[
               <>右侧预览面板顶部有<b className="font-medium text-neutral-900">会话文件</b>和<b className="font-medium text-neutral-900">项目文件</b>两个页签。</>,
@@ -818,7 +797,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
             arrowMode="magnifier"
             magnifierOffsetX={70}
             magnifierImageOffset={{ x: 0.22 }}
-            highlight="入门指南 · 第 2 步"
+            highlight="入门篇 · 第 2 步"
             title="项目的概念"
             paragraphs={[
               <>左侧边栏的<b className="font-medium text-neutral-900">项目</b>是你为特定工作建立的独立空间。</>,
@@ -994,6 +973,16 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
 
       {/* ===== 底部进度地图（欢迎页不显示） ===== */}
       {step !== 'welcome' && step !== 'environment' && <ProgressMap current={step} />}
+
+      {step === 'guide' && (
+        <button
+          onClick={handleSkipBeginner}
+          className="absolute bottom-5 right-[30px] z-30 flex h-8 items-center gap-1 px-2 text-sm text-neutral-500 transition-colors hover:text-[#1b3f2d]"
+        >
+          跳过入门篇
+          <ChevronsRight className="h-4 w-4" />
+        </button>
+      )}
 
       {/* ===== 白色闪屏遮罩 ===== */}
       <div

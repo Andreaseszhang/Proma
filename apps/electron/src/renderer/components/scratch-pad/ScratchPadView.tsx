@@ -59,6 +59,7 @@ import {
   VOICE_DICTATION_INSERT_EVENT,
   VOICE_DICTATION_PREVIEW_EVENT,
   getLastFocusedVoiceInputId,
+  isVoiceDictationTargetInput,
   setLastFocusedVoiceInputId,
 } from '@/lib/voice-input-focus'
 import { SelectionActionPopover } from '@/components/selection/SelectionActionPopover'
@@ -579,13 +580,13 @@ function ScratchPadEditor({ variant }: ScratchPadEditorProps): React.ReactElemen
     if (!editor) return
 
     const updatePreview = (event: Event): void => {
-      const { sessionId, text } = (event as CustomEvent<{ sessionId?: string; text?: string }>).detail ?? {}
+      const { sessionId, text, targetInputId } = (event as CustomEvent<{ sessionId?: string; text?: string; targetInputId?: string | null }>).detail ?? {}
       const previewText = text?.trim()
       if (!sessionId || !previewText) return
 
       const current = voicePreviewRef.current
       if (current && current.sessionId !== sessionId) return
-      if (!current && getLastFocusedVoiceInputId() !== SCRATCH_PAD_VOICE_INPUT_ID) return
+      if (!current && !isVoiceDictationTargetInput(SCRATCH_PAD_VOICE_INPUT_ID, targetInputId)) return
       const from = current?.from ?? editor.state.selection.from
       const to = current?.to ?? editor.state.selection.to
       editor.view.dispatch(editor.state.tr.insertText(previewText, from, to))
@@ -593,18 +594,27 @@ function ScratchPadEditor({ variant }: ScratchPadEditorProps): React.ReactElemen
       event.preventDefault()
     }
 
+    const clearPreviewRange = (): void => {
+      const current = voicePreviewRef.current
+      if (!current) return
+      if (!editor.view.isDestroyed) {
+        editor.view.dispatch(editor.state.tr.delete(current.from, current.to))
+      }
+      voicePreviewRef.current = null
+    }
+
     const clearPreview = (event: Event): void => {
       const { sessionId } = (event as CustomEvent<{ sessionId?: string }>).detail ?? {}
       const current = voicePreviewRef.current
       if (!current || current.sessionId !== sessionId) return
-      editor.view.dispatch(editor.state.tr.delete(current.from, current.to))
-      voicePreviewRef.current = null
+      clearPreviewRange()
       event.preventDefault()
     }
 
     window.addEventListener(VOICE_DICTATION_PREVIEW_EVENT, updatePreview)
     window.addEventListener(VOICE_DICTATION_CLEAR_PREVIEW_EVENT, clearPreview)
     return () => {
+      clearPreviewRange()
       window.removeEventListener(VOICE_DICTATION_PREVIEW_EVENT, updatePreview)
       window.removeEventListener(VOICE_DICTATION_CLEAR_PREVIEW_EVENT, clearPreview)
     }
@@ -626,7 +636,7 @@ function ScratchPadEditor({ variant }: ScratchPadEditorProps): React.ReactElemen
   React.useEffect(() => {
     if (!editor) return
     const handler = (event: Event): void => {
-      const customEvent = event as CustomEvent<{ sessionId?: string; text?: string }>
+      const customEvent = event as CustomEvent<{ sessionId?: string; text?: string; targetInputId?: string | null }>
       const text = customEvent.detail?.text?.trim()
       if (!text) return
 
@@ -638,7 +648,7 @@ function ScratchPadEditor({ variant }: ScratchPadEditorProps): React.ReactElemen
         editor.view.dispatch(transaction)
         voicePreviewRef.current = null
       } else {
-        if (getLastFocusedVoiceInputId() !== SCRATCH_PAD_VOICE_INPUT_ID) return
+        if (!isVoiceDictationTargetInput(SCRATCH_PAD_VOICE_INPUT_ID, customEvent.detail?.targetInputId)) return
         editor.chain().focus().insertContent({ type: 'text', text }).run()
       }
       event.preventDefault()
@@ -769,7 +779,7 @@ function ScratchPadEditor({ variant }: ScratchPadEditorProps): React.ReactElemen
       )}
       {/* 底部居中悬浮：圆形语音输入按钮 */}
       <div className={speechWrapperClassName}>
-        <SpeechButton className={speechButtonClassName} />
+        <SpeechButton className={speechButtonClassName} voiceInputId={SCRATCH_PAD_VOICE_INPUT_ID} />
       </div>
       <div className="h-[28px] border-t border-border/40 px-4 flex items-center justify-between">
         <div className="flex items-center gap-3">

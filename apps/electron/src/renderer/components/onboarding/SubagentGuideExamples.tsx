@@ -26,7 +26,7 @@ export function SubagentGuideExamples() {
               直接说出目标，Agent 可以创建多个子会话并行推进。复杂任务中，它也可能主动建议或自动唤起子会话；你还可以用自然语言指定每个子会话使用的模型。
             </p>
             <div className="mt-5 border-l-2 border-[#1b3f2d]/35 pl-4">
-              <div className="text-xs font-medium text-[#1b3f2d]">你可以这样说</div>
+              <div className="text-base font-medium leading-7 text-[#1b3f2d]">这样告诉 Agent</div>
               <p className="mt-1 text-base leading-7 text-neutral-500">“启动 3 个子会话研究大五人格，并让其中一个使用 DeepSeek。”</p>
             </div>
           </div>
@@ -40,7 +40,7 @@ export function SubagentGuideExamples() {
               每个子会话都是独立且完整的会话，拥有自己的上下文、任务边界和输出。打开后可像普通会话一样继续追问、补充方向，并检查它正在完成的工作。
             </p>
             <div className="mt-5 border-l-2 border-[#1b3f2d]/35 pl-4">
-              <div className="text-xs font-medium text-[#1b3f2d]">你可以这样说</div>
+              <div className="text-base font-medium leading-7 text-[#1b3f2d]">这样告诉 Agent</div>
               <p className="mt-1 text-base leading-7 text-neutral-500">“补充大五人格在实际工作和人际关系中的应用，并用要点列出。”</p>
             </div>
           </div>
@@ -60,7 +60,7 @@ export function SubagentGuideExamples() {
               各个子会话完成研究后，结果会自动汇回父会话。父会话会把不同方向的发现整合成最终答案、报告或其他可交付成果。
             </p>
             <div className="mt-5 border-l-2 border-[#1b3f2d]/35 pl-4">
-              <div className="text-xs font-medium text-[#1b3f2d]">你可以这样说</div>
+              <div className="text-base font-medium leading-7 text-[#1b3f2d]">这样告诉 Agent</div>
               <p className="mt-1 text-base leading-7 text-neutral-500">“等所有子会话完成后，整合为一份面向新手的简明研究报告。”</p>
             </div>
           </div>

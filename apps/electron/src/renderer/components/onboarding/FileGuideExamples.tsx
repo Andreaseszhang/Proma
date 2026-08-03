@@ -11,12 +11,14 @@ interface FileExampleImageProps {
   imageSrc: string
   alt: string
   anchor: { x: number; y: number }
+  /** 水平偏移以 320px 镜片为基准，避免靠近右缘的镜片越出窗口。 */
+  offsetX?: number
 }
 
 /**
- * 截图上的标签位置以归一化坐标保存，ResizeObserver 会在容器尺寸变化时重算镜片大小与取景位置。
+ * 截图上的标签位置以归一化坐标保存，ResizeObserver 会在容器尺寸变化时重算与首屏一致的镜片大小与取景位置。
  */
-function FileExampleImage({ imageSrc, alt, anchor }: FileExampleImageProps) {
+function FileExampleImage({ imageSrc, alt, anchor, offsetX = 0 }: FileExampleImageProps) {
   const frameRef = useRef<HTMLDivElement>(null)
   const [frameSize, setFrameSize] = useState<ImageSize>({ width: 0, height: 0 })
 
@@ -45,10 +47,21 @@ function FileExampleImage({ imageSrc, alt, anchor }: FileExampleImageProps) {
   }, [updateFrameSize])
 
   const hasDimensions = frameSize.width > 0 && frameSize.height > 0
-  const magnifierDiameter = Math.min(Math.max(frameSize.width * 0.16, 72), 132)
   const zoom = 2.2
+  const sourceCropWidth = 0.1765
+  const referenceDiameter = 320
+  const magnifierDiameter = frameSize.width * zoom * sourceCropWidth
+  const radius = magnifierDiameter / 2
   const focusX = anchor.x * frameSize.width
   const focusY = anchor.y * frameSize.height
+  const scaledOffsetX = offsetX * (magnifierDiameter / referenceDiameter)
+  const zoomedWidth = frameSize.width * zoom
+  const zoomedHeight = frameSize.height * zoom
+
+  const clampToLens = (position: number, contentSize: number) =>
+    Math.min(0, Math.max(magnifierDiameter - contentSize, position))
+  const baseLeft = clampToLens(radius - anchor.x * zoomedWidth, zoomedWidth)
+  const baseTop = clampToLens(radius - anchor.y * zoomedHeight, zoomedHeight)
 
   return (
     <div ref={frameRef} className="relative">
@@ -59,29 +72,46 @@ function FileExampleImage({ imageSrc, alt, anchor }: FileExampleImageProps) {
       {hasDimensions && (
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute z-10"
+          className="pointer-events-none absolute z-20"
           style={{
-            left: focusX - magnifierDiameter / 2,
-            top: focusY - magnifierDiameter / 2,
+            left: focusX - radius + scaledOffsetX,
+            top: focusY - radius,
             width: magnifierDiameter,
             height: magnifierDiameter,
+            backgroundColor: '#eef4ea',
+            clipPath: `circle(${radius}px at ${radius}px ${radius}px)`,
+            overflow: 'hidden',
+            filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.25))',
           }}
         >
-          <div className="relative h-full w-full overflow-hidden rounded-full border-[3px] border-[#1b3f2d] bg-[#eef4ea] shadow-[0_8px_18px_rgba(27,63,45,0.24)] ring-2 ring-[#f6f8f3]/90">
-            <img
-              src={imageSrc}
-              alt=""
-              draggable={false}
-              className="absolute max-w-none"
-              style={{
-                left: magnifierDiameter / 2 - focusX * zoom,
-                top: magnifierDiameter / 2 - focusY * zoom,
-                width: frameSize.width * zoom,
-                height: frameSize.height * zoom,
-              }}
-            />
-          </div>
-          <span className="absolute -bottom-3 right-1 h-9 w-3 rounded-full bg-[#1b3f2d] shadow-[0_3px_8px_rgba(27,63,45,0.22)]" style={{ transform: 'rotate(-45deg)' }} />
+          <img
+            src={imageSrc}
+            alt=""
+            draggable={false}
+            className="max-w-none"
+            style={{
+              position: 'absolute',
+              left: baseLeft,
+              top: baseTop,
+              width: zoomedWidth,
+              height: zoomedHeight,
+              objectFit: 'fill',
+            }}
+          />
+          <div
+            className="absolute inset-0 rounded-full border-[3px] border-[#1b3f2d]"
+            style={{ clipPath: `circle(${radius}px at ${radius}px ${radius}px)` }}
+          />
+          <div
+            className="absolute bottom-[-6px] right-[-6px] h-8 w-8 rounded-full border-[4px] border-[#1b3f2d]"
+            style={{
+              clipPath: 'none',
+              background: 'transparent',
+              borderRightColor: 'transparent',
+              borderBottomColor: 'transparent',
+              transform: 'rotate(-45deg)',
+            }}
+          />
         </div>
       )}
     </div>
@@ -114,7 +144,7 @@ export function FileGuideExamples() {
               当结果只服务于这一次讨论，例如一份 RAG 调研报告，就把它保存到会话文件。它会紧贴当前上下文，方便在这段对话中继续引用和修改。
             </p>
             <div className="mt-5 border-l-2 border-[#1b3f2d]/35 pl-4">
-              <div className="text-xs font-medium text-[#1b3f2d]">你可以这样说</div>
+              <div className="text-base font-medium leading-7 text-[#1b3f2d]">这样告诉 Agent</div>
               <p className="mt-1 text-base leading-7 text-neutral-500">“把这份 RAG 研究结果写入会话文件，方便我在当前对话继续引用。”</p>
             </div>
           </div>
@@ -128,7 +158,7 @@ export function FileGuideExamples() {
               当内容可以跨会话复用，例如研究方法、工作模板或项目知识，把它保存到项目文件。同一项目中的其他对话都能找到并继续沿用这些成果。
             </p>
             <div className="mt-5 border-l-2 border-[#1b3f2d]/35 pl-4">
-              <div className="text-xs font-medium text-[#1b3f2d]">你可以这样说</div>
+              <div className="text-base font-medium leading-7 text-[#1b3f2d]">这样告诉 Agent</div>
               <p className="mt-1 text-base leading-7 text-neutral-500">“把这套研究方法整理到项目文件，后面的会话都可以继续使用。”</p>
             </div>
           </div>
@@ -137,6 +167,7 @@ export function FileGuideExamples() {
               imageSrc={projectFilesExample}
               alt="Agent 将可复用的研究方法写入项目文件的示例"
               anchor={{ x: 0.942, y: 0.071 }}
+              offsetX={-75}
             />
           </div>
         </article>

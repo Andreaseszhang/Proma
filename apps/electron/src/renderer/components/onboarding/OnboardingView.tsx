@@ -35,6 +35,7 @@ import guideSubagent from '@/assets/onboarding/guide-subagent.png'
 import promaMarkWhite from '@/assets/onboarding/proma-mark-white.svg'
 import { AutomationGuideExamples } from './AutomationGuideExamples'
 import { FileGuideExamples } from './FileGuideExamples'
+import { SideAnswerGuideExamples } from './SideAnswerGuideExamples'
 import { SubagentGuideExamples } from './SubagentGuideExamples'
 import { FAQ_GROUPS } from './faq-content'
 
@@ -419,16 +420,8 @@ function AgentChatGuidePage({ onNext, onBack }: { onNext: () => void; onBack: ()
       onNext={onNext}
       onBack={onBack}
     >
-      <section className="border-t border-[#1b3f2d]/20 py-16 md:py-20">
-        <div className="max-w-2xl">
-          <div className="text-xs font-medium uppercase tracking-[0.2em] text-[#1b3f2d]">真实示例</div>
-          <h2 className="mt-4 text-3xl font-light tracking-tight text-neutral-900 md:text-4xl">从一句话开始，得到不同类型的结果</h2>
-          <p className="mt-4 text-base leading-[1.7] text-neutral-600 md:text-lg">
-            同样是提问，选择的模式会决定 Proma 如何推进工作。先用 Chat 快速厘清一个概念，再把需要调用工具和产出结果的任务交给 Agent。
-          </p>
-        </div>
-
-        <div className="mt-14 space-y-16 md:mt-16 md:space-y-20">
+      <section className="-mt-[150px] pb-16 pt-6 md:pb-20 md:pt-10">
+        <div className="space-y-16 md:space-y-20">
           <article className="grid gap-10 border-t border-[#1b3f2d]/15 pt-10 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-center">
             <figure className="overflow-hidden rounded-lg bg-[#f6f8f3] shadow-[0_14px_30px_rgba(27,63,45,0.12)]">
               <img src={guideChatExample} alt="Chat 解释 RAG 搜索原理的示例" className="block h-auto w-full" />
@@ -440,7 +433,7 @@ function AgentChatGuidePage({ onNext, onBack }: { onNext: () => void; onBack: ()
                 例如，直接询问 RAG 的搜索原理，就能快速得到结构化解释，并可继续追问细节。Chat 专注对话和文字回答，不会操作电脑或创建产出。
               </p>
               <div className="mt-5 border-l-2 border-[#1b3f2d]/35 pl-4">
-                <div className="text-xs font-medium text-[#1b3f2d]">你可以这样说</div>
+                <div className="text-base font-medium leading-7 text-[#1b3f2d]">你可以这样说</div>
                 <p className="mt-1 text-base leading-7 text-neutral-500">“用通俗的话帮我解释一下 RAG 的搜索原理。”</p>
               </div>
             </div>
@@ -454,7 +447,7 @@ function AgentChatGuidePage({ onNext, onBack }: { onNext: () => void; onBack: ()
                 例如，请它研究 RAG 并将结论写入会话文件。Agent 会拆解任务、调用工具、持续推进，再把成果保留在当前工作区。
               </p>
               <div className="mt-5 border-l-2 border-[#1b3f2d]/35 pl-4">
-                <div className="text-xs font-medium text-[#1b3f2d]">你可以这样说</div>
+                <div className="text-base font-medium leading-7 text-[#1b3f2d]">这样告诉 Agent</div>
                 <p className="mt-1 text-base leading-7 text-neutral-500">“帮我研究一下什么是 RAG，然后把研究结果写成一个文件放到会话文件里。”</p>
               </div>
             </div>
@@ -944,24 +937,30 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
         )}
 
         {step === 'sideanswer' && (
-          <GuideFeatureStep
-            anchor={{ x: 0.66, y: 0.044 }}
-            arrowMode="none"
-            imageSrc={guideSideAnswer}
-            highlight="进阶指南 · 第 4 步"
-            title="侧边回答"
-            paragraphs={[
-              <>在 Agent 对话中，可以选中一段文字（如对话内容、搜索选区），然后打开侧边回答。</>,
-              <>侧边回答会打开<b className="font-medium text-neutral-900">右侧问答面板</b>，
-                围绕你选中的内容深入讲解，不打断主对话。
-              </>,
-              <>适合查词、解释概念、拆解长文——主对话保持干净，答案在侧边展开。
-              </>,
-            ]}
+          <GuideExamplesPage
+            intro={{
+              anchor: { x: 0.66, y: 0.044 },
+              arrowMode: 'none',
+              imageSrc: guideSideAnswer,
+              highlight: '进阶指南 · 第 4 步',
+              title: '侧边回答',
+              paragraphs: [
+                <>在 Agent 对话中，可以选中一段文字（如对话内容、搜索选区），然后打开侧边回答。</>,
+                <>侧边回答会打开<b className="font-medium text-neutral-900">右侧问答面板</b>，
+                  围绕你选中的内容深入讲解，不打断主对话。
+                </>,
+                <>适合查词、解释概念、拆解长文——主对话保持干净，答案在侧边展开。
+                </>,
+              ],
+            }}
             nextLabel="下一个"
             onNext={handleNextFromSideAnswer}
             onBack={() => transitionTo('memory')}
-          />
+          >
+            <section className="border-t border-[#1b3f2d]/20 py-16 md:py-20">
+              <SideAnswerGuideExamples />
+            </section>
+          </GuideExamplesPage>
         )}
 
         {step === 'faq' && (

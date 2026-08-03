@@ -31,6 +31,7 @@ import guideMemory from '@/assets/onboarding/guide-memory.png'
 import guideSideAnswer from '@/assets/onboarding/guide-side-answer.png'
 import guideSubagent from '@/assets/onboarding/guide-subagent.png'
 import promaMarkWhite from '@/assets/onboarding/proma-mark-white.svg'
+import { FAQ_GROUPS } from './faq-content'
 
 type OnboardingStep = 'welcome' | 'guide' | 'files' | 'project' | 'automation' | 'memory' | 'sideanswer' | 'subagent' | 'faq' | 'environment'
 
@@ -341,160 +342,70 @@ function GuideFeatureStep({ anchor, title, highlight, paragraphs, nextLabel, onN
 }
 
 /** FAQ 主题分组 */
-const FAQ_GROUPS: Array<{ topic: string; items: Array<{ q: string; a: string }> }> = [
-  {
-    topic: 'Agent / Chat',
-    items: [
-      {
-        q: 'Chat 也能完成 Agent 做的事吗？',
-        a: '不能。Chat 适合快速问答，但遇到需要多步规划、调用工具、读写文件的任务，只有 Agent 可以完成。',
-      },
-      {
-        q: '什么时候用 Chat、什么时候用 Agent？',
-        a: '简单问答随手用 Chat；要执行任务、调研、改代码、自动化时用 Agent。拿不准时直接用 Agent，它会判断是否需要多步执行。',
-      },
-      {
-        q: '切换模式会丢失当前对话吗？',
-        a: '不会。Agent 和 Chat 的对话是独立的会话，切换模式不会清除任何内容，你可以随时回来继续。',
-      },
-    ],
-  },
-  {
-    topic: '项目',
-    items: [
-      {
-        q: '项目和文件夹有什么区别？',
-        a: '项目是 Proma 的工作区概念，自带独立的文件、上下文和记忆；文件夹只是存放文件的目录，两者定位不同。',
-      },
-      {
-        q: '项目之间会互相影响吗？',
-        a: '不会。每个项目的文件、Agent 记忆、上下文互相隔离，切换项目不会串内容。',
-      },
-      {
-        q: '可以建多个项目吗？',
-        a: '可以。按工作目标建项目即可，比如每个客户、每个研究方向一个项目，便于长期维护。',
-      },
-    ],
-  },
-  {
-    topic: '文件',
-    items: [
-      {
-        q: '项目文件是本项目所有会话共享的吗？',
-        a: '是的。项目文件属于整个项目，项目内所有会话都可以访问，适合放共享资料、长期文档和项目级 Context。',
-      },
-      {
-        q: '这两个地方分别应该放什么样的文件？',
-        a: '一次性的材料（如临时截图、附件）放会话文件；需要跨会话共享的长期资料（项目文档、共享素材）放项目文件。',
-      },
-    ],
-  },
-  {
-    topic: '自动任务',
-    items: [
-      {
-        q: '自动任务需要一直开着 Proma 吗？',
-        a: '需要 Proma 在运行才会执行。你可以设置触发时间，到时应用会自动运行任务并通知结果。',
-      },
-      {
-        q: '任务执行会占用多少资源？',
-        a: '每个任务按你选的模型独立运行，支持完全权限无人值守，也可以配置运行次数上限和频率控制。',
-      },
-      {
-        q: '任务结果在哪里看？',
-        a: '在自动任务的运行历史里可以看到每次执行的状态、耗时和结果，失败也会记录原因。',
-      },
-    ],
-  },
-  {
-    topic: '记忆',
-    items: [
-      {
-        q: '记忆会保存什么？',
-        a: '它沉淀项目规则、稳定偏好和已经确认的结论，让后续 Agent 在同一项目中不必每次从零理解你的工作方式。',
-      },
-      {
-        q: '怎么把一条结论变成记忆？',
-        a: '直接告诉 Agent「记住这个规则」或「把这次结论沉淀为项目记忆」。它会判断应该写入项目指令、长期记忆还是当前会话 Context。',
-      },
-    ],
-  },
-  {
-    topic: 'Pi',
-    items: [
-      {
-        q: 'Pi 是什么？',
-        a: 'Pi 是 Proma 支持的一种 Agent runtime。它可以结合你选定的模型、工具和工作区来完成多步任务，适合需要规划、读写文件或调用工具的工作。',
-      },
-    ],
-  },
-  {
-    topic: '侧边回答',
-    items: [
-      {
-        q: '侧边回答和普通对话有什么区别？',
-        a: '普通对话是独立问答；侧边回答是围绕你选中的文字展开，右侧面板专门讲解，不打断当前主对话。',
-      },
-      {
-        q: '侧边回答会新建会话吗？',
-        a: '不会新建独立会话，它是当前会话的辅助面板，问答记录仍归属当前上下文。',
-      },
-      {
-        q: '哪些内容可以用侧边回答？',
-        a: '对话消息、搜索选区等可选中文本都可以，选中后打开侧边回答即可。',
-      },
-    ],
-  },
-  {
-    topic: '子会话',
-    items: [
-      {
-        q: '子会话怎么启动？',
-        a: '直接用自然语言说就行，比如「启动 3 个子会话分别研究 A、B、C」，Agent 会自动创建协作子会话。',
-      },
-      {
-        q: '子会话可以指定模型吗？',
-        a: '可以。每个子会话都能指定不同的模型（如 MiniMax、DeepSeek），按任务特点选合适的内核。',
-      },
-      {
-        q: '子会话结果会占用父会话上下文吗？',
-        a: '基本不占。子会话拥有独立上下文，各自研究后再把结论汇总回父会话，节省父会话空间。',
-      },
-    ],
-  },
-]
 
 /**
- * FAQ 页面：一次展开全部问题，按主题连续阅读。
+ * FAQ 页面：左侧可点击目录地图 + 右侧按主题展开全部问题。
  */
 function FaqPage({ nextLabel, onNext, onBack, highlight }: { nextLabel: string; onNext: () => void; onBack?: () => void; highlight?: React.ReactNode }) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+
+  const scrollToGroup = (topic: string) => {
+    const el = document.getElementById(`faq-${topic}`)
+    if (!el || !scrollRef.current) return
+    const container = scrollRef.current
+    const top = el.getBoundingClientRect().top - container.getBoundingClientRect().top + container.scrollTop - 24
+    container.scrollTo({ top, behavior: 'smooth' })
+  }
+
   return (
-    <div className="flex h-full w-full items-start justify-center overflow-y-auto px-6 py-12 pb-32 md:px-12">
-      <div className="w-full max-w-4xl">
-        {highlight && <ChapterMarker>{highlight}</ChapterMarker>}
-        <h2 className="text-3xl font-light tracking-tight text-neutral-900 md:text-4xl">常见问题</h2>
-        <p className="mt-3 text-base leading-relaxed text-neutral-500">
-          常见问题已经全部展开，方便你快速浏览和搜索。
-        </p>
+    <div className="flex h-full w-full items-stretch">
+      {/* 左侧：本页目录地图（垂直居中，整体上移 20px） */}
+      <div className="hidden w-56 shrink-0 border-r border-neutral-200/80 px-4 py-4 md:flex md:flex-col md:justify-center -translate-y-5">
+        <div className="text-center text-[11px] uppercase tracking-[0.2em] text-neutral-400">本页目录</div>
+        <nav className="mt-4 space-y-1">
+          {FAQ_GROUPS.map((group) => (
+            <button
+              key={group.topic}
+              onClick={() => scrollToGroup(group.topic)}
+              className="flex w-full items-center gap-2 rounded-sm px-3 py-2 text-left text-sm text-neutral-600 transition-colors hover:bg-[#1b3f2d]/5 hover:text-[#1b3f2d]"
+            >
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#1b3f2d]/40" />
+              {group.topic}
+            </button>
+          ))}
+        </nav>
+      </div>
 
-        <div className="mt-10 space-y-10">
-          {FAQ_GROUPS.map((group, groupIndex) => (
-            <section key={group.topic} aria-labelledby={`faq-${group.topic}`}>
-              <div className="flex items-end gap-3 border-b border-neutral-300 pb-3">
-                <span className="text-xs font-medium tracking-[0.16em] text-[#1b3f2d]">
-                  {String(groupIndex + 1).padStart(2, '0')}
-                </span>
-                <h3 id={`faq-${group.topic}`} className="text-lg font-medium text-neutral-900">
-                  {group.topic}
-                </h3>
-              </div>
+      {/* 右侧：FAQ 内容（flex-col + m-auto 实现居中，超高时可正常滚动不裁剪） */}
+      <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 pb-32 md:px-10">
+        <div className="m-auto w-full max-w-4xl py-10">
+          {highlight && <ChapterMarker>{highlight}</ChapterMarker>}
+          <div className="flex items-baseline gap-3">
+            <h2 className="text-3xl font-light tracking-tight text-neutral-900 md:text-4xl">常见问题</h2>
+            <span className="text-2xl font-light tracking-[0.3em] text-[#1b3f2d]/60 md:text-3xl">FAQ</span>
+          </div>
+          <p className="mt-3 text-base leading-relaxed text-neutral-500">
+            常见问题已经全部展开，方便你快速浏览和搜索。点击左侧目录可跳转到对应主题。
+          </p>
 
-              <div className="divide-y divide-neutral-200/80">
-                {group.items.map((item) => (
-                  <article key={item.q} className="border-l-2 border-[#1b3f2d]/25 py-4 pl-4">
-                    <h4 className="text-sm font-semibold tracking-wide text-[#1b3f2d]">{item.q}</h4>
-                    <p className="mt-2 max-w-3xl text-[15px] leading-7 text-neutral-600">{item.a}</p>
-                  </article>
+          <div className="mt-10 space-y-10">
+            {FAQ_GROUPS.map((group, groupIndex) => (
+              <section key={group.topic} aria-labelledby={`faq-${group.topic}`}>
+                <div className="flex items-end gap-3 border-b border-neutral-300 pb-3">
+                  <span className="text-xs font-medium tracking-[0.16em] text-[#1b3f2d]">
+                    {String(groupIndex + 1).padStart(2, '0')}
+                  </span>
+                  <h3 id={`faq-${group.topic}`} className="text-lg font-medium text-neutral-900">
+                    {group.topic}
+                  </h3>
+                </div>
+
+                <div className="divide-y divide-neutral-200/80">
+                  {group.items.map((item) => (
+                    <article key={item.q} className="border-l-2 border-[#1b3f2d]/25 py-4 pl-4">
+                      <h4 className="text-sm font-semibold tracking-wide text-[#1b3f2d]">{item.q}</h4>
+                      <p className="mt-2 max-w-3xl text-[15px] leading-7 text-neutral-600">{item.a}</p>
+                    </article>
                 ))}
               </div>
             </section>
@@ -517,6 +428,7 @@ function FaqPage({ nextLabel, onNext, onBack, highlight }: { nextLabel: string; 
             {nextLabel}
             <ChevronRight className="h-4 w-4" />
           </button>
+        </div>
         </div>
       </div>
     </div>

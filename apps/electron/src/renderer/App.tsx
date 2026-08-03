@@ -7,6 +7,7 @@ import { EnvironmentCheckDialog } from './components/environment/EnvironmentChec
 import { MigrationImportDialog } from './components/migration/MigrationImportDialog'
 import { TooltipProvider } from './components/ui/tooltip'
 import { ShortcutGuideDialog } from './components/shortcuts/ShortcutGuideDialog'
+import { FaqDialog } from './components/shortcuts/FaqDialog'
 import { PlanningReminderRail } from './components/planning/PlanningReminderRail'
 import { conversationsAtom } from './atoms/chat-atoms'
 import { environmentCheckDialogOpenAtom } from './atoms/environment'
@@ -104,6 +105,7 @@ export default function App(): React.ReactElement {
       <AppShell contextValue={contextValue} />
       <PlanningReminderRail />
       <ShortcutGuideDialog />
+      <FaqDialog />
       <TutorialBanner />
       <GlobalEnvironmentCheckDialog />
       <MigrationImportDialog />

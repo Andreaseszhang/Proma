@@ -11,6 +11,7 @@ import { PlanningReminderRail } from './components/planning/PlanningReminderRail
 import { conversationsAtom } from './atoms/chat-atoms'
 import { environmentCheckDialogOpenAtom } from './atoms/environment'
 import { tabsAtom, activeTabIdAtom, openTab, TUTORIAL_TAB_ID } from './atoms/tab-atoms'
+import { hasCompletedCurrentOnboarding } from '../types'
 import type { AppShellContextType } from './contexts/AppShellContext'
 
 export default function App(): React.ReactElement {
@@ -27,7 +28,7 @@ export default function App(): React.ReactElement {
     const initialize = async () => {
       try {
         const settings = await window.electronAPI.getSettings()
-        if (!settings.onboardingCompleted) {
+        if (!hasCompletedCurrentOnboarding(settings)) {
           setShowOnboarding(true)
         }
       } catch (error) {

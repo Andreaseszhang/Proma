@@ -61,7 +61,10 @@ export function AppShell({ contextValue }: AppShellProps): React.ReactElement {
 
   /** 重置 onboarding：写回 false 并重新加载窗口，便于测试引导流程 */
   const handleResetOnboarding = React.useCallback(async () => {
-    await window.electronAPI.updateSettings({ onboardingCompleted: false })
+    await window.electronAPI.updateSettings({
+      onboardingCompleted: false,
+      onboardingVersion: undefined,
+    })
     window.location.reload()
   }, [])
 

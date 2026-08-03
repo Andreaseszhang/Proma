@@ -8,30 +8,31 @@
  *  Step 2：Agent vs Chat 科普（绿色指针指向界面截图中的切换按钮）
  *  Step 3：会话文件/项目文件区别
  *  Step 4：项目概念
- *  Step 5：自动任务科普（图：自动任务配置页）
- *  Step 6：引用功能科普（图：Agent 引用提示）
- *  Step 7：侧边回答科普（图：历史选区问答）
- *  Step 8：子会话科普（图：collaboration 子会话）
+ *  Step 5：子会话科普（图：collaboration 子会话）
+ *  Step 6：自动任务科普（图：自动任务配置页）
+ *  Step 7：记忆功能科普（图：Agent 技能的记忆页面）
+ *  Step 8：侧边回答科普（图：历史选区问答）
  *  Step 9：FAQ 汇总页（按主题分组）
  *  Step 10：Windows 环境检测（仅 Windows，其他平台自动跳过）
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAtomValue } from 'jotai'
-import { ChevronRight, ChevronLeft, ChevronDown, Check, RefreshCw } from 'lucide-react'
+import { ChevronRight, ChevronLeft, ChevronsRight, Check, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { EnvironmentCheckPanel } from '@/components/environment/EnvironmentCheckPanel'
 import { isShellEnvironmentOkAtom } from '@/atoms/environment'
 import { detectIsWindows } from '@/lib/platform'
+import { CURRENT_ONBOARDING_VERSION } from '../../../types'
 import roomsByTheSea from '@/assets/onboarding/rooms-by-the-sea.png'
 import guideVisual from '@/assets/onboarding/guide-visual.png'
 import guideAutomation from '@/assets/onboarding/guide-automation.png'
-import guideReference from '@/assets/onboarding/guide-reference.png'
+import guideMemory from '@/assets/onboarding/guide-memory.png'
 import guideSideAnswer from '@/assets/onboarding/guide-side-answer.png'
 import guideSubagent from '@/assets/onboarding/guide-subagent.png'
 import promaMarkWhite from '@/assets/onboarding/proma-mark-white.svg'
 
-type OnboardingStep = 'welcome' | 'guide' | 'files' | 'project' | 'automation' | 'reference' | 'sideanswer' | 'subagent' | 'faq' | 'environment'
+type OnboardingStep = 'welcome' | 'guide' | 'files' | 'project' | 'automation' | 'memory' | 'sideanswer' | 'subagent' | 'faq' | 'environment'
 
 interface OnboardingViewProps {
   onComplete: (openTutorial?: boolean) => void
@@ -65,8 +66,11 @@ interface GuideFeatureStepProps {
   magnifierOffsetX?: number
   /** 仅移动镜片内的截图，不移动放大镜容器 */
   magnifierImageOffset?: MagnifierImageOffset
-  /** 常见问题（每页 3 个） */
-  faqs?: Array<{ q: string; a: string }>}
+  /** 左侧截图右缘需要隐藏的 CSS 像素数 */
+  imageRightCrop?: number
+  /** 仅在 Agent / Chat 介绍页显示，直接前往进阶篇 */
+  onSkip?: () => void
+}
 
 interface MagnifierProps {
   imageSrc: string
@@ -165,7 +169,7 @@ function Magnifier({ imageSrc, anchorX, anchorY, imgRect, offsetX = 0, imageOffs
 /**
  * 引导科普页：左侧显示界面截图，从锚点画绿色指针指向右侧讲解区。
  */
-function GuideFeatureStep({ anchor, title, highlight, paragraphs, nextLabel, onNext, onBack, imageSrc = guideVisual, arrowMode = 'none', magnifierOffsetX = 0, magnifierImageOffset = {} }: GuideFeatureStepProps) {
+function GuideFeatureStep({ anchor, title, highlight, paragraphs, nextLabel, onNext, onBack, onSkip, imageSrc = guideVisual, arrowMode = 'none', magnifierOffsetX = 0, magnifierImageOffset = {}, imageRightCrop = 0 }: GuideFeatureStepProps) {
   const imgRef = useRef<HTMLImageElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [imgRect, setImgRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
@@ -207,6 +211,7 @@ function GuideFeatureStep({ anchor, title, highlight, paragraphs, nextLabel, onN
           src={imageSrc}
           alt="Proma 界面"
           className="max-h-full max-w-full object-contain"
+          style={imageRightCrop > 0 ? { clipPath: `inset(0 ${imageRightCrop}px 0 0)` } : undefined}
         />
 
         {/* 圆形放大镜：覆盖在图片对应区域，圈内放大显示被讲解的 UI */}
@@ -280,8 +285,11 @@ function GuideFeatureStep({ anchor, title, highlight, paragraphs, nextLabel, onN
         )}
       </div>
 
-      {/* 右侧：科普讲解（整体上移） */}
-      <div className="relative flex flex-1 flex-col items-center justify-start px-8 pt-20 md:px-12 md:pt-24 translate-y-[50px]">
+      {/* 右侧：科普讲解（常规窗口相对原布局下移 200px，紧凑高度时保留导航空间） */}
+      <div
+        className="relative flex flex-1 flex-col items-center justify-start px-8 pt-20 md:px-12 md:pt-24"
+        style={{ transform: 'translateY(clamp(0px, calc(100vh - 608px), 250px))' }}
+      >
         {highlight && <div className="mb-4 text-sm uppercase tracking-[0.3em] text-neutral-400">{highlight}</div>}
         <h2 className="text-3xl font-light tracking-tight text-neutral-900 md:text-4xl">{title}</h2>
         <div className="mt-9 max-w-lg space-y-4">
@@ -301,13 +309,24 @@ function GuideFeatureStep({ anchor, title, highlight, paragraphs, nextLabel, onN
           ) : (
             <span />
           )}
-          <button
-            onClick={onNext}
-            className="flex h-12 items-center justify-center gap-1.5 rounded-sm bg-[#1b3f2d] px-8 text-base font-medium text-white transition-all hover:bg-[#27513a] active:translate-y-0.5 active:shadow-none"
-          >
-            {nextLabel}
-            <ChevronRight className="h-4 w-4" />
-          </button>
+          <div className="flex items-center gap-3">
+            {onSkip && (
+              <button
+                onClick={onSkip}
+                className="flex h-8 items-center gap-1 px-2 text-sm text-neutral-400 transition-colors hover:text-[#1b3f2d]"
+              >
+                跳过入门篇
+                <ChevronsRight className="h-4 w-4" />
+              </button>
+            )}
+            <button
+              onClick={onNext}
+              className="flex h-12 items-center justify-center gap-1.5 rounded-sm bg-[#1b3f2d] px-8 text-base font-medium text-white transition-all hover:bg-[#27513a] active:translate-y-0.5 active:shadow-none"
+            >
+              {nextLabel}
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -381,19 +400,24 @@ const FAQ_GROUPS: Array<{ topic: string; items: Array<{ q: string; a: string }> 
     ],
   },
   {
-    topic: '引用',
+    topic: '记忆',
     items: [
       {
-        q: '引用和支持拖拽是一回事吗？',
-        a: '是的。你可以把文件或文件夹直接拖进输入框，或点击「添加文件」按钮，都会被作为引用交给 Agent。',
+        q: '记忆会保存什么？',
+        a: '它沉淀项目规则、稳定偏好和已经确认的结论，让后续 Agent 在同一项目中不必每次从零理解你的工作方式。',
       },
       {
-        q: '引用会占用对话上下文吗？',
-        a: '会按需读取。Agent 会先看到文件清单，真正用到内容时才读取，避免一次塞入大量无关内容。',
+        q: '怎么把一条结论变成记忆？',
+        a: '直接告诉 Agent「记住这个规则」或「把这次结论沉淀为项目记忆」。它会判断应该写入项目指令、长期记忆还是当前会话 Context。',
       },
+    ],
+  },
+  {
+    topic: 'Pi',
+    items: [
       {
-        q: '可以引用哪些类型的内容？',
-        a: '文件、文件夹、其他会话、待办/日程都可以引用，输入框提示里会显示对应的引用方式。',
+        q: 'Pi 是什么？',
+        a: 'Pi 是 Proma 支持的一种 Agent runtime。它可以结合你选定的模型、工具和工作区来完成多步任务，适合需要规划、读写文件或调用工具的工作。',
       },
     ],
   },
@@ -434,89 +458,42 @@ const FAQ_GROUPS: Array<{ topic: string; items: Array<{ q: string; a: string }> 
 ]
 
 /**
- * FAQ 页面：按主题分组展示所有常见问题。
+ * FAQ 页面：一次展开全部问题，按主题连续阅读。
  */
 function FaqPage({ nextLabel, onNext, onBack }: { nextLabel: string; onNext: () => void; onBack?: () => void }) {
-  const [openGroup, setOpenGroup] = useState<string | null>(null)
-  const [openItem, setOpenItem] = useState<string | null>(null)
-
   return (
-    <div className="flex h-full w-full items-start justify-center overflow-y-auto px-6 py-12 md:px-12">
-      <div className="w-full max-w-3xl">
+    <div className="flex h-full w-full items-start justify-center overflow-y-auto px-6 py-12 pb-32 md:px-12">
+      <div className="w-full max-w-4xl">
         <h2 className="text-3xl font-light tracking-tight text-neutral-900 md:text-4xl">常见问题</h2>
         <p className="mt-3 text-base leading-relaxed text-neutral-500">
-          关于 Proma 的高频疑问，按主题整理好了。
+          常见问题已经全部展开，方便你快速浏览和搜索。
         </p>
 
-        <div className="mt-8 space-y-6">
-          {FAQ_GROUPS.map((group) => {
-            const groupOpen = openGroup === group.topic
-            return (
-              <div key={group.topic} className="rounded-sm border border-neutral-200/80 bg-white/70">
-                <button
-                  onClick={() => setOpenGroup(groupOpen ? null : group.topic)}
-                  className="flex w-full items-center justify-between px-4 py-3.5 text-left"
-                >
-                  <span className="text-base font-medium text-neutral-900">{group.topic}</span>
-                  <span
-                    className={`text-neutral-400 transition-transform duration-200 ${groupOpen ? 'rotate-180' : ''}`}
-                  >
-                    <ChevronDown size={18} />
-                  </span>
-                </button>
-
-                <div
-                  className={`grid transition-all duration-200 ${
-                    groupOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
-                  }`}
-                >
-                  <div className="overflow-hidden">
-                    <div className="space-y-1 px-3 pb-3">
-                      {group.items.map((item) => {
-                        const itemOpen = openItem === `${group.topic}::${item.q}`
-                        return (
-                          <div
-                            key={item.q}
-                            className="overflow-hidden rounded-sm border border-neutral-100"
-                          >
-                            <button
-                              onClick={() =>
-                                setOpenItem(itemOpen ? null : `${group.topic}::${item.q}`)
-                              }
-                              className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left"
-                            >
-                              <span className="text-sm text-neutral-700">{item.q}</span>
-                              <span
-                                className={`text-neutral-300 transition-transform duration-200 ${
-                                  itemOpen ? 'rotate-180' : ''
-                                }`}
-                              >
-                                <ChevronDown size={14} />
-                              </span>
-                            </button>
-                            <div
-                              className={`grid transition-all duration-200 ${
-                                itemOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
-                              }`}
-                            >
-                              <div className="overflow-hidden">
-                                <p className="px-3 pb-3 text-sm leading-relaxed text-neutral-600">
-                                  {item.a}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                </div>
+        <div className="mt-10 space-y-10">
+          {FAQ_GROUPS.map((group, groupIndex) => (
+            <section key={group.topic} aria-labelledby={`faq-${group.topic}`}>
+              <div className="flex items-end gap-3 border-b border-neutral-300 pb-3">
+                <span className="text-xs font-medium tracking-[0.16em] text-[#1b3f2d]">
+                  {String(groupIndex + 1).padStart(2, '0')}
+                </span>
+                <h3 id={`faq-${group.topic}`} className="text-lg font-medium text-neutral-900">
+                  {group.topic}
+                </h3>
               </div>
-            )
-          })}
+
+              <div className="divide-y divide-neutral-200/80">
+                {group.items.map((item) => (
+                  <article key={item.q} className="border-l-2 border-[#1b3f2d]/25 py-4 pl-4">
+                    <h4 className="text-sm font-semibold tracking-wide text-[#1b3f2d]">{item.q}</h4>
+                    <p className="mt-2 max-w-3xl text-[15px] leading-7 text-neutral-600">{item.a}</p>
+                  </article>
+                ))}
+              </div>
+            </section>
+          ))}
         </div>
 
-        <div className="mt-10 flex w-full items-center justify-between">
+        <div className="mt-12 flex w-full items-center justify-between">
           {onBack ? (
             <Button variant="ghost" size="sm" onClick={onBack} className="text-neutral-500">
               <ChevronLeft className="mr-1 h-4 w-4" />
@@ -538,80 +515,82 @@ function FaqPage({ nextLabel, onNext, onBack }: { nextLabel: string; onNext: () 
   )
 }
 
-/** 引导步骤标题（用于底部进度地图） */
-const STEP_LABELS: Array<{ step: OnboardingStep; label: string }> = [
-  { step: 'welcome', label: '欢迎' },
+/** 引导步骤标题（欢迎页独立，不在地图中显示） */
+const STEP_LABELS: Array<{ step: Exclude<OnboardingStep, 'welcome' | 'environment'>; label: string }> = [
   { step: 'guide', label: 'Agent / Chat' },
   { step: 'project', label: '项目' },
   { step: 'files', label: '文件' },
-  { step: 'automation', label: '自动任务' },
-  { step: 'reference', label: '引用' },
-  { step: 'sideanswer', label: '侧边回答' },
   { step: 'subagent', label: '子会话' },
+  { step: 'automation', label: '自动任务' },
+  { step: 'memory', label: '记忆' },
+  { step: 'sideanswer', label: '侧边回答' },
   { step: 'faq', label: 'FAQ' },
 ]
 
+const BEGINNER_STEP_LABELS = STEP_LABELS.slice(0, 3)
+const ADVANCED_STEP_LABELS = STEP_LABELS.slice(3)
+
 /**
- * 底部进度地图：一条线 + 步骤点 + 标题，高亮当前进度。
+ * 底部进度地图：仅显示当前章节的步骤，并保持章节内的宽松间距。
  */
-function ProgressMap({ current }: { current: OnboardingStep }) {
-  const currentIdx = STEP_LABELS.findIndex((s) => s.step === current)
-  const activeIdx = currentIdx === -1 ? 0 : currentIdx
+function ProgressMap({ current }: { current: Exclude<OnboardingStep, 'welcome' | 'environment'> }) {
+  const isBeginner = BEGINNER_STEP_LABELS.some((step) => step.step === current)
+  const visibleSteps = isBeginner ? BEGINNER_STEP_LABELS : ADVANCED_STEP_LABELS
+  const activeIdx = visibleSteps.findIndex((step) => step.step === current)
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-4 z-20 flex items-start justify-center px-6">
-      <div className="flex w-full max-w-3xl items-start">
-        {STEP_LABELS.map((item, i) => {
-          const done = i < activeIdx
-          const isCurrent = i === activeIdx
-          return (
-            <div key={item.step} className="flex flex-1 flex-col items-center">
-              <span
-                className={`text-[10px] leading-tight tracking-wide md:text-[11px] ${
-                  isCurrent
-                    ? 'font-medium text-[#1b3f2d]'
-                    : done
-                      ? 'text-neutral-500'
-                      : 'text-neutral-400'
-                }`}
-              >
-                {item.label}
-              </span>
-              <div className="mt-1.5 flex h-3 w-full items-center">
-                {/* 前半段占位（首节点透明，保证圆点居中、间距统一） */}
-                <div
-                  className={`h-px flex-1 ${
-                    i === 0
-                      ? 'bg-transparent'
-                      : done || isCurrent
-                        ? 'bg-[#1b3f2d]/50'
-                        : 'bg-neutral-200'
-                  }`}
-                />
-                {/* 节点圆点 */}
-                <div
-                  className={`mx-1 h-2.5 w-2.5 shrink-0 rounded-full transition-colors duration-300 ${
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-start justify-center bg-[#fbf9f7]/95 px-8 pb-4 pt-2 backdrop-blur-sm md:px-12">
+      <div className={`w-full ${isBeginner ? 'max-w-3xl' : 'max-w-5xl'}`}>
+        <div className="flex items-start">
+          {visibleSteps.map((item, index) => {
+            const done = index < activeIdx
+            const isCurrent = index === activeIdx
+            return (
+              <div key={item.step} className="flex flex-1 flex-col items-center">
+                <span
+                  className={`text-[10px] leading-tight tracking-wide md:text-xs ${
                     isCurrent
-                      ? 'bg-[#1b3f2d] ring-4 ring-[#1b3f2d]/15'
+                      ? 'font-medium text-[#1b3f2d]'
                       : done
-                        ? 'bg-[#1b3f2d]/70'
-                        : 'bg-neutral-300'
+                        ? 'text-neutral-500'
+                        : 'text-neutral-400'
                   }`}
-                />
-                {/* 后半段占位（末节点透明，保证圆点居中、间距统一） */}
-                <div
-                  className={`h-px flex-1 ${
-                    i === STEP_LABELS.length - 1
-                      ? 'bg-transparent'
-                      : i < activeIdx
-                        ? 'bg-[#1b3f2d]/50'
-                        : 'bg-neutral-200'
-                  }`}
-                />
+                >
+                  {item.label}
+                </span>
+                <div className="mt-1.5 flex h-3 w-full items-center">
+                  <div
+                    className={`h-px flex-1 ${
+                      index === 0
+                        ? 'bg-transparent'
+                        : done || isCurrent
+                          ? 'bg-[#1b3f2d]/50'
+                          : 'bg-neutral-200'
+                    }`}
+                  />
+                  <div
+                    className={`mx-1.5 h-2.5 w-2.5 shrink-0 rounded-full transition-colors duration-300 ${
+                      isCurrent
+                        ? 'bg-[#1b3f2d] ring-4 ring-[#1b3f2d]/15'
+                        : done
+                          ? 'bg-[#1b3f2d]/70'
+                          : 'bg-neutral-300'
+                    }`}
+                  />
+                  <div
+                    className={`h-px flex-1 ${
+                      index === visibleSteps.length - 1
+                        ? 'bg-transparent'
+                        : index < activeIdx
+                          ? 'bg-[#1b3f2d]/50'
+                          : 'bg-neutral-200'
+                    }`}
+                  />
+                </div>
               </div>
-            </div>
-          )
-        })}
+            )
+          })}
+        </div>
       </div>
     </div>
   )
@@ -625,7 +604,10 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
   const shellOk = useAtomValue(isShellEnvironmentOkAtom)
 
   const handleFinish = async (openTutorial?: boolean) => {
-    await window.electronAPI.updateSettings({ onboardingCompleted: true })
+    await window.electronAPI.updateSettings({
+      onboardingCompleted: true,
+      onboardingVersion: CURRENT_ONBOARDING_VERSION,
+    })
     onComplete(openTutorial)
   }
 
@@ -650,11 +632,12 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
   const handleEnterGuide = () => transitionTo('guide')
   const handleNextFromGuide = () => transitionTo('project')
   const handleNextFromProject = () => transitionTo('files')
-  const handleNextFromFiles = () => transitionTo('automation')
-  const handleNextFromAutomation = () => transitionTo('reference')
-  const handleNextFromReference = () => transitionTo('sideanswer')
-  const handleNextFromSideAnswer = () => transitionTo('subagent')
-  const handleNextFromSubagent = () => transitionTo('faq')
+  const handleNextFromFiles = () => transitionTo('subagent')
+  const handleSkipBeginner = () => transitionTo('subagent')
+  const handleNextFromAutomation = () => transitionTo('memory')
+  const handleNextFromMemory = () => transitionTo('sideanswer')
+  const handleNextFromSideAnswer = () => transitionTo('faq')
+  const handleNextFromSubagent = () => transitionTo('automation')
   const handleNextFromFaq = () => {
     if (isWindows) {
       transitionTo('environment')
@@ -665,31 +648,16 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
 
   /** 重置 onboarding：写回 false 并重新加载窗口，便于反复测试引导流程 */
   const handleResetOnboarding = async () => {
-    await window.electronAPI.updateSettings({ onboardingCompleted: false })
+    await window.electronAPI.updateSettings({
+      onboardingCompleted: false,
+      onboardingVersion: undefined,
+    })
     window.location.reload()
   }
 
-  const stepIndex =
-    step === 'welcome'
-      ? 1
-      : step === 'guide'
-        ? 2
-        : step === 'project'
-          ? 3
-          : step === 'files'
-            ? 4
-            : step === 'automation'
-              ? 5
-              : step === 'reference'
-                ? 6
-                : step === 'sideanswer'
-                  ? 7
-                  : step === 'subagent'
-                    ? 8
-                    : step === 'faq'
-                      ? 9
-                      : 10
-  const totalSteps = isWindows ? 10 : 9
+  const currentMapIndex = STEP_LABELS.findIndex((item) => item.step === step)
+  const stepIndex = step === 'environment' ? STEP_LABELS.length + 1 : currentMapIndex + 1
+  const totalSteps = STEP_LABELS.length + (isWindows ? 1 : 0)
 
   return (
     <div className="relative flex h-screen w-full flex-col overflow-hidden bg-[#fbf9f7] md:flex-row">
@@ -738,9 +706,11 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
         }`}
       >
         {/* 右上角步骤指示 */}
-        <div className="absolute right-8 top-6 text-xs uppercase tracking-[0.3em] text-neutral-400 md:right-10 md:top-8">
-          {String(stepIndex).padStart(2, '0')} / {String(totalSteps).padStart(2, '0')}
-        </div>
+        {step !== 'welcome' && (
+          <div className="absolute right-8 top-6 text-xs uppercase tracking-[0.3em] text-neutral-400 md:right-10 md:top-8">
+            {String(stepIndex).padStart(2, '0')} / {String(totalSteps).padStart(2, '0')}
+          </div>
+        )}
 
         {step === 'welcome' && (
           <div className="w-full max-w-xl px-6 py-10 md:px-10">
@@ -793,6 +763,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
             nextLabel="下一个"
             onNext={handleNextFromGuide}
             onBack={() => transitionTo('welcome')}
+            onSkip={handleSkipBeginner}
           />
         )}
 
@@ -812,7 +783,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
                 是团队/长期项目真正的工作台。
               </>,
             ]}
-            nextLabel="下一个"
+            nextLabel="开始进阶篇"
             onNext={handleNextFromFiles}
             onBack={() => transitionTo('project')}
           />
@@ -841,11 +812,41 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
           />
         )}
 
+        {step === 'subagent' && (
+          <GuideFeatureStep
+            anchor={{ x: 0.075, y: 0.38 }}
+            arrowMode="magnifier"
+            magnifierOffsetX={80}
+            magnifierImageOffset={{ x: 0.075 }}
+            imageSrc={guideSubagent}
+            title="子会话功能"
+            paragraphs={[
+              <>
+                子会话（Collaboration）是 Agent 派生的<b className="font-medium text-neutral-900">独立研究小分队</b>——
+                你用一句自然语言就能启动，比如「启动 3 个子会话研究躺平现象」。
+              </>,
+              <>
+                每个子会话可以<b className="font-medium text-neutral-900">指定不同模型</b>（如 MiniMax、DeepSeek），
+                拥有<b className="font-medium text-neutral-900">独立的上下文</b>，各自专注一个方向并行研究。
+              </>,
+              <>
+                结果再汇回父会话——
+                <b className="font-medium text-neutral-900">既节省父会话的上下文，又能并行干更多的活</b>。
+              </>,
+            ]}
+            nextLabel="下一个"
+            onNext={handleNextFromSubagent}
+            onBack={() => transitionTo('files')}
+          />
+        )}
+
         {step === 'automation' && (
           <GuideFeatureStep
             anchor={{ x: 0.21, y: 0.019 }}
             arrowMode="none"
-            imageSrc={guideAutomation}            title="自动任务功能"
+            imageSrc={guideAutomation}
+            imageRightCrop={2}
+            title="自动任务功能"
             paragraphs={[
               <>
                 打开<b className="font-medium text-neutral-900">自动任务</b>，你可以让 Proma 定时自动执行一件事。
@@ -855,35 +856,37 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
                 <b className="font-medium text-neutral-900">无人值守也能按时完成</b>。
               </>,
               <>
-                日报周报、定时检查、价格监控、数据汇总……反复要做的事都交给它。
+                也不必手动填写配置：直接告诉 Agent「每天早上检查这个仓库的 PR」或「每周汇总销售数据」，
+                它会把你的目标转成对应的自动任务。
               </>,
             ]}
             nextLabel="下一个"
             onNext={handleNextFromAutomation}
-            onBack={() => transitionTo('files')}
+            onBack={() => transitionTo('subagent')}
           />
         )}
 
-        {step === 'reference' && (
+        {step === 'memory' && (
           <GuideFeatureStep
-            anchor={{ x: 0.43, y: 0.19 }}
+            anchor={{ x: 0.49, y: 0.18 }}
             arrowMode="none"
-            imageSrc={guideReference}            title="引用功能"
+            imageSrc={guideMemory}
+            title="让 Agent 记住你的项目"
             paragraphs={[
               <>
-                在 Agent 回复里会出现<b className="font-medium text-neutral-900">「为 Agent 引用」</b>的提示，
-                表示这条消息引用了文件、文件夹或对话内容。
+                <b className="font-medium text-neutral-900">记忆</b>会沉淀项目指令、稳定偏好和已经确认的结论，
+                让后续 Agent 不必每次从零理解你的工作方式。
               </>,
               <>
-                你可以把文件直接<b className="font-medium text-neutral-900">拖拽进输入框</b>，
-                或点击「添加文件/附加文件夹」，让 Agent 基于这些材料工作。
+                你不必自己判断信息该存在哪里。直接说「记住这个项目规则」或「把这次结论沉淀为项目记忆」，
+                Agent 会帮你选择合适的位置并完成更新。
               </>,
               <>
-                引用让 Agent 看到真实的上下文，而不是只靠你口头描述。
+                项目越长期、协作越复杂，清晰的记忆就越能让每次对话接得更自然。
               </>,
             ]}
             nextLabel="下一个"
-            onNext={handleNextFromReference}
+            onNext={handleNextFromMemory}
             onBack={() => transitionTo('automation')}
           />
         )}
@@ -903,32 +906,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
             ]}
             nextLabel="下一个"
             onNext={handleNextFromSideAnswer}
-            onBack={() => transitionTo('reference')}
-          />
-        )}
-
-        {step === 'subagent' && (
-          <GuideFeatureStep
-            anchor={{ x: 0.30, y: 0.64 }}
-            arrowMode="none"
-            imageSrc={guideSubagent}            title="子会话功能"
-            paragraphs={[
-              <>
-                子会话（Collaboration）是 Agent 派生的<b className="font-medium text-neutral-900">独立研究小分队</b>——
-                你用一句自然语言就能启动，比如「启动 3 个子会话研究躺平现象」。
-              </>,
-              <>
-                每个子会话可以<b className="font-medium text-neutral-900">指定不同模型</b>（如 MiniMax、DeepSeek），
-                拥有<b className="font-medium text-neutral-900">独立的上下文</b>，各自专注一个方向并行研究。
-              </>,
-              <>
-                结果再汇回父会话——
-                <b className="font-medium text-neutral-900">既节省父会话的上下文，又能并行干更多的活</b>。
-              </>,
-            ]}
-            nextLabel="下一个"
-            onNext={handleNextFromSubagent}
-            onBack={() => transitionTo('sideanswer')}
+            onBack={() => transitionTo('memory')}
           />
         )}
 
@@ -936,7 +914,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
           <FaqPage
             nextLabel={isWindows ? '下一个' : '开始使用'}
             onNext={handleNextFromFaq}
-            onBack={() => transitionTo('subagent')}
+            onBack={() => transitionTo('sideanswer')}
           />
         )}
 
@@ -985,7 +963,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
       </div>
 
       {/* ===== 底部进度地图（欢迎页不显示） ===== */}
-      {step !== 'welcome' && <ProgressMap current={step} />}
+      {step !== 'welcome' && step !== 'environment' && <ProgressMap current={step} />}
 
       {/* ===== 白色闪屏遮罩 ===== */}
       <div

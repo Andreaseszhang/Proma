@@ -26,11 +26,16 @@ import { detectIsWindows } from '@/lib/platform'
 import { CURRENT_ONBOARDING_VERSION } from '../../../types'
 import roomsByTheSea from '@/assets/onboarding/rooms-by-the-sea.png'
 import guideVisual from '@/assets/onboarding/guide-visual.png'
+import guideAgentExample from '@/assets/onboarding/guide-agent-example.png'
+import guideChatExample from '@/assets/onboarding/guide-chat-example.png'
 import guideAutomation from '@/assets/onboarding/guide-automation.png'
 import guideMemory from '@/assets/onboarding/guide-memory.png'
 import guideSideAnswer from '@/assets/onboarding/guide-side-answer.png'
 import guideSubagent from '@/assets/onboarding/guide-subagent.png'
 import promaMarkWhite from '@/assets/onboarding/proma-mark-white.svg'
+import { AutomationGuideExamples } from './AutomationGuideExamples'
+import { FileGuideExamples } from './FileGuideExamples'
+import { SubagentGuideExamples } from './SubagentGuideExamples'
 import { FAQ_GROUPS } from './faq-content'
 
 type OnboardingStep = 'welcome' | 'guide' | 'files' | 'project' | 'automation' | 'memory' | 'sideanswer' | 'subagent' | 'faq' | 'environment'
@@ -69,6 +74,10 @@ interface GuideFeatureStepProps {
   magnifierImageOffset?: MagnifierImageOffset
   /** 左侧截图右缘需要隐藏的 CSS 像素数 */
   imageRightCrop?: number
+  /** 放大镜缩放倍率（默认 1），>1 更大 */
+  magnifierScale?: number
+  /** 是否在本讲解区显示上一页/下一页导航 */
+  showNavigation?: boolean
 }
 
 interface MagnifierProps {
@@ -82,6 +91,8 @@ interface MagnifierProps {
   offsetX?: number
   /** 仅移动镜片内的截图，不移动放大镜容器 */
   imageOffset?: MagnifierImageOffset
+  /** 放大镜缩放倍率（默认 1），>1 更大 */
+  scale?: number
 }
 
 /**
@@ -91,11 +102,11 @@ interface MagnifierProps {
  * 容器内再渲染同一张图片，但以锚点为中心放大 2 倍，
  * 视觉效果就像把对应区域的内容放大到圆圈里。
  */
-function Magnifier({ imageSrc, anchorX, anchorY, imgRect, offsetX = 0, imageOffset = {} }: MagnifierProps) {
+function Magnifier({ imageSrc, anchorX, anchorY, imgRect, offsetX = 0, imageOffset = {}, scale = 1 }: MagnifierProps) {
   const ZOOM = 2.2 // 放大倍数
   const SOURCE_CROP_WIDTH = 0.1765 // 每次展示原截图横向约 17.65% 的区域
   const REFERENCE_DIAMETER = 320
-  const DIAMETER = imgRect.w * ZOOM * SOURCE_CROP_WIDTH
+  const DIAMETER = imgRect.w * ZOOM * SOURCE_CROP_WIDTH * scale
   const RADIUS = DIAMETER / 2
 
   const cx = imgRect.x + anchorX * imgRect.w
@@ -177,10 +188,32 @@ function ChapterMarker({ children }: { children: React.ReactNode }) {
   )
 }
 
+function GuideNavigation({ nextLabel, onNext, onBack }: { nextLabel: string; onNext: () => void; onBack?: () => void }) {
+  return (
+    <div className="flex w-full items-center justify-between border-t border-[#1b3f2d]/20 pt-6">
+      {onBack ? (
+        <Button variant="ghost" size="sm" onClick={onBack} className="text-neutral-500">
+          <ChevronLeft className="mr-1 h-4 w-4" />
+          上一个
+        </Button>
+      ) : (
+        <span />
+      )}
+      <button
+        onClick={onNext}
+        className="flex h-14 items-center justify-center gap-1.5 rounded-md bg-[#1b3f2d] px-9 text-base font-medium text-white shadow-[0_8px_18px_rgba(27,63,45,0.14)] transition-all hover:bg-[#27513a] active:translate-y-0.5 active:shadow-none"
+      >
+        {nextLabel}
+        <ChevronRight className="h-4 w-4" />
+      </button>
+    </div>
+  )
+}
+
 /**
  * 引导科普页：左侧显示界面截图，从锚点画绿色指针指向右侧讲解区。
  */
-function GuideFeatureStep({ anchor, title, highlight, paragraphs, nextLabel, onNext, onBack, imageSrc = guideVisual, arrowMode = 'none', magnifierOffsetX = 0, magnifierImageOffset = {}, imageRightCrop = 0 }: GuideFeatureStepProps) {
+function GuideFeatureStep({ anchor, title, highlight, paragraphs, nextLabel, onNext, onBack, imageSrc = guideVisual, arrowMode = 'none', magnifierOffsetX = 0, magnifierImageOffset = {}, imageRightCrop = 0, magnifierScale = 1, showNavigation = true }: GuideFeatureStepProps) {
   const imgRef = useRef<HTMLImageElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [imgRect, setImgRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
@@ -242,6 +275,7 @@ function GuideFeatureStep({ anchor, title, highlight, paragraphs, nextLabel, onN
             imgRect={imgRect}
             offsetX={magnifierOffsetX}
             imageOffset={magnifierImageOffset}
+            scale={magnifierScale}
           />
         )}
 
@@ -319,25 +353,118 @@ function GuideFeatureStep({ anchor, title, highlight, paragraphs, nextLabel, onN
           ))}
         </div>
 
-        <div className="mt-12 flex w-full max-w-lg items-center justify-between border-t border-[#1b3f2d]/20 pt-6">
-          {onBack ? (
-            <Button variant="ghost" size="sm" onClick={onBack} className="text-neutral-500">
-              <ChevronLeft className="mr-1 h-4 w-4" />
-              上一个
-            </Button>
-          ) : (
-            <span />
-          )}
-          <button
-            onClick={onNext}
-            className="flex h-14 items-center justify-center gap-1.5 rounded-md bg-[#1b3f2d] px-9 text-base font-medium text-white shadow-[0_8px_18px_rgba(27,63,45,0.14)] transition-all hover:bg-[#27513a] active:translate-y-0.5 active:shadow-none"
-          >
-            {nextLabel}
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        </div>
+        {showNavigation && (
+          <div className="mt-12 w-full max-w-lg">
+            <GuideNavigation nextLabel={nextLabel} onNext={onNext} onBack={onBack} />
+          </div>
+        )}
       </div>
     </div>
+  )
+}
+
+type GuideExamplesIntroProps = Omit<GuideFeatureStepProps, 'nextLabel' | 'onNext' | 'onBack' | 'showNavigation'>
+
+function GuideExamplesPage({ intro, nextLabel, onNext, onBack, children }: {
+  intro: GuideExamplesIntroProps
+  nextLabel: string
+  onNext: () => void
+  onBack: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <div className="h-full w-full overflow-y-auto">
+      <div className="h-[1100px] lg:h-[calc(100vh-4rem)] lg:min-h-[660px]">
+        <GuideFeatureStep
+          {...intro}
+          nextLabel={nextLabel}
+          onNext={onNext}
+          onBack={onBack}
+          showNavigation={false}
+        />
+      </div>
+
+      <div className="mx-auto w-full max-w-[calc(58vw+504px)] px-6 pb-28 pt-6 md:px-10">
+        {children}
+        <GuideNavigation nextLabel={nextLabel} onNext={onNext} onBack={onBack} />
+      </div>
+    </div>
+  )
+}
+
+/** Agent / Chat 首章：保留模式说明，并在同页继续展示真实工作流。 */
+function AgentChatGuidePage({ onNext, onBack }: { onNext: () => void; onBack: () => void }) {
+  return (
+    <GuideExamplesPage
+      intro={{
+        anchor: { x: 0.073, y: 0.049 },
+        arrowMode: 'magnifier',
+        magnifierOffsetX: 70,
+        magnifierImageOffset: { x: 0.09, y: 0.33 },
+        highlight: '入门篇 · 第 1 步',
+        title: 'Agent 和 Chat 模式的区别',
+        paragraphs: [
+          <>左边栏顶部是 Proma 的<b className="font-medium text-neutral-900">模式切换</b>：Agent 与 Chat。</>,
+          <>
+            <b className="font-medium text-neutral-900">Chat</b> 是一问一答的对话——快速提问、简单交流，
+            不涉及任何对电脑的操作，核心偏向满足好奇心和完成简单的文字工作。
+          </>,
+          <>
+            <b className="font-medium text-neutral-900">Agent</b> 则能自主规划、调用工具、操作电脑、写代码和文档，
+            为你的想法赋形。
+          </>,
+        ],
+      }}
+      nextLabel="下一个"
+      onNext={onNext}
+      onBack={onBack}
+    >
+      <section className="border-t border-[#1b3f2d]/20 py-16 md:py-20">
+        <div className="max-w-2xl">
+          <div className="text-xs font-medium uppercase tracking-[0.2em] text-[#1b3f2d]">真实示例</div>
+          <h2 className="mt-4 text-3xl font-light tracking-tight text-neutral-900 md:text-4xl">从一句话开始，得到不同类型的结果</h2>
+          <p className="mt-4 text-base leading-[1.7] text-neutral-600 md:text-lg">
+            同样是提问，选择的模式会决定 Proma 如何推进工作。先用 Chat 快速厘清一个概念，再把需要调用工具和产出结果的任务交给 Agent。
+          </p>
+        </div>
+
+        <div className="mt-14 space-y-16 md:mt-16 md:space-y-20">
+          <article className="grid gap-10 border-t border-[#1b3f2d]/15 pt-10 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-center">
+            <figure className="overflow-hidden rounded-lg bg-[#f6f8f3] shadow-[0_14px_30px_rgba(27,63,45,0.12)]">
+              <img src={guideChatExample} alt="Chat 解释 RAG 搜索原理的示例" className="block h-auto w-full" />
+            </figure>
+            <div>
+              <div className="text-xs font-medium uppercase tracking-[0.18em] text-[#1b3f2d]">示例 01 · Chat</div>
+              <h3 className="mt-3 text-2xl font-medium text-neutral-900 md:text-3xl">快速厘清一个概念用 Chat</h3>
+              <p className="mt-4 text-base leading-[1.7] text-neutral-600 md:text-lg">
+                例如，直接询问 RAG 的搜索原理，就能快速得到结构化解释，并可继续追问细节。Chat 专注对话和文字回答，不会操作电脑或创建产出。
+              </p>
+              <div className="mt-5 border-l-2 border-[#1b3f2d]/35 pl-4">
+                <div className="text-xs font-medium text-[#1b3f2d]">你可以这样说</div>
+                <p className="mt-1 text-base leading-7 text-neutral-500">“用通俗的话帮我解释一下 RAG 的搜索原理。”</p>
+              </div>
+            </div>
+          </article>
+
+          <article className="grid gap-10 border-t border-[#1b3f2d]/15 pt-10 lg:grid-cols-[22rem_minmax(0,1fr)] lg:items-center">
+            <div className="lg:order-1">
+              <div className="text-xs font-medium uppercase tracking-[0.18em] text-[#1b3f2d]">示例 02 · Agent</div>
+              <h3 className="mt-3 text-2xl font-medium text-neutral-900 md:text-3xl">需要调用工具并产出成果时用 Agent</h3>
+              <p className="mt-4 text-base leading-[1.7] text-neutral-600 md:text-lg">
+                例如，请它研究 RAG 并将结论写入会话文件。Agent 会拆解任务、调用工具、持续推进，再把成果保留在当前工作区。
+              </p>
+              <div className="mt-5 border-l-2 border-[#1b3f2d]/35 pl-4">
+                <div className="text-xs font-medium text-[#1b3f2d]">你可以这样说</div>
+                <p className="mt-1 text-base leading-7 text-neutral-500">“帮我研究一下什么是 RAG，然后把研究结果写成一个文件放到会话文件里。”</p>
+              </div>
+            </div>
+            <figure className="overflow-hidden rounded-lg bg-[#f6f8f3] shadow-[0_14px_30px_rgba(27,63,45,0.12)] lg:order-2">
+              <img src={guideAgentExample} alt="Agent 研究 RAG 并写入会话文件的示例" className="block h-auto w-full" />
+            </figure>
+          </article>
+        </div>
+      </section>
+    </GuideExamplesPage>
   )
 }
 
@@ -664,60 +791,48 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
         )}
 
         {step === 'guide' && (
-          <GuideFeatureStep
-            anchor={{ x: 0.073, y: 0.049 }}
-            arrowMode="magnifier"
-            magnifierOffsetX={70}
-            magnifierImageOffset={{ x: 0.09, y: 0.33 }}
-            highlight="入门篇 · 第 1 步"
-            title="Agent 和 Chat 模式的区别"
-            paragraphs={[
-              <>左边栏顶部是 Proma 的<b className="font-medium text-neutral-900">模式切换</b>：Agent 与 Chat。</>,
-              <>
-                <b className="font-medium text-neutral-900">Chat</b> 是一问一答的对话——快速提问、简单交流，
-                不涉及任何对电脑的操作，核心偏向满足好奇心和完成简单的文字工作。
-              </>,
-              <>
-                <b className="font-medium text-neutral-900">Agent</b> 则能自主规划、调用工具、操作电脑、写代码和文档，
-                为你的想法赋形。
-              </>,
-            ]}
-            nextLabel="下一个"
+          <AgentChatGuidePage
             onNext={handleNextFromGuide}
             onBack={() => transitionTo('welcome')}
           />
         )}
 
         {step === 'files' && (
-          <GuideFeatureStep
-            anchor={{ x: 0.91, y: 0.07 }}
-            arrowMode="magnifier"
-            magnifierOffsetX={-40}
-            highlight="入门篇 · 第 3 步"
-            title="会话文件和项目文件"
-            paragraphs={[
-              <>右侧预览面板顶部有<b className="font-medium text-neutral-900">会话文件</b>和<b className="font-medium text-neutral-900">项目文件</b>两个页签。</>,
-              <>
-                <b className="font-medium text-neutral-900">会话文件</b>属于这一次对话——附件、截图、临时引用，
-                聊完就归位，适合一次性材料。
-              </>,
-              <>
-                <b className="font-medium text-neutral-900">项目文件</b>属于整个项目——所有项目内的会话共享这些文件，
-                是团队/长期项目真正的工作台。
-              </>,
-            ]}
+          <GuideExamplesPage
+            intro={{
+              anchor: { x: 0.91, y: 0.07 },
+              arrowMode: 'magnifier',
+              magnifierOffsetX: -40,
+              highlight: '入门篇 · 第 3 步',
+              title: '会话文件和项目文件',
+              paragraphs: [
+                <>右侧预览面板顶部有<b className="font-medium text-neutral-900">会话文件</b>和<b className="font-medium text-neutral-900">项目文件</b>两个页签。</>,
+                <>
+                  <b className="font-medium text-neutral-900">会话文件</b>属于这一次对话——附件、截图、临时引用，
+                  聊完就归位，适合一次性材料。
+                </>,
+                <>
+                  <b className="font-medium text-neutral-900">项目文件</b>属于整个项目——所有项目内的会话共享这些文件，
+                  是团队/长期项目真正的工作台。
+                </>,
+              ],
+            }}
             nextLabel="开始进阶篇"
             onNext={handleNextFromFiles}
             onBack={() => transitionTo('project')}
-          />
+          >
+            <section className="border-t border-[#1b3f2d]/20 py-16 md:py-20">
+              <FileGuideExamples />
+            </section>
+          </GuideExamplesPage>
         )}
 
         {step === 'project' && (
           <GuideFeatureStep
             anchor={{ x: 0.012, y: 0.22 }}
             arrowMode="magnifier"
-            magnifierOffsetX={70}
-            magnifierImageOffset={{ x: 0.22 }}
+            magnifierOffsetX={130}
+            magnifierImageOffset={{ x: 0.08, y: 0.05 }}
             highlight="入门篇 · 第 2 步"
             title="项目的概念"
             paragraphs={[
@@ -737,59 +852,69 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
         )}
 
         {step === 'subagent' && (
-          <GuideFeatureStep
-            anchor={{ x: 0.075, y: 0.38 }}
-            arrowMode="magnifier"
-            magnifierOffsetX={80}
-            magnifierImageOffset={{ x: 0.075 }}
-            imageSrc={guideSubagent}
-            highlight="进阶指南 · 第 1 步"
-            title="子会话功能"
-            paragraphs={[
-              <>
-                子会话（Collaboration）是 Agent 派生的<b className="font-medium text-neutral-900">独立研究小分队</b>——
-                你用一句自然语言就能启动，比如「启动 3 个子会话研究躺平现象」。
-              </>,
-              <>
-                每个子会话可以<b className="font-medium text-neutral-900">指定不同模型</b>（如 MiniMax、DeepSeek），
-                拥有<b className="font-medium text-neutral-900">独立的上下文</b>，各自专注一个方向并行研究。
-              </>,
-              <>
-                结果再汇回父会话——
-                <b className="font-medium text-neutral-900">既节省父会话的上下文，又能并行干更多的活</b>。
-              </>,
-            ]}
+          <GuideExamplesPage
+            intro={{
+              anchor: { x: 0.075, y: 0.38 },
+              arrowMode: 'magnifier',
+              magnifierOffsetX: 80,
+              magnifierImageOffset: { x: 0.075 },
+              imageSrc: guideSubagent,
+              highlight: '进阶指南 · 第 1 步',
+              title: '子会话功能',
+              paragraphs: [
+                <>
+                  子会话（Collaboration）是 Agent 派生的<b className="font-medium text-neutral-900">独立研究小分队</b>——
+                  你用一句自然语言就能启动，比如「启动 3 个子会话研究躺平现象」。
+                </>,
+                <>
+                  每个子会话可以<b className="font-medium text-neutral-900">指定不同模型</b>（如 MiniMax、DeepSeek），
+                  拥有<b className="font-medium text-neutral-900">独立的上下文</b>，各自专注一个方向并行研究。
+                </>,
+                <>
+                  结果再汇回父会话——
+                  <b className="font-medium text-neutral-900">既节省父会话的上下文，又能并行干更多的活</b>。
+                </>,
+              ],
+            }}
             nextLabel="下一个"
             onNext={handleNextFromSubagent}
             onBack={() => transitionTo('files')}
-          />
+          >
+            <SubagentGuideExamples />
+          </GuideExamplesPage>
         )}
 
         {step === 'automation' && (
-          <GuideFeatureStep
-            anchor={{ x: 0.21, y: 0.019 }}
-            arrowMode="none"
-            imageSrc={guideAutomation}
-            imageRightCrop={2}
-            highlight="进阶指南 · 第 2 步"
-            title="自动任务功能"
-            paragraphs={[
-              <>
-                打开<b className="font-medium text-neutral-900">自动任务</b>，你可以让 Proma 定时自动执行一件事。
-              </>,
-              <>
-                在任务描述里写清楚「做什么、什么时候做」，再配置频率与模型，
-                <b className="font-medium text-neutral-900">无人值守也能按时完成</b>。
-              </>,
-              <>
-                也不必手动填写配置：直接告诉 Agent「每天早上检查这个仓库的 PR」或「每周汇总销售数据」，
-                它会把你的目标转成对应的自动任务。
-              </>,
-            ]}
+          <GuideExamplesPage
+            intro={{
+              anchor: { x: 0.21, y: 0.019 },
+              arrowMode: 'none',
+              imageSrc: guideAutomation,
+              imageRightCrop: 2,
+              highlight: '进阶指南 · 第 2 步',
+              title: '自动任务功能',
+              paragraphs: [
+                <>
+                  打开<b className="font-medium text-neutral-900">自动任务</b>，你可以让 Proma 定时自动执行一件事。
+                </>,
+                <>
+                  在任务描述里写清楚「做什么、什么时候做」，再配置频率与模型，
+                  <b className="font-medium text-neutral-900">无人值守也能按时完成</b>。
+                </>,
+                <>
+                  也不必手动填写配置：直接告诉 Agent「每天早上检查这个仓库的 PR」或「每周汇总销售数据」，
+                  它会把你的目标转成对应的自动任务。
+                </>,
+              ],
+            }}
             nextLabel="下一个"
             onNext={handleNextFromAutomation}
             onBack={() => transitionTo('subagent')}
-          />
+          >
+            <section className="border-t border-[#1b3f2d]/20 py-16 md:py-20">
+              <AutomationGuideExamples />
+            </section>
+          </GuideExamplesPage>
         )}
 
         {step === 'memory' && (

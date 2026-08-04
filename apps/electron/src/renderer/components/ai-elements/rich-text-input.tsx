@@ -29,6 +29,8 @@ import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip
 import { cn } from '@/lib/utils'
 import { lowlight } from '@/lib/lowlight'
 import { htmlToMarkdown } from '@/lib/markdown-rich-text'
+import { useOpenPreview } from '@/components/diff/preview-opener'
+import { isImageFilePath } from './file-path-chip'
 import { resolveMentionSuggestionChar } from './mention-utils'
 import { richTextRenderingEnabledAtom } from '@/atoms/ui-preferences'
 import { createFileMentionSuggestion } from '@/components/file-browser/file-mention-suggestion'
@@ -242,6 +244,29 @@ export const RichTextInput = forwardRef<RichTextInputHandle, RichTextInputProps>
   const richTextEnabledRef = useRef(richTextEnabled)
   richTextEnabledRef.current = richTextEnabled
   const isMac = useMemo(() => isMacPlatform(), [])
+  const openPreview = useOpenPreview()
+  const mentionPreviewBasePaths = useMemo(
+    () => Array.from(new Set([workspacePath, ...attachedDirs, ...sessionAttachedDirs].filter(Boolean))) as string[],
+    [workspacePath, attachedDirs, sessionAttachedDirs],
+  )
+
+  const handleImageMentionClick = useCallback((event: MouseEvent): boolean => {
+    const target = event.target
+    if (!(target instanceof Element) || !sessionId) return false
+
+    const mention = target.closest<HTMLElement>('[data-type="mention"][data-mention-previewable="true"]')
+    const filePath = mention?.dataset.id
+    if (!filePath) return false
+
+    event.preventDefault()
+    openPreview(sessionId, {
+      filePath,
+      previewOnly: true,
+      readOnly: true,
+      basePaths: mentionPreviewBasePaths.length > 0 ? mentionPreviewBasePaths : undefined,
+    })
+    return true
+  }, [sessionId, openPreview, mentionPreviewBasePaths])
 
   const forwardSessionQuickSwitchKeyEvent = useCallback((event: React.KeyboardEvent<HTMLDivElement>, type: 'keydown' | 'keyup'): void => {
     const nativeEvent = event.nativeEvent
@@ -404,6 +429,9 @@ export const RichTextInput = forwardRef<RichTextInputHandle, RichTextInputProps>
                   : {}),
                 ...(node.attrs.commandMenuMention ? { 'data-command-menu-mention': 'true' } : {}),
                 ...(isDirectory ? { 'data-mention-is-directory': 'true' } : {}),
+                ...(char === '@' && !isDirectory && isImageFilePath(String(node.attrs.id))
+                  ? { 'data-mention-previewable': 'true' }
+                  : {}),
                 class: chipClass,
               },
               `${char === '@' ? '@' : ''}${label}`,
@@ -431,6 +459,9 @@ export const RichTextInput = forwardRef<RichTextInputHandle, RichTextInputProps>
         }
         return false
       },
+      // TipTap mention 节点由 ProseMirror 直接输出 DOM，不能在这里挂 React onClick。
+      // 仅拦截图片 @ 引用，其余 chip 保持编辑器的原有选择行为。
+      handleClick: (_view, _pos, event) => handleImageMentionClick(event),
       attributes: {
         class: cn(
           'prose dark:prose-invert max-w-none focus:outline-none',
@@ -955,6 +986,12 @@ export const RichTextInput = forwardRef<RichTextInputHandle, RichTextInputProps>
           mask-size: contain;
           mask-repeat: no-repeat;
           flex-shrink: 0;
+        }
+        .mention-chip[data-mention-previewable="true"] {
+          cursor: pointer;
+        }
+        .mention-chip[data-mention-previewable="true"]:hover {
+          background-color: hsl(var(--primary) / 0.16);
         }
         .directory-mention-chip {
           background-color: hsl(var(--primary) / 0.14);

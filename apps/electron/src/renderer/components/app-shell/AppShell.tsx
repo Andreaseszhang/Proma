@@ -249,14 +249,16 @@ export function AppShell({ contextValue }: AppShellProps): React.ReactElement {
           </div>
         )}
 
-        {/* 右下角：重置 Onboarding（测试用） */}
-        <button
-          onClick={handleResetOnboarding}
-          title="重置 Onboarding（重新进入引导）"
-          className="absolute bottom-4 right-4 z-[70] flex h-9 w-9 items-center justify-center rounded-full border border-neutral-300/70 bg-white/70 text-neutral-500 shadow-sm backdrop-blur-sm transition-all hover:border-[#1b3f2d]/40 hover:bg-white hover:text-[#1b3f2d] dark:border-neutral-700 dark:bg-neutral-900/70 dark:text-neutral-400 dark:hover:text-[#27513a]"
-        >
-          <RefreshCw size={16} />
-        </button>
+        {/* 右下角：重置 Onboarding（仅开发环境测试用） */}
+        {import.meta.env.DEV && (
+          <button
+            onClick={handleResetOnboarding}
+            title="重置 Onboarding（重新进入引导）"
+            className="absolute bottom-4 right-4 z-[70] flex h-9 w-9 items-center justify-center rounded-full border border-neutral-300/70 bg-white/70 text-neutral-500 shadow-sm backdrop-blur-sm transition-all hover:border-[#1b3f2d]/40 hover:bg-white hover:text-[#1b3f2d] dark:border-neutral-700 dark:bg-neutral-900/70 dark:text-neutral-400 dark:hover:text-[#27513a]"
+          >
+            <RefreshCw size={16} />
+          </button>
+        )}
       </div>
     </AppShellProvider>
   )

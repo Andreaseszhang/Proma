@@ -1032,14 +1032,16 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
         }`}
       />
 
-      {/* ===== 左下角：重置 Onboarding（测试用） ===== */}
-      <button
-        onClick={handleResetOnboarding}
-        title="重置 Onboarding（重新进入引导）"
-        className="absolute bottom-4 left-4 z-[60] flex h-9 w-9 items-center justify-center rounded-full border border-neutral-300/70 bg-white/70 text-neutral-500 shadow-sm backdrop-blur-sm transition-all hover:border-[#1b3f2d]/40 hover:bg-white hover:text-[#1b3f2d]"
-      >
-        <RefreshCw size={16} />
-      </button>
+      {/* ===== 左下角：重置 Onboarding（仅开发环境测试用） ===== */}
+      {import.meta.env.DEV && (
+        <button
+          onClick={handleResetOnboarding}
+          title="重置 Onboarding（重新进入引导）"
+          className="absolute bottom-4 left-4 z-[60] flex h-9 w-9 items-center justify-center rounded-full border border-neutral-300/70 bg-white/70 text-neutral-500 shadow-sm backdrop-blur-sm transition-all hover:border-[#1b3f2d]/40 hover:bg-white hover:text-[#1b3f2d]"
+        >
+          <RefreshCw size={16} />
+        </button>
+      )}
     </div>
   )
 }

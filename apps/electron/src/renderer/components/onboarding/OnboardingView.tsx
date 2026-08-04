@@ -18,7 +18,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAtomValue } from 'jotai'
-import { ChevronRight, ChevronLeft, ChevronsRight, Check, RefreshCw } from 'lucide-react'
+import { ChevronRight, ChevronLeft, ChevronsRight, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { EnvironmentCheckPanel } from '@/components/environment/EnvironmentCheckPanel'
 import { isShellEnvironmentOkAtom } from '@/atoms/environment'
@@ -695,15 +695,6 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
     }
   }
 
-  /** 重置 onboarding：写回 false 并重新加载窗口，便于反复测试引导流程 */
-  const handleResetOnboarding = async () => {
-    await window.electronAPI.updateSettings({
-      onboardingCompleted: false,
-      onboardingVersion: undefined,
-    })
-    window.location.reload()
-  }
-
   const currentMapIndex = STEP_LABELS.findIndex((item) => item.step === step)
   const stepIndex = step === 'environment' ? STEP_LABELS.length + 1 : currentMapIndex + 1
   const totalSteps = STEP_LABELS.length + (isWindows ? 1 : 0)
@@ -1032,16 +1023,6 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
         }`}
       />
 
-      {/* ===== 左下角：重置 Onboarding（仅开发环境测试用） ===== */}
-      {import.meta.env.DEV && (
-        <button
-          onClick={handleResetOnboarding}
-          title="重置 Onboarding（重新进入引导）"
-          className="absolute bottom-4 left-4 z-[60] flex h-9 w-9 items-center justify-center rounded-full border border-neutral-300/70 bg-white/70 text-neutral-500 shadow-sm backdrop-blur-sm transition-all hover:border-[#1b3f2d]/40 hover:bg-white hover:text-[#1b3f2d]"
-        >
-          <RefreshCw size={16} />
-        </button>
-      )}
     </div>
   )
 }

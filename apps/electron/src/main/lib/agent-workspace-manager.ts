@@ -7,6 +7,7 @@
  */
 
 import { readFileSync, writeFileSync, existsSync, readdirSync, cpSync, mkdirSync, statSync, openSync, readSync, closeSync, realpathSync, accessSync, constants } from 'node:fs'
+import { cp as cpAsync, readFile as readFileAsync, writeFile as writeFileAsync } from 'node:fs/promises'
 import type { Dirent } from 'node:fs'
 import { rmSyncWithRetry, renameWithRetry } from './fs-retry'
 import { writeJsonFileAtomic, readJsonFileSafe } from './safe-file'
@@ -927,16 +928,26 @@ export function getOtherWorkspaceSkills(currentSlug: string): OtherWorkspaceSkil
   return result
 }
 
+class SkillAlreadyExistsError extends Error {
+  readonly code = 'SKILL_ALREADY_EXISTS' as const
+
+  constructor(skillSlug: string) {
+    super(`当前项目已存在同名 Skill: ${skillSlug}`)
+    this.name = 'SkillAlreadyExistsError'
+  }
+}
+
 /**
  * 从其他工作区导入 Skill 到当前工作区。
  *
  * 复制目录并记录来源元数据（.source.json），支持后续版本检测和同步更新。
+ * 导入过程在临时目录中完成，成功后再原子移动到目标目录，避免失败留下残缺 Skill。
  */
-export function importSkillFromWorkspace(
+export async function importSkillFromWorkspace(
   targetSlug: string,
   sourceSlug: string,
   skillSlug: string,
-): SkillMeta {
+): Promise<SkillMeta> {
   const sourcePath = resolveSkillDir(sourceSlug, skillSlug)
 
   if (!sourcePath) {
@@ -949,16 +960,14 @@ export function importSkillFromWorkspace(
     throw new Error(`源 Skill 缺少 SKILL.md: ${skillSlug}`)
   }
 
-  const targetPath = join(getWorkspaceSkillsDir(targetSlug), skillSlug)
+  const targetSkillsDir = getWorkspaceSkillsDir(targetSlug)
+  const targetPath = join(targetSkillsDir, skillSlug)
   const targetInactivePath = join(getInactiveSkillsDir(targetSlug), skillSlug)
 
   if (existsSync(targetPath) || existsSync(targetInactivePath)) {
-    throw new Error(`当前项目已存在同名 Skill: ${skillSlug}`)
+    throw new SkillAlreadyExistsError(skillSlug)
   }
 
-  cpSync(sourcePath, targetPath, { recursive: true })
-
-  // 写入来源元数据
   const sourceWorkspace = listAgentWorkspaces().find((w) => w.slug === sourceSlug)
   const importSource: SkillImportSource = {
     sourceWorkspaceSlug: sourceSlug,
@@ -966,34 +975,50 @@ export function importSkillFromWorkspace(
     importedAt: new Date().toISOString(),
     sourceVersion: parseSkillVersion(sourcePath),
   }
-  writeSkillImportSource(targetPath, importSource)
+  const tempPath = join(targetSkillsDir, `.${skillSlug}.importing-${randomUUID()}`)
 
-  console.log(`[Agent 工作区] 已从 ${sourceSlug} 导入 Skill: ${targetSlug}/${skillSlug}`)
+  try {
+    await cpAsync(sourcePath, tempPath, { recursive: true })
 
-  const content = readFileSync(join(targetPath, 'SKILL.md'), 'utf-8')
-  const meta = parseSkillFrontmatter(content, skillSlug, true)
-  meta.importSource = importSource
-  return meta
+    // 先在临时目录写入来源元数据并解析内容，确保目标目录完整后再移动。
+    await writeFileAsync(join(tempPath, SOURCE_META_FILE), JSON.stringify(importSource, null, 2), 'utf-8')
+    const content = await readFileAsync(join(tempPath, 'SKILL.md'), 'utf-8')
+    const meta = parseSkillFrontmatter(content, skillSlug, true)
+    meta.importSource = importSource
+
+    renameWithRetry(tempPath, targetPath)
+    console.log(`[Agent 工作区] 已从 ${sourceSlug} 导入 Skill: ${targetSlug}/${skillSlug}`)
+    return meta
+  } catch (error) {
+    if (existsSync(tempPath)) {
+      try {
+        rmSyncWithRetry(tempPath, { recursive: true, force: true })
+      } catch (cleanupError) {
+        console.warn(`[Agent 工作区] 清理 Skill 临时目录失败: ${tempPath}`, cleanupError)
+      }
+    }
+    throw error
+  }
 }
 
 // ===== Skill 批量导入 =====
 
 /** 从其他工作区批量导入多个 Skill 到目标工作区（复用单 skill 导入逻辑） */
-export function batchImportSkillsFromWorkspaces(
+export async function batchImportSkillsFromWorkspaces(
   targetSlug: string,
   selections: BulkImportWorkspaceSelection[],
-): BulkImportSkillsResult {
+): Promise<BulkImportSkillsResult> {
   const items: BulkImportSkillItemResult[] = []
   for (const { sourceSlug, skillSlug } of selections) {
     try {
-      const imported = importSkillFromWorkspace(targetSlug, sourceSlug, skillSlug)
+      const imported = await importSkillFromWorkspace(targetSlug, sourceSlug, skillSlug)
       items.push({ slug: skillSlug, name: imported.name, status: 'imported' })
     } catch (error) {
       const message = error instanceof Error ? error.message : '未知错误'
       items.push({
         slug: skillSlug,
         name: skillSlug,
-        status: message.includes('已存在') ? 'skipped' : 'failed',
+        status: error instanceof SkillAlreadyExistsError ? 'skipped' : 'failed',
         reason: message,
       })
     }

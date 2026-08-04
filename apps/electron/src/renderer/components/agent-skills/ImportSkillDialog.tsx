@@ -10,6 +10,7 @@ import { toast } from 'sonner'
 import { Check, Loader2, Sparkles } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { SettingsCard } from '@/components/settings/primitives'
 import { cn } from '@/lib/utils'
 import type { BulkImportSkillsResult, OtherWorkspaceSkillsGroup, SkillMeta } from '@proma/shared'
@@ -72,6 +73,7 @@ export function ImportSkillDialog({
   onImported,
 }: ImportSkillDialogProps): React.ReactElement {
   const [otherWorkspaces, setOtherWorkspaces] = React.useState<OtherWorkspaceSkillsGroup[]>([])
+  const [selectedWorkspaceSlug, setSelectedWorkspaceSlug] = React.useState('')
   const [selectedKeys, setSelectedKeys] = React.useState<Set<string>>(new Set())
   const [importing, setImporting] = React.useState(false)
   const [result, setResult] = React.useState<BulkImportSkillsResult | null>(null)
@@ -79,6 +81,7 @@ export function ImportSkillDialog({
   React.useEffect(() => {
     if (!open || !workspaceSlug) return
     // 打开时清空上一次的选中与结果
+    setSelectedWorkspaceSlug('')
     setSelectedKeys(new Set())
     setResult(null)
     void (async () => {
@@ -101,15 +104,30 @@ export function ImportSkillDialog({
     [otherWorkspaces, installedSlugs],
   )
 
-  const selectedCount = React.useMemo(() => {
-    let count = 0
-    for (const w of availableWorkspaces) {
-      for (const s of w.skills) {
-        if (selectedKeys.has(`${w.workspaceSlug}/${s.slug}`)) count += 1
-      }
+  // 来源项目下拉默认选中第一个可用工作区（保持当前值仍有效时不切换）
+  React.useEffect(() => {
+    if (!open || availableWorkspaces.length === 0) {
+      setSelectedWorkspaceSlug('')
+      return
     }
-    return count
-  }, [availableWorkspaces, selectedKeys])
+    setSelectedWorkspaceSlug((current) =>
+      availableWorkspaces.some((w) => w.workspaceSlug === current)
+        ? current
+        : availableWorkspaces[0]!.workspaceSlug,
+    )
+  }, [availableWorkspaces, open])
+
+  const selectedWorkspace = React.useMemo(
+    () => availableWorkspaces.find((w) => w.workspaceSlug === selectedWorkspaceSlug) ?? null,
+    [availableWorkspaces, selectedWorkspaceSlug],
+  )
+
+  const selectedCount = React.useMemo(() => {
+    if (!selectedWorkspace) return 0
+    return selectedWorkspace.skills.filter((s) =>
+      selectedKeys.has(`${selectedWorkspace.workspaceSlug}/${s.slug}`),
+    ).length
+  }, [selectedWorkspace, selectedKeys])
 
   const toggleSelection = (sourceSlug: string, skillSlug: string): void => {
     setSelectedKeys((prev) => {
@@ -121,16 +139,17 @@ export function ImportSkillDialog({
     })
   }
 
+  const handleWorkspaceChange = (value: string): void => {
+    setSelectedWorkspaceSlug(value)
+    setSelectedKeys(new Set())
+    setResult(null)
+  }
+
   const handleImport = async (): Promise<void> => {
-    if (!workspaceSlug || importing || selectedCount === 0) return
-    const selections: Array<{ sourceSlug: string; skillSlug: string }> = []
-    for (const w of availableWorkspaces) {
-      for (const s of w.skills) {
-        if (selectedKeys.has(`${w.workspaceSlug}/${s.slug}`)) {
-          selections.push({ sourceSlug: w.workspaceSlug, skillSlug: s.slug })
-        }
-      }
-    }
+    if (!workspaceSlug || importing || !selectedWorkspace || selectedCount === 0) return
+    const selections = selectedWorkspace.skills
+      .filter((s) => selectedKeys.has(`${selectedWorkspace.workspaceSlug}/${s.slug}`))
+      .map((s) => ({ sourceSlug: selectedWorkspace.workspaceSlug, skillSlug: s.slug }))
     setImporting(true)
     try {
       const importResult = await window.electronAPI.batchImportSkillsFromWorkspaces(workspaceSlug, selections)
@@ -170,62 +189,78 @@ export function ImportSkillDialog({
               </div>
             </SettingsCard>
           ) : (
-            availableWorkspaces.map((w) => (
-              <div key={w.workspaceSlug}>
-                <div className="mb-3 flex items-center justify-between gap-3 text-sm text-muted-foreground">
-                  <span className="truncate">{w.workspaceName}</span>
-                  <span className="shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium tabular-nums">
-                    {w.skills.length} 个
-                  </span>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {w.skills.map((skill) => {
-                    const checked = selectedKeys.has(`${w.workspaceSlug}/${skill.slug}`)
-                    return (
-                      <SettingsCard key={skill.slug} divided={false} className="overflow-hidden">
-                        <button
-                          type="button"
-                          onClick={() => toggleSelection(w.workspaceSlug, skill.slug)}
-                          className={cn(
-                            'flex h-full w-full flex-col gap-3 p-4 text-left transition-colors',
-                            checked ? 'bg-accent/40' : 'hover:bg-accent/30',
-                          )}
-                        >
-                          <div className="flex items-start gap-3">
-                            <span
-                              className={cn(
-                                'mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md border transition-colors',
-                                checked
-                                  ? 'border-primary bg-primary text-primary-foreground'
-                                  : 'border-border/80 text-transparent',
-                              )}
-                            >
-                              <Check size={13} />
-                            </span>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-2">
-                                <span className="truncate text-sm font-medium text-foreground">{skill.name}</span>
-                                {skill.version ? (
-                                  <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
-                                    v{skill.version}
-                                  </span>
-                                ) : null}
-                              </div>
-                              <div className="mt-1 text-xs text-muted-foreground">{skill.slug}</div>
-                            </div>
-                            <Sparkles size={16} className="shrink-0 text-amber-500" />
-                          </div>
-                          <div className="line-clamp-3 min-h-[40px] text-sm leading-6 text-muted-foreground">
-                            {skill.description ?? '暂无描述'}
-                          </div>
-                        </button>
-                      </SettingsCard>
-                    )
-                  })}
-                </div>
-              </div>
-            ))
+            <div className="space-y-2">
+              <div className="text-sm font-medium text-foreground">选择来源项目</div>
+              <Select value={selectedWorkspaceSlug} onValueChange={handleWorkspaceChange}>
+                <SelectTrigger>
+                  <SelectValue placeholder="选择来源项目" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableWorkspaces.map((w) => (
+                    <SelectItem key={w.workspaceSlug} value={w.workspaceSlug}>
+                      {w.workspaceName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           )}
+
+          {selectedWorkspace ? (
+            <>
+              <div className="mb-3 flex items-center justify-between gap-3 text-sm text-muted-foreground">
+                <span className="truncate">{selectedWorkspace.workspaceName}</span>
+                <span className="shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium tabular-nums">
+                  {selectedWorkspace.skills.length} 个
+                </span>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {selectedWorkspace.skills.map((skill) => {
+                  const checked = selectedKeys.has(`${selectedWorkspace.workspaceSlug}/${skill.slug}`)
+                  return (
+                    <SettingsCard key={skill.slug} divided={false} className="overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => toggleSelection(selectedWorkspace.workspaceSlug, skill.slug)}
+                        className={cn(
+                          'flex h-full w-full flex-col gap-3 p-4 text-left transition-colors',
+                          checked ? 'bg-accent/40' : 'hover:bg-accent/30',
+                        )}
+                      >
+                        <div className="flex items-start gap-3">
+                          <span
+                            className={cn(
+                              'mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md border transition-colors',
+                              checked
+                                ? 'border-primary bg-primary text-primary-foreground'
+                                : 'border-border/80 text-transparent',
+                            )}
+                          >
+                            <Check size={13} />
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="truncate text-sm font-medium text-foreground">{skill.name}</span>
+                              {skill.version ? (
+                                <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+                                  v{skill.version}
+                                </span>
+                              ) : null}
+                            </div>
+                            <div className="mt-1 text-xs text-muted-foreground">{skill.slug}</div>
+                          </div>
+                          <Sparkles size={16} className="shrink-0 text-amber-500" />
+                        </div>
+                        <div className="line-clamp-3 min-h-[40px] text-sm leading-6 text-muted-foreground">
+                          {skill.description ?? '暂无描述'}
+                        </div>
+                      </button>
+                    </SettingsCard>
+                  )
+                })}
+              </div>
+            </>
+          ) : null}
 
           {result ? <ImportResultSummary result={result} /> : null}
         </div>

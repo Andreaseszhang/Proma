@@ -35,6 +35,7 @@ import guideSubagent from '@/assets/onboarding/guide-subagent.png'
 import promaMarkWhite from '@/assets/onboarding/proma-mark-white.svg'
 import { AutomationGuideExamples } from './AutomationGuideExamples'
 import { FileGuideExamples } from './FileGuideExamples'
+import { MemoryGuideExamples } from './MemoryGuideExamples'
 import { SideAnswerGuideExamples } from './SideAnswerGuideExamples'
 import { SubagentGuideExamples } from './SubagentGuideExamples'
 import { FAQ_GROUPS } from './faq-content'
@@ -919,29 +920,35 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
         )}
 
         {step === 'memory' && (
-          <GuideFeatureStep
-            anchor={{ x: 0.49, y: 0.18 }}
-            arrowMode="none"
-            imageSrc={guideMemory}
-            highlight="进阶指南 · 第 3 步"
-            title="让 Agent 记住你的项目"
-            paragraphs={[
-              <>
-                <b className="font-medium text-neutral-900">记忆</b>会沉淀项目指令、稳定偏好和已经确认的结论，
-                让后续 Agent 不必每次从零理解你的工作方式。
-              </>,
-              <>
-                你不必自己判断信息该存在哪里。直接说「记住这个项目规则」或「把这次结论沉淀为项目记忆」，
-                Agent 会帮你选择合适的位置并完成更新。
-              </>,
-              <>
-                项目越长期、协作越复杂，清晰的记忆就越能让每次对话接得更自然。
-              </>,
-            ]}
+          <GuideExamplesPage
+            intro={{
+              anchor: { x: 0.49, y: 0.18 },
+              arrowMode: 'none',
+              imageSrc: guideMemory,
+              highlight: '进阶指南 · 第 3 步',
+              title: '让 Agent 记住你的项目',
+              paragraphs: [
+                <>
+                  <b className="font-medium text-neutral-900">记忆</b>会沉淀项目指令、稳定偏好和已经确认的结论，
+                  让后续 Agent 不必每次从零理解你的工作方式。
+                </>,
+                <>
+                  你不必自己判断信息该存在哪里。直接说「记住这个项目规则」或「把这次结论沉淀为项目记忆」，
+                  Agent 会帮你选择合适的位置并完成更新。
+                </>,
+                <>
+                  项目越长期、协作越复杂，清晰的记忆就越能让每次对话接得更自然。
+                </>,
+              ],
+            }}
             nextLabel="下一个"
             onNext={handleNextFromMemory}
             onBack={() => transitionTo('automation')}
-          />
+          >
+            <section className="border-t border-[#1b3f2d]/20 py-16 md:py-20">
+              <MemoryGuideExamples />
+            </section>
+          </GuideExamplesPage>
         )}
 
         {step === 'sideanswer' && (

@@ -1,6 +1,139 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
 import guideSubagentDelegation from '@/assets/onboarding/guide-subagent-delegation.png'
 import guideSubagentWorkspace from '@/assets/onboarding/guide-subagent-workspace.png'
 import guideSubagentSummary from '@/assets/onboarding/guide-subagent-summary.png'
+
+interface ImageBounds {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/** 聚焦自然语言启动多个子会话的 Prompt，尺寸随截图渲染宽度同步变化。 */
+function SubagentDelegationExampleImage() {
+  const frameRef = useRef<HTMLDivElement>(null)
+  const imageRef = useRef<HTMLImageElement>(null)
+  const [imageBounds, setImageBounds] = useState<ImageBounds | null>(null)
+
+  const updateImageBounds = useCallback(() => {
+    const frame = frameRef.current
+    const image = imageRef.current
+    if (!frame || !image) return
+
+    const frameRect = frame.getBoundingClientRect()
+    const imageRect = image.getBoundingClientRect()
+    if (!imageRect.width || !imageRect.height) return
+
+    const next = {
+      x: imageRect.left - frameRect.left,
+      y: imageRect.top - frameRect.top,
+      width: imageRect.width,
+      height: imageRect.height,
+    }
+
+    setImageBounds((current) => {
+      if (
+        current &&
+        Math.abs(current.x - next.x) < 0.5 &&
+        Math.abs(current.y - next.y) < 0.5 &&
+        Math.abs(current.width - next.width) < 0.5 &&
+        Math.abs(current.height - next.height) < 0.5
+      ) {
+        return current
+      }
+
+      return next
+    })
+  }, [])
+
+  useEffect(() => {
+    const image = imageRef.current
+    if (!image) return
+
+    updateImageBounds()
+    const observer = new ResizeObserver(updateImageBounds)
+    observer.observe(image)
+
+    return () => observer.disconnect()
+  }, [updateImageBounds])
+
+  const anchor = { x: 0.46, y: 0.212 }
+  const imageZoom = 1.28
+  const sourceCropWidth = 0.30375
+  const magnifierDiameter = imageBounds ? imageBounds.width * imageZoom * sourceCropWidth : 0
+  const radius = magnifierDiameter / 2
+  const verticalOffset = magnifierDiameter * 0.14
+  const focusX = imageBounds ? imageBounds.x + anchor.x * imageBounds.width : 0
+  const focusY = imageBounds ? imageBounds.y + anchor.y * imageBounds.height : 0
+  const zoomedWidth = imageBounds ? imageBounds.width * imageZoom : 0
+  const zoomedHeight = imageBounds ? imageBounds.height * imageZoom : 0
+
+  const clampToLens = (position: number, contentSize: number) =>
+    Math.min(0, Math.max(magnifierDiameter - contentSize, position))
+  const imageLeft = imageBounds ? clampToLens(radius - anchor.x * zoomedWidth, zoomedWidth) : 0
+  const imageTop = imageBounds ? clampToLens(radius - verticalOffset - anchor.y * zoomedHeight, zoomedHeight) : 0
+
+  return (
+    <div ref={frameRef} className="relative min-w-0">
+      <figure className="overflow-hidden rounded-lg bg-[#f6f8f3] shadow-[0_14px_30px_rgba(27,63,45,0.12)]">
+        <img
+          ref={imageRef}
+          src={guideSubagentDelegation}
+          alt="父会话用自然语言启动三个子会话研究大五人格"
+          className="block h-auto w-full"
+          onLoad={updateImageBounds}
+        />
+      </figure>
+
+      {imageBounds && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute z-20"
+          style={{
+            left: focusX - radius,
+            top: focusY - radius + verticalOffset,
+            width: magnifierDiameter,
+            height: magnifierDiameter,
+            backgroundColor: '#eef4ea',
+            clipPath: `circle(${radius}px at ${radius}px ${radius}px)`,
+            overflow: 'hidden',
+            filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.25))',
+          }}
+        >
+          <img
+            src={guideSubagentDelegation}
+            alt=""
+            draggable={false}
+            className="max-w-none"
+            style={{
+              position: 'absolute',
+              left: imageLeft,
+              top: imageTop,
+              width: zoomedWidth,
+              height: zoomedHeight,
+              objectFit: 'fill',
+            }}
+          />
+          <div
+            className="absolute inset-0 rounded-full border-[3px] border-[#1b3f2d]"
+            style={{ clipPath: `circle(${radius}px at ${radius}px ${radius}px)` }}
+          />
+          <div
+            className="absolute bottom-[-6px] right-[-6px] h-8 w-8 rounded-full border-[4px] border-[#1b3f2d]"
+            style={{
+              clipPath: 'none',
+              background: 'transparent',
+              borderRightColor: 'transparent',
+              borderBottomColor: 'transparent',
+              transform: 'rotate(-45deg)',
+            }}
+          />
+        </div>
+      )}
+    </div>
+  )
+}
 
 /** 子会话章节的真实工作流示例。 */
 export function SubagentGuideExamples() {
@@ -16,9 +149,7 @@ export function SubagentGuideExamples() {
 
       <div className="mt-14 space-y-16 md:mt-16 md:space-y-20">
         <article className="grid gap-10 border-t border-[#1b3f2d]/15 pt-10 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-center">
-          <figure className="overflow-hidden rounded-lg bg-[#f6f8f3] shadow-[0_14px_30px_rgba(27,63,45,0.12)]">
-            <img src={guideSubagentDelegation} alt="父会话用自然语言启动三个子会话研究大五人格" className="block h-auto w-full" />
-          </figure>
+          <SubagentDelegationExampleImage />
           <div>
             <div className="text-xs font-medium uppercase text-[#1b3f2d]">示例 01 · 启动</div>
             <h3 className="mt-3 text-2xl font-medium text-neutral-900 md:text-3xl">一句话，就能启动多个研究方向</h3>

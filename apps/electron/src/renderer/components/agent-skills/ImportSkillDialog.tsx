@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { SettingsCard } from '@/components/settings/primitives'
 import { cn } from '@/lib/utils'
-import type { BulkImportSkillsResult, OtherWorkspaceSkillsGroup, SkillMeta } from '@proma/shared'
+import type { OtherWorkspaceSkillsGroup, SkillMeta } from '@proma/shared'
 
 interface ImportSkillDialogProps {
   open: boolean
@@ -21,48 +21,6 @@ interface ImportSkillDialogProps {
   workspaceSlug: string
   installedSkills: SkillMeta[]
   onImported: () => void
-}
-
-/** 导入结果汇总（成功/跳过/失败 + 明细） */
-function ImportResultSummary({ result }: { result: BulkImportSkillsResult }): React.ReactElement {
-  const skipped = result.items.filter((i) => i.status === 'skipped')
-  const failed = result.items.filter((i) => i.status === 'failed')
-
-  return (
-    <SettingsCard divided={false} className="overflow-hidden">
-      <div className="space-y-3 p-4">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] font-medium">
-          <span className="text-emerald-600 dark:text-emerald-400">成功 {result.imported}</span>
-          <span className="text-amber-600 dark:text-amber-400">跳过 {result.skipped}</span>
-          <span className="text-red-600 dark:text-red-400">失败 {result.failed}</span>
-        </div>
-        {(skipped.length > 0 || failed.length > 0) && (
-          <ul className="space-y-1.5 text-xs">
-            {skipped.map((item) => (
-              <li key={`skipped-${item.slug}`} className="flex items-start gap-2 text-muted-foreground">
-                <span className="mt-[3px] shrink-0 text-amber-600 dark:text-amber-400">跳过</span>
-                <span className="min-w-0 flex-1">
-                  <span className="font-medium text-foreground/80">{item.name}</span>
-                  <span className="text-muted-foreground/70">（{item.slug}）</span>
-                  {item.reason ? <span className="block truncate text-muted-foreground/60">{item.reason}</span> : null}
-                </span>
-              </li>
-            ))}
-            {failed.map((item) => (
-              <li key={`failed-${item.slug}`} className="flex items-start gap-2 text-muted-foreground">
-                <span className="mt-[3px] shrink-0 text-red-600 dark:text-red-400">失败</span>
-                <span className="min-w-0 flex-1">
-                  <span className="font-medium text-foreground/80">{item.name}</span>
-                  <span className="text-muted-foreground/70">（{item.slug}）</span>
-                  {item.reason ? <span className="block truncate text-muted-foreground/60">{item.reason}</span> : null}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </SettingsCard>
-  )
 }
 
 export function ImportSkillDialog({
@@ -76,14 +34,12 @@ export function ImportSkillDialog({
   const [selectedWorkspaceSlug, setSelectedWorkspaceSlug] = React.useState('')
   const [selectedKeys, setSelectedKeys] = React.useState<Set<string>>(new Set())
   const [importing, setImporting] = React.useState(false)
-  const [result, setResult] = React.useState<BulkImportSkillsResult | null>(null)
 
   React.useEffect(() => {
     if (!open || !workspaceSlug) return
-    // 打开时清空上一次的选中与结果
+    // 打开时清空上一次的选中
     setSelectedWorkspaceSlug('')
     setSelectedKeys(new Set())
-    setResult(null)
     void (async () => {
       try {
         const groups = await window.electronAPI.getOtherWorkspaceSkills(workspaceSlug)
@@ -142,7 +98,6 @@ export function ImportSkillDialog({
   const handleWorkspaceChange = (value: string): void => {
     setSelectedWorkspaceSlug(value)
     setSelectedKeys(new Set())
-    setResult(null)
   }
 
   const handleImport = async (): Promise<void> => {
@@ -153,15 +108,22 @@ export function ImportSkillDialog({
     setImporting(true)
     try {
       const importResult = await window.electronAPI.batchImportSkillsFromWorkspaces(workspaceSlug, selections)
-      setResult(importResult)
       if (importResult.imported > 0) {
         onImported()
-        setSelectedKeys(new Set())
-        toast.success(`批量导入完成：成功 ${importResult.imported} 个、跳过 ${importResult.skipped} 个、失败 ${importResult.failed} 个`)
+        const detail =
+          importResult.skipped > 0 && importResult.failed > 0
+            ? `（跳过 ${importResult.skipped} 个、失败 ${importResult.failed} 个）`
+            : importResult.skipped > 0
+              ? `（跳过 ${importResult.skipped} 个）`
+              : importResult.failed > 0
+                ? `（失败 ${importResult.failed} 个）`
+                : ''
+        toast.success(`已导入 ${importResult.imported} 个 Skill${detail}`)
+        onOpenChange(false)
       } else if (importResult.failed === 0) {
-        toast.info(`没有新导入的 Skill：跳过 ${importResult.skipped} 个`)
+        toast.info(`没有新导入的 Skill，已跳过 ${importResult.skipped} 个同名项`)
       } else {
-        toast.error(`批量导入失败 ${importResult.failed} 个`)
+        toast.error(`导入失败 ${importResult.failed} 个${importResult.skipped > 0 ? `，跳过 ${importResult.skipped} 个` : ''}`)
       }
     } catch (error) {
       console.error('[Agent 技能] 批量导入失败:', error)
@@ -261,8 +223,6 @@ export function ImportSkillDialog({
               </div>
             </>
           ) : null}
-
-          {result ? <ImportResultSummary result={result} /> : null}
         </div>
 
         <div className="sticky bottom-0 flex items-center justify-between gap-3 border-t border-border/60 bg-background/95 px-6 py-4">

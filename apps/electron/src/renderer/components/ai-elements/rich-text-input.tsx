@@ -249,24 +249,29 @@ export const RichTextInput = forwardRef<RichTextInputHandle, RichTextInputProps>
     () => Array.from(new Set([workspacePath, ...attachedDirs, ...sessionAttachedDirs].filter(Boolean))) as string[],
     [workspacePath, attachedDirs, sessionAttachedDirs],
   )
+  // useEditor 只会在 richTextEnabled 变化时重建，事件处理器必须经 ref 读取异步加载的最新路径。
+  const mentionPreviewBasePathsRef = useRef<string[]>(mentionPreviewBasePaths)
+  mentionPreviewBasePathsRef.current = mentionPreviewBasePaths
 
   const handleImageMentionClick = useCallback((event: MouseEvent): boolean => {
     const target = event.target
-    if (!(target instanceof Element) || !sessionId) return false
+    const activeSessionId = currentSessionIdRef.current
+    if (!(target instanceof Element) || !activeSessionId) return false
 
     const mention = target.closest<HTMLElement>('[data-type="mention"][data-mention-previewable="true"]')
     const filePath = mention?.dataset.id
     if (!filePath) return false
 
     event.preventDefault()
-    openPreview(sessionId, {
+    const basePaths = mentionPreviewBasePathsRef.current
+    openPreview(activeSessionId, {
       filePath,
       previewOnly: true,
       readOnly: true,
-      basePaths: mentionPreviewBasePaths.length > 0 ? mentionPreviewBasePaths : undefined,
+      basePaths: basePaths.length > 0 ? basePaths : undefined,
     })
     return true
-  }, [sessionId, openPreview, mentionPreviewBasePaths])
+  }, [openPreview])
 
   const forwardSessionQuickSwitchKeyEvent = useCallback((event: React.KeyboardEvent<HTMLDivElement>, type: 'keydown' | 'keyup'): void => {
     const nativeEvent = event.nativeEvent

@@ -24,7 +24,7 @@ import { EnvironmentCheckPanel } from '@/components/environment/EnvironmentCheck
 import { isShellEnvironmentOkAtom } from '@/atoms/environment'
 import { detectIsWindows } from '@/lib/platform'
 import { CURRENT_ONBOARDING_VERSION } from '../../../types'
-import roomsByTheSea from '@/assets/onboarding/rooms-by-the-sea.png'
+import hopperSeasideWhiteHouse from '@/assets/onboarding/hopper-seaside-white-house.png'
 import guideVisual from '@/assets/onboarding/guide-visual.png'
 import guideAgentExample from '@/assets/onboarding/guide-agent-example.png'
 import guideChatExample from '@/assets/onboarding/guide-chat-example.png'
@@ -706,8 +706,8 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
       {step === 'welcome' && (
         <div className="relative h-56 shrink-0 overflow-hidden bg-[#d9e0e4] md:h-auto md:w-[calc(58%+100px)]">
           <img
-            src={roomsByTheSea}
-            alt="海边的房间画作"
+            src={hopperSeasideWhiteHouse}
+            alt="海边的白色小屋画作"
             className="absolute inset-0 h-full w-full object-cover object-center"
           />
           {/* 光感渐变遮罩 */}
@@ -733,10 +733,6 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
             </p>
           </div>
 
-          {/* 右下角画作签名装饰 */}
-          <div className="absolute bottom-6 right-6 hidden select-none text-[10px] uppercase tracking-widest text-white/50 md:bottom-10 md:right-10 md:block">
-            Cape Ann Granite
-          </div>
         </div>
       )}
 

@@ -142,26 +142,20 @@ export function MemoryGuideExamples() {
             <div className="text-xs font-medium uppercase tracking-[0.18em] text-[#1b3f2d]">示例 01 · 生成</div>
             <h3 className="mt-3 text-2xl font-medium text-neutral-900 md:text-3xl">从代表性工作中生成项目记忆</h3>
             <p className="mt-4 text-base leading-[1.7] text-neutral-600 md:text-lg">
-              项目使用一段时间后，在项目记忆处点击“生成项目记忆”。Agent 会整理选定范围内有代表性的工作，提炼项目偏好、规则与已确认结论，方便后续会话接续。
+              项目使用一段时间后，在项目记忆处点击“生成项目记忆”。Agent 会开启一个会话整理选定范围内有代表性的工作，提炼项目偏好、规则与已确认结论。
             </p>
-            <div className="mt-5 border-l-2 border-[#1b3f2d]/35 pl-4">
-              <div className="text-base font-medium leading-7 text-[#1b3f2d]">图中的选择</div>
-              <p className="mt-1 text-base leading-7 text-neutral-500">为“心理学研究”项目整理近 1 个月的会话。</p>
-            </div>
           </div>
         </article>
 
         <article className="grid gap-10 border-t border-[#1b3f2d]/15 pt-10 lg:grid-cols-[22rem_minmax(0,1fr)] lg:items-center">
           <div className="min-w-0 lg:order-1">
             <div className="text-xs font-medium uppercase tracking-[0.18em] text-[#1b3f2d]">示例 02 · 查看与维护</div>
-            <h3 className="mt-3 text-2xl font-medium text-neutral-900 md:text-3xl">把整理好的偏好和记忆留在可编辑文件中</h3>
+            <h3 className="mt-3 text-2xl font-medium text-neutral-900 md:text-3xl">
+              Agent 整理好的<b className="font-medium text-neutral-900">偏好和记忆可以随时编辑</b>
+            </h3>
             <p className="mt-4 text-base leading-[1.7] text-neutral-600 md:text-lg">
-              “记忆文件”下是 Agent 整理好的偏好和记忆。你可以自己编辑这些文件；需要重新梳理时，再生成或更新记忆即可。
+              “记忆”下是 Agent 整理好的偏好和记忆。你可以手动编辑这些 md 文件；需要大规模重新梳理时，再一键生成或更新记忆即可。
             </p>
-            <div className="mt-5 border-l-2 border-[#1b3f2d]/35 pl-4">
-              <div className="text-base font-medium leading-7 text-[#1b3f2d]">需要调整时</div>
-              <p className="mt-1 text-base leading-7 text-neutral-500">自行编辑文件，或在需要时重新生成、更新记忆。</p>
-            </div>
           </div>
           <div className="lg:order-2">
             <MemoryFilesExampleImage />

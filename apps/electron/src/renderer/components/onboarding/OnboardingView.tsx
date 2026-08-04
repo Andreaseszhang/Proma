@@ -407,11 +407,11 @@ function AgentChatGuidePage({ onNext, onBack }: { onNext: () => void; onBack: ()
         paragraphs: [
           <>左边栏顶部是 Proma 的<b className="font-medium text-neutral-900">模式切换</b>：Agent 与 Chat。</>,
           <>
-            <b className="font-medium text-neutral-900">Chat</b> 是一问一答的对话——快速提问、简单交流，
-            不涉及任何对电脑的操作，核心偏向满足好奇心和完成简单的文字工作。
+            <b className="font-medium text-neutral-900">Chat</b> 是一问一答的对话——快速提问、不涉及任何对电脑的操作，
+            核心偏向满足好奇心和完成简单的文字工作。
           </>,
           <>
-            <b className="font-medium text-neutral-900">Agent</b> 则能自主规划、调用工具、操作电脑、写代码和文档，
+            <b className="font-medium text-neutral-900">Agent</b> 则能自主规划做调研、操作电脑、写代码、PPT 和文档，
             为你的想法赋形。
           </>,
         ],
@@ -430,7 +430,7 @@ function AgentChatGuidePage({ onNext, onBack }: { onNext: () => void; onBack: ()
               <div className="text-xs font-medium uppercase tracking-[0.18em] text-[#1b3f2d]">示例 01 · Chat</div>
               <h3 className="mt-3 text-2xl font-medium text-neutral-900 md:text-3xl">快速厘清一个概念用 Chat</h3>
               <p className="mt-4 text-base leading-[1.7] text-neutral-600 md:text-lg">
-                例如，直接询问 RAG 的搜索原理，就能快速得到结构化解释，并可继续追问细节。Chat 专注对话和文字回答，不会操作电脑或创建产出。
+                AI 最常见的场景，随意询问一件事，得到简单快速的解释。Chat 专注对话和文字回答，不会有任何产出。
               </p>
               <div className="mt-5 border-l-2 border-[#1b3f2d]/35 pl-4">
                 <div className="text-base font-medium leading-7 text-[#1b3f2d]">你可以这样说</div>
@@ -442,13 +442,15 @@ function AgentChatGuidePage({ onNext, onBack }: { onNext: () => void; onBack: ()
           <article className="grid gap-10 border-t border-[#1b3f2d]/15 pt-10 lg:grid-cols-[22rem_minmax(0,1fr)] lg:items-center">
             <div className="lg:order-1">
               <div className="text-xs font-medium uppercase tracking-[0.18em] text-[#1b3f2d]">示例 02 · Agent</div>
-              <h3 className="mt-3 text-2xl font-medium text-neutral-900 md:text-3xl">需要调用工具并产出成果时用 Agent</h3>
+              <h3 className="mt-3 text-2xl font-medium text-neutral-900 md:text-3xl">
+                复杂<b className="font-medium text-neutral-900">调研/写代码/做PPT</b>等需要产出成果时用 Agent
+              </h3>
               <p className="mt-4 text-base leading-[1.7] text-neutral-600 md:text-lg">
-                例如，请它研究 RAG 并将结论写入会话文件。Agent 会拆解任务、调用工具、持续推进，再把成果保留在当前工作区。
+                例如，请它研究一个概念或者行业并将结论做成 PPT/文档。Agent 会拆解任务、调用工具、持续推进，再把成果保留在当前工作区。
               </p>
               <div className="mt-5 border-l-2 border-[#1b3f2d]/35 pl-4">
                 <div className="text-base font-medium leading-7 text-[#1b3f2d]">这样告诉 Agent</div>
-                <p className="mt-1 text-base leading-7 text-neutral-500">“帮我研究一下什么是 RAG，然后把研究结果写成一个文件放到会话文件里。”</p>
+                <p className="mt-1 text-base leading-7 text-neutral-500">“帮我研究一下什么是 RAG，然后把研究结果写成一个文件/PPT放到会话文件里。”</p>
               </div>
             </div>
             <figure className="overflow-hidden rounded-lg bg-[#f6f8f3] shadow-[0_14px_30px_rgba(27,63,45,0.12)] lg:order-2">
@@ -674,7 +676,6 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
   const handleNextFromGuide = () => transitionTo('project')
   const handleNextFromProject = () => transitionTo('files')
   const handleNextFromFiles = () => transitionTo('subagent')
-  const handleSkipBeginner = () => transitionTo('subagent')
   const handleNextFromAutomation = () => transitionTo('memory')
   const handleNextFromMemory = () => transitionTo('sideanswer')
   const handleNextFromSideAnswer = () => {
@@ -809,8 +810,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
               paragraphs: [
                 <>右侧预览面板顶部有<b className="font-medium text-neutral-900">会话文件</b>和<b className="font-medium text-neutral-900">项目文件</b>两个页签。</>,
                 <>
-                  <b className="font-medium text-neutral-900">会话文件</b>属于这一次对话——附件、截图、临时引用，
-                  聊完就归位，适合一次性材料。
+                  <b className="font-medium text-neutral-900">会话文件</b>属于这一次对话——附件、截图、临时引用等。
                 </>,
                 <>
                   <b className="font-medium text-neutral-900">项目文件</b>属于整个项目——所有项目内的会话共享这些文件，
@@ -839,11 +839,11 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
             paragraphs={[
               <>左侧边栏的<b className="font-medium text-neutral-900">项目</b>是你为特定工作建立的独立空间。</>,
               <>
-                每个项目有自己的<b className="font-medium text-neutral-900">项目文件</b>、<b className="font-medium text-neutral-900">上下文与记忆</b>，
-                互不干扰。
+                每个项目有自己的<b className="font-medium text-neutral-900">项目文件</b>、
+                <b className="font-medium text-neutral-900">上下文、Skills/MCP 与记忆</b>，互不干扰。
               </>,
               <>
-                比如「广告投放项目」「代码分析」，都各是一个独立的项目工作区。
+                比如图中的「广告投放项目」「代码分析」，都各是一个独立的项目工作区，用于做完全不同的事。
               </>,
             ]}
             nextLabel="下一个"
@@ -868,12 +868,12 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
                   你用一句自然语言就能启动，比如「启动 3 个子会话研究躺平现象」。
                 </>,
                 <>
-                  每个子会话可以<b className="font-medium text-neutral-900">指定不同模型</b>（如 MiniMax、DeepSeek），
+                  每个子会话可以用自然语言<b className="font-medium text-neutral-900">指定不同模型</b>（如 GLM、DeepSeek），
                   拥有<b className="font-medium text-neutral-900">独立的上下文</b>，各自专注一个方向并行研究。
                 </>,
                 <>
                   结果再汇回父会话——
-                  <b className="font-medium text-neutral-900">既节省父会话的上下文，又能并行干更多的活</b>。
+                  <b className="font-medium text-neutral-900">既节省父会话的上下文，又能省时并行干更多的活</b>。
                 </>,
               ],
             }}
@@ -897,14 +897,9 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
               paragraphs: [
                 <>
                   打开<b className="font-medium text-neutral-900">自动任务</b>，你可以让 Proma 定时自动执行一件事。
-                </>,
-                <>
-                  在任务描述里写清楚「做什么、什么时候做」，再配置频率与模型，
-                  <b className="font-medium text-neutral-900">无人值守也能按时完成</b>。
-                </>,
-                <>
-                  也不必手动填写配置：直接告诉 Agent「每天早上检查这个仓库的 PR」或「每周汇总销售数据」，
-                  它会把你的目标转成对应的自动任务。
+                  在任务描述里用自然语言写清楚「做什么、什么时候做」，再配置频率与模型，
+                  <b className="font-medium text-neutral-900">无人值守</b>也能完成。
+                  你也可以用自然语言直接让 Agent 帮你创建自动任务。
                 </>,
               ],
             }}
@@ -928,15 +923,8 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
               title: '让 Agent 记住你的项目',
               paragraphs: [
                 <>
-                  <b className="font-medium text-neutral-900">记忆</b>会沉淀项目指令、稳定偏好和已经确认的结论，
+                  <b className="font-medium text-neutral-900">记忆</b>会沉淀项目指令、确定偏好、告知 Agent 你工作流的具体形态，
                   让后续 Agent 不必每次从零理解你的工作方式。
-                </>,
-                <>
-                  你不必自己判断信息该存在哪里。直接说「记住这个项目规则」或「把这次结论沉淀为项目记忆」，
-                  Agent 会帮你选择合适的位置并完成更新。
-                </>,
-                <>
-                  项目越长期、协作越复杂，清晰的记忆就越能让每次对话接得更自然。
                 </>,
               ],
             }}
@@ -958,11 +946,11 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
             highlight="进阶指南 · 第 4 步"
             title="侧边回答"
             paragraphs={[
-              <>在 Agent 对话中，可以选中一段文字（如对话内容、搜索选区），然后打开侧边回答。</>,
-              <>侧边回答会打开<b className="font-medium text-neutral-900">右侧问答面板</b>，
-                围绕你选中的内容深入讲解，不打断主对话。
+              <>在 Agent 对话中，可以选中一段文字，然后打开侧边回答。</>,
+              <>这会打开<b className="font-medium text-neutral-900">右侧问答面板</b>，
+                围绕你选中的内容讲解，不打断主对话也不占用上下文。
               </>,
-              <>适合查词、解释概念、拆解长文——主对话保持干净，答案在侧边展开。
+              <>适合查词、解释概念、拆解长文。
               </>,
             ]}
             nextLabel="下一个"
@@ -1027,12 +1015,12 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
       {/* ===== 底部进度地图（欢迎页不显示） ===== */}
       {step !== 'welcome' && step !== 'environment' && <ProgressMap current={step} />}
 
-      {(step === 'guide' || step === 'subagent') && (
+      {step === 'subagent' && (
         <button
-          onClick={step === 'guide' ? handleSkipBeginner : handleJumpToFaq}
+          onClick={handleJumpToFaq}
           className="absolute bottom-5 right-[30px] z-30 flex h-8 items-center gap-1 px-2 text-sm text-neutral-500 transition-colors hover:text-[#1b3f2d]"
         >
-          {step === 'guide' ? '跳过入门篇' : '跳到 FAQ'}
+          跳到 FAQ
           <ChevronsRight className="h-4 w-4" />
         </button>
       )}

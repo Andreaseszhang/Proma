@@ -37,7 +37,7 @@ export function AutomationGuideExamples() {
             <div className="text-xs font-medium uppercase tracking-[0.18em] text-[#1b3f2d]">示例 02 · 执行</div>
             <h3 className="mt-3 text-2xl font-medium text-neutral-900 md:text-3xl">Agent 会在你设定的时间自动打开新会话工作</h3>
             <p className="mt-4 text-base leading-[1.7] text-neutral-600 md:text-lg">
-              到点后，Agent 会读取昨天的两条提交及其 diff，完成代码质量审查；过程和结果都会留在新会话里。
+              到点后，Agent 会自动扫描代码库，完成代码质量审查；过程和结果都会留在新会话里。
             </p>
             <div className="mt-5 border-l-2 border-[#1b3f2d]/35 pl-4">
               <div className="text-base font-medium text-[#1b3f2d]">这样告诉 Agent</div>
@@ -57,7 +57,7 @@ export function AutomationGuideExamples() {
             <div className="text-xs font-medium uppercase tracking-[0.18em] text-[#1b3f2d]">示例 03 · 查看</div>
             <h3 className="mt-3 text-2xl font-medium text-neutral-900 md:text-3xl">在日程表里查看自动任务</h3>
             <p className="mt-4 text-base leading-[1.7] text-neutral-600 md:text-lg">
-              创建后，你的自动任务会显示在日程表里。像每天 09:00 的“扫描代码质量”，会按计划显示在这一周的对应时间段。
+              创建后，你的自动任务会显示在日程表里供你查看。
             </p>
           </div>
         </article>

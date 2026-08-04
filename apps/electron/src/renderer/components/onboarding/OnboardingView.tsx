@@ -36,7 +36,6 @@ import promaMarkWhite from '@/assets/onboarding/proma-mark-white.svg'
 import { AutomationGuideExamples } from './AutomationGuideExamples'
 import { FileGuideExamples } from './FileGuideExamples'
 import { MemoryGuideExamples } from './MemoryGuideExamples'
-import { SideAnswerGuideExamples } from './SideAnswerGuideExamples'
 import { SubagentGuideExamples } from './SubagentGuideExamples'
 import { FAQ_GROUPS } from './faq-content'
 
@@ -952,30 +951,24 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
         )}
 
         {step === 'sideanswer' && (
-          <GuideExamplesPage
-            intro={{
-              anchor: { x: 0.66, y: 0.044 },
-              arrowMode: 'none',
-              imageSrc: guideSideAnswer,
-              highlight: '进阶指南 · 第 4 步',
-              title: '侧边回答',
-              paragraphs: [
-                <>在 Agent 对话中，可以选中一段文字（如对话内容、搜索选区），然后打开侧边回答。</>,
-                <>侧边回答会打开<b className="font-medium text-neutral-900">右侧问答面板</b>，
-                  围绕你选中的内容深入讲解，不打断主对话。
-                </>,
-                <>适合查词、解释概念、拆解长文——主对话保持干净，答案在侧边展开。
-                </>,
-              ],
-            }}
+          <GuideFeatureStep
+            anchor={{ x: 0.66, y: 0.044 }}
+            arrowMode="none"
+            imageSrc={guideSideAnswer}
+            highlight="进阶指南 · 第 4 步"
+            title="侧边回答"
+            paragraphs={[
+              <>在 Agent 对话中，可以选中一段文字（如对话内容、搜索选区），然后打开侧边回答。</>,
+              <>侧边回答会打开<b className="font-medium text-neutral-900">右侧问答面板</b>，
+                围绕你选中的内容深入讲解，不打断主对话。
+              </>,
+              <>适合查词、解释概念、拆解长文——主对话保持干净，答案在侧边展开。
+              </>,
+            ]}
             nextLabel="下一个"
             onNext={handleNextFromSideAnswer}
             onBack={() => transitionTo('memory')}
-          >
-            <section className="border-t border-[#1b3f2d]/20 py-16 md:py-20">
-              <SideAnswerGuideExamples />
-            </section>
-          </GuideExamplesPage>
+          />
         )}
 
         {step === 'faq' && (

@@ -63,7 +63,6 @@ import type {
   WorkspaceMcpConfig,
   SkillMeta,
   BulkImportSkillItemResult,
-  BulkImportSkillsOptions,
   BulkImportSkillsResult,
   BulkImportWorkspaceSelection,
   SkillFileContent,
@@ -270,7 +269,6 @@ import {
   getProjectFilesPath,
   deleteWorkspaceSkill,
   importSkillFromWorkspace,
-  batchImportSkillsFromPaths,
   batchImportSkillsFromWorkspaces,
   updateSkillFromSource,
   readWorkspaceSkillContent,
@@ -2403,29 +2401,6 @@ export function registerIpcHandlers(): void {
     AGENT_IPC_CHANNELS.BATCH_IMPORT_SKILLS_FROM_WORKSPACES,
     async (_, targetSlug: string, selections: BulkImportWorkspaceSelection[]): Promise<BulkImportSkillsResult> => {
       return batchImportSkillsFromWorkspaces(targetSlug, selections)
-    }
-  )
-
-  // 从本地目录/文件批量导入多个 Skill
-  ipcMain.handle(
-    AGENT_IPC_CHANNELS.BATCH_IMPORT_SKILLS_FROM_PATHS,
-    async (_, targetSlug: string, paths: string[], options?: BulkImportSkillsOptions): Promise<BulkImportSkillsResult> => {
-      return batchImportSkillsFromPaths(targetSlug, paths, options)
-    }
-  )
-
-  // 打开多选文件夹对话框（批量导入 Skill 源）
-  ipcMain.handle(
-    AGENT_IPC_CHANNELS.PICK_SKILL_SOURCE_DIRS,
-    async (): Promise<string[]> => {
-      const win = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0]
-      if (!win) return []
-      const result = await dialog.showOpenDialog(win, {
-        properties: ['openDirectory', 'multiSelections'],
-        title: '选择 Skill 源文件夹（可多选）',
-      })
-      if (result.canceled) return []
-      return result.filePaths
     }
   )
 

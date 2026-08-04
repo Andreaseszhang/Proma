@@ -953,12 +953,6 @@ export interface BulkImportSkillsResult {
   items: BulkImportSkillItemResult[]
 }
 
-/** 本地路径批量导入的选项 */
-export interface BulkImportSkillsOptions {
-  /** 遇到目标工作区已存在同名 Skill 时是否覆盖；false（默认）则跳过 */
-  overwrite?: boolean
-}
-
 /** 从其他工作区批量导入的选中项 */
 export interface BulkImportWorkspaceSelection {
   sourceSlug: string
@@ -1608,10 +1602,6 @@ export const AGENT_IPC_CHANNELS = {
   IMPORT_SKILL_FROM_WORKSPACE: 'agent:import-skill-from-workspace',
   /** 从其他工作区批量导入多个 Skill 到当前工作区 */
   BATCH_IMPORT_SKILLS_FROM_WORKSPACES: 'agent:batch-import-skills-from-workspaces',
-  /** 从本地目录/文件批量导入多个 Skill 到当前工作区 */
-  BATCH_IMPORT_SKILLS_FROM_PATHS: 'agent:batch-import-skills-from-paths',
-  /** 打开多选文件夹对话框（用于批量导入 Skill 源） */
-  PICK_SKILL_SOURCE_DIRS: 'agent:pick-skill-source-dirs',
   /** 从源工作区同步更新已导入的 Skill */
   UPDATE_SKILL_FROM_SOURCE: 'agent:update-skill-from-source',
   /** 读取 SKILL.md 全文内容 */

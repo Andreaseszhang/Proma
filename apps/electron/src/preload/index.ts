@@ -619,12 +619,6 @@ export interface ElectronAPI {
   /** 从其他工作区批量导入多个 Skill */
   batchImportSkillsFromWorkspaces: (targetSlug: string, selections: import('@proma/shared').BulkImportWorkspaceSelection[]) => Promise<import('@proma/shared').BulkImportSkillsResult>
 
-  /** 从本地目录/文件批量导入多个 Skill */
-  batchImportSkillsFromPaths: (targetSlug: string, paths: string[], options?: import('@proma/shared').BulkImportSkillsOptions) => Promise<import('@proma/shared').BulkImportSkillsResult>
-
-  /** 打开多选文件夹对话框（批量导入 Skill 源） */
-  pickSkillSourceDirectories: () => Promise<string[]>
-
   /** 从源工作区同步更新已导入的 Skill */
   updateSkillFromSource: (targetSlug: string, skillSlug: string) => Promise<SkillMeta>
 
@@ -1820,19 +1814,6 @@ const electronAPI: ElectronAPI = {
       targetSlug,
       selections,
     )
-  },
-
-  batchImportSkillsFromPaths: (targetSlug: string, paths: string[], options?: import('@proma/shared').BulkImportSkillsOptions) => {
-    return ipcRenderer.invoke(
-      AGENT_IPC_CHANNELS.BATCH_IMPORT_SKILLS_FROM_PATHS,
-      targetSlug,
-      paths,
-      options,
-    )
-  },
-
-  pickSkillSourceDirectories: () => {
-    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.PICK_SKILL_SOURCE_DIRS)
   },
 
   updateSkillFromSource: (targetSlug: string, skillSlug: string) => {

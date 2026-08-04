@@ -29,7 +29,7 @@ import { findAllGitRoots, normalizeGitRoot } from './git-diff-service'
 import { listBuiltinMcpServers } from './builtin-mcp/catalog'
 import { RESERVED_BUILTIN_KEYS } from './builtin-mcp/baseline'
 import { inferMcpTransportType, normalizeMcpTransportType } from '@proma/shared'
-import type { AgentWorkspace, CreateAgentWorkspaceInput, LocalProjectRootStatus, WorkspaceMcpConfig, SkillMeta, SkillImportSource, OtherWorkspaceSkillsGroup, WorkspaceCapabilities, SkillFileNode, SkillFileContent, WorkspaceMemorySummary, BulkImportSkillItemResult, BulkImportSkillsOptions, BulkImportSkillsResult, BulkImportWorkspaceSelection } from '@proma/shared'
+import type { AgentWorkspace, CreateAgentWorkspaceInput, LocalProjectRootStatus, WorkspaceMcpConfig, SkillMeta, SkillImportSource, OtherWorkspaceSkillsGroup, WorkspaceCapabilities, SkillFileNode, SkillFileContent, WorkspaceMemorySummary, BulkImportSkillItemResult, BulkImportSkillsResult, BulkImportWorkspaceSelection } from '@proma/shared'
 
 interface AgentWorkspacesIndex {
   version: number
@@ -977,111 +977,6 @@ export function importSkillFromWorkspace(
 }
 
 // ===== Skill 批量导入 =====
-
-/** 从本地路径（Skill 目录或 SKILL.md 文件）解析 Skill 根目录与 slug，非法时返回 null */
-function resolveLocalSkillSource(sourcePath: string): { dir: string; slug: string } | null {
-  if (!existsSync(sourcePath)) return null
-
-  const stat = statSync(sourcePath)
-  if (stat.isFile()) {
-    if (basename(sourcePath).toLowerCase() !== 'skill.md') return null
-    const dir = dirname(sourcePath)
-    return existsSync(join(dir, 'SKILL.md')) ? { dir, slug: basename(dir) } : null
-  }
-  if (!stat.isDirectory()) return null
-
-  return existsSync(join(sourcePath, 'SKILL.md')) ? { dir: sourcePath, slug: basename(sourcePath) } : null
-}
-
-/** 判断 child 路径是否位于 parent 目录内部（用于阻止把目标工作区自身当来源） */
-function isPathInside(child: string, parent: string): boolean {
-  const rel = relative(resolve(parent), resolve(child))
-  return rel === '' || (!rel.startsWith('..') && !isAbsolute(rel))
-}
-
-/**
- * 从本地路径导入单个 Skill 到目标工作区。
- *
- * - 支持传入 Skill 目录，或直接传入其中的 SKILL.md 文件
- * - 目标已存在同名 Skill 时：overwrite=false 跳过；overwrite=true 覆盖（active / inactive 均处理）
- * - 本地导入不写 .source.json（视为「本项目」Skill）
- */
-export function importSkillFromLocalPath(
-  targetSlug: string,
-  sourcePath: string,
-  options: BulkImportSkillsOptions = {},
-): BulkImportSkillItemResult {
-  const resolved = resolveLocalSkillSource(sourcePath)
-  if (!resolved) {
-    return {
-      slug: basename(sourcePath),
-      name: basename(sourcePath),
-      status: 'failed',
-      reason: '不是有效的 Skill（目录内缺少 SKILL.md）',
-    }
-  }
-
-  const { dir, slug } = resolved
-  let meta: SkillMeta
-  try {
-    meta = parseSkillFrontmatter(readFileSync(join(dir, 'SKILL.md'), 'utf-8'), slug, true)
-  } catch {
-    return { slug, name: slug, status: 'failed', reason: '读取 SKILL.md 失败' }
-  }
-
-  // 安全边界：源目录属于目标工作区自身时无需导入
-  if (isPathInside(dir, getWorkspaceSkillsDir(targetSlug)) || isPathInside(dir, getInactiveSkillsDir(targetSlug))) {
-    return { slug, name: meta.name, status: 'skipped', reason: '源目录位于当前工作区，无需导入' }
-  }
-
-  const targetPath = join(getWorkspaceSkillsDir(targetSlug), slug)
-  const targetInactivePath = join(getInactiveSkillsDir(targetSlug), slug)
-  const targetExists = existsSync(targetPath) || existsSync(targetInactivePath)
-
-  if (targetExists) {
-    if (!options.overwrite) {
-      return { slug, name: meta.name, status: 'skipped', reason: '目标工作区已存在同名 Skill' }
-    }
-    if (existsSync(targetPath)) rmSyncWithRetry(targetPath, { recursive: true, force: true })
-    if (existsSync(targetInactivePath)) rmSyncWithRetry(targetInactivePath, { recursive: true, force: true })
-  }
-
-  try {
-    cpSync(dir, targetPath, { recursive: true })
-  } catch (error) {
-    return {
-      slug,
-      name: meta.name,
-      status: 'failed',
-      reason: error instanceof Error ? error.message : '复制失败',
-    }
-  }
-
-  console.log(`[Agent 工作区] 已从本地路径导入 Skill: ${targetSlug}/${slug} (${dir})`)
-  return { slug, name: meta.name, status: 'imported' }
-}
-
-/** 从多个本地路径批量导入 Skills 到目标工作区 */
-export function batchImportSkillsFromPaths(
-  targetSlug: string,
-  paths: string[],
-  options: BulkImportSkillsOptions = {},
-): BulkImportSkillsResult {
-  const items: BulkImportSkillItemResult[] = []
-  for (const path of paths) {
-    try {
-      items.push(importSkillFromLocalPath(targetSlug, path, options))
-    } catch (error) {
-      items.push({
-        slug: basename(path),
-        name: basename(path),
-        status: 'failed',
-        reason: error instanceof Error ? error.message : '未知错误',
-      })
-    }
-  }
-  return summarizeBulkImport(items)
-}
 
 /** 从其他工作区批量导入多个 Skill 到目标工作区（复用单 skill 导入逻辑） */
 export function batchImportSkillsFromWorkspaces(

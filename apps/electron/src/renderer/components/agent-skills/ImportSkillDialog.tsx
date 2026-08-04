@@ -151,6 +151,14 @@ export function ImportSkillDialog({
     onOpenChange(nextOpen)
   }
 
+  const isActiveImportOperation = (operationId: number, targetWorkspaceSlug: string): boolean => {
+    return (
+      importOperationRef.current === operationId &&
+      dialogScopeRef.current.open &&
+      dialogScopeRef.current.workspaceSlug === targetWorkspaceSlug
+    )
+  }
+
   const handleImport = async (): Promise<void> => {
     if (!workspaceSlug || importing || !selectedWorkspace || selectedCount === 0) return
     const operationId = ++importOperationRef.current
@@ -161,11 +169,7 @@ export function ImportSkillDialog({
     setImporting(true)
     try {
       const importResult = await window.electronAPI.batchImportSkillsFromWorkspaces(targetWorkspaceSlug, selections)
-      const stillActive =
-        importOperationRef.current === operationId &&
-        dialogScopeRef.current.open &&
-        dialogScopeRef.current.workspaceSlug === targetWorkspaceSlug
-      if (!stillActive) return
+      if (!isActiveImportOperation(operationId, targetWorkspaceSlug)) return
 
       const failureDescription = getFailureDescription(importResult)
       if (importResult.imported > 0) {
@@ -190,11 +194,11 @@ export function ImportSkillDialog({
         })
       }
     } catch (error) {
-      if (importOperationRef.current !== operationId) return
+      if (!isActiveImportOperation(operationId, targetWorkspaceSlug)) return
       console.error('[Agent 技能] 批量导入失败:', error)
       toast.error('批量导入失败', { description: error instanceof Error ? error.message : '未知错误' })
     } finally {
-      if (importOperationRef.current === operationId) setImporting(false)
+      if (isActiveImportOperation(operationId, targetWorkspaceSlug)) setImporting(false)
     }
   }
 

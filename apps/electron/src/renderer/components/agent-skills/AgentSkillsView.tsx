@@ -20,6 +20,13 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { agentPendingPromptAtom, workspaceCapabilitiesVersionAtom } from '@/atoms/agent-atoms'
 import { agentSkillsTabAtom } from '@/atoms/active-view'
@@ -35,6 +42,7 @@ import { SkillDetailSheet } from './SkillDetailSheet'
 import { McpDetailSheet } from './McpDetailSheet'
 import { BuiltinMcpDetailSheet } from './BuiltinMcpDetailSheet'
 import { ImportSkillDialog } from './ImportSkillDialog'
+import { BulkImportSkillDialog } from './BulkImportSkillDialog'
 import { WorkspaceMemoryTab } from './WorkspaceMemoryTab'
 import { groupSkills } from './skillGrouping'
 
@@ -104,6 +112,8 @@ export function AgentSkillsView(): React.ReactElement {
   const [editingMcp, setEditingMcp] = React.useState<{ name: string; entry: McpServerEntry } | null>(null)
   const [selectedBuiltinMcp, setSelectedBuiltinMcp] = React.useState<BuiltinMcpServerSummary | null>(null)
   const [showImport, setShowImport] = React.useState(false)
+  const [showBulkImport, setShowBulkImport] = React.useState(false)
+  const [importMenuOpen, setImportMenuOpen] = React.useState(false)
   const [wsPopoverOpen, setWsPopoverOpen] = React.useState(false)
   const [pendingDeleteSkill, setPendingDeleteSkill] = React.useState<SkillMeta | null>(null)
   const [pendingDeleteMcpName, setPendingDeleteMcpName] = React.useState<string | null>(null)
@@ -348,14 +358,33 @@ export function AgentSkillsView(): React.ReactElement {
               </TooltipTrigger>
               <TooltipContent side="bottom">创建 Agent 会话，读取 SKILL.md 内容并补全 group</TooltipContent>
             </Tooltip>
-            <button
-              type="button"
-              onClick={() => setShowImport(true)}
-              className="flex h-8 items-center gap-1.5 rounded-lg border border-border/60 bg-content-area px-3 text-[13px] font-medium text-foreground/80 shadow-sm transition-colors hover:bg-foreground/[0.04]"
-            >
-              <Plus size={14} />
-              <span>导入</span>
-            </button>
+            <DropdownMenu open={importMenuOpen} onOpenChange={setImportMenuOpen}>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className="flex h-8 items-center gap-1.5 rounded-lg border border-border/60 bg-content-area px-3 text-[13px] font-medium text-foreground/80 shadow-sm transition-colors hover:bg-foreground/[0.04]"
+                >
+                  <Plus size={14} />
+                  <span>导入</span>
+                  <ChevronDown size={13} className="text-foreground/45" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem
+                  onClick={() => { setImportMenuOpen(false); setShowBulkImport(true) }}
+                >
+                  <FolderOpen size={14} />
+                  <span>从本地文件夹批量导入</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => { setImportMenuOpen(false); setShowImport(true) }}
+                >
+                  <Blocks size={14} />
+                  <span>从其他项目导入</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </>
         )}
 
@@ -477,6 +506,14 @@ export function AgentSkillsView(): React.ReactElement {
       <ImportSkillDialog
         open={showImport}
         onOpenChange={setShowImport}
+        workspaceSlug={data.workspaceSlug}
+        installedSkills={data.skills}
+        onImported={() => bumpCapabilities((v) => v + 1)}
+      />
+
+      <BulkImportSkillDialog
+        open={showBulkImport}
+        onOpenChange={setShowBulkImport}
         workspaceSlug={data.workspaceSlug}
         installedSkills={data.skills}
         onImported={() => bumpCapabilities((v) => v + 1)}

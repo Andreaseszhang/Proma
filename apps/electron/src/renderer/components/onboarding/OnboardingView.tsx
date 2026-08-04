@@ -920,7 +920,7 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
               arrowMode: 'none',
               imageSrc: guideMemory,
               highlight: '进阶指南 · 第 3 步',
-              title: '让 Agent 记住你的项目',
+              title: '生成你的项目记忆',
               paragraphs: [
                 <>
                   <b className="font-medium text-neutral-900">记忆</b>会沉淀项目指令、确定偏好、告知 Agent 你工作流的具体形态，

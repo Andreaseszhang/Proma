@@ -123,10 +123,7 @@ export function MemoryGuideExamples() {
     <>
       <div className="max-w-2xl">
         <div className="text-xs font-medium uppercase tracking-[0.2em] text-[#1b3f2d]">真实示例</div>
-        <h2 className="mt-4 text-3xl font-light tracking-tight text-neutral-900 md:text-4xl">把已验证的经验留给下一次会话</h2>
-        <p className="mt-4 text-base leading-[1.7] text-neutral-600 md:text-lg">
-          项目使用一段时间后，生成项目记忆会整理代表性的工作，提炼项目偏好、规则与已确认结论，方便后续会话接续。
-        </p>
+        <h2 className="mt-4 text-3xl font-light tracking-tight text-neutral-900 md:text-4xl">复用已验证的经验</h2>
       </div>
 
       <div className="mt-14 space-y-16 md:mt-16 md:space-y-20">
@@ -139,8 +136,7 @@ export function MemoryGuideExamples() {
             />
           </figure>
           <div className="min-w-0">
-            <div className="text-xs font-medium uppercase tracking-[0.18em] text-[#1b3f2d]">示例 01 · 生成</div>
-            <h3 className="mt-3 text-2xl font-medium text-neutral-900 md:text-3xl">从代表性工作中生成项目记忆</h3>
+            <h3 className="mt-3 text-2xl font-medium text-neutral-900 md:text-3xl">一键生成项目记忆</h3>
             <p className="mt-4 text-base leading-[1.7] text-neutral-600 md:text-lg">
               项目使用一段时间后，在项目记忆处点击“生成项目记忆”。Agent 会开启一个会话整理选定范围内有代表性的工作，提炼项目偏好、规则与已确认结论。
             </p>
@@ -149,7 +145,6 @@ export function MemoryGuideExamples() {
 
         <article className="grid gap-10 border-t border-[#1b3f2d]/15 pt-10 lg:grid-cols-[22rem_minmax(0,1fr)] lg:items-center">
           <div className="min-w-0 lg:order-1">
-            <div className="text-xs font-medium uppercase tracking-[0.18em] text-[#1b3f2d]">示例 02 · 查看与维护</div>
             <h3 className="mt-3 text-2xl font-medium text-neutral-900 md:text-3xl">
               Agent 整理好的<b className="font-medium text-neutral-900">偏好和记忆可以随时编辑</b>
             </h3>

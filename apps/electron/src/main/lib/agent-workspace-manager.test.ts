@@ -194,6 +194,22 @@ describe('Agent 工作区 Skill 批量导入', () => {
     expect(readFileSync(join(inactivePath, 'SKILL.md'), 'utf-8')).toContain('Existing Skill')
   })
 
+  test('Given 两个来源并发导入同名 Skill When 批量导入 Then 只保留第一个完成项且另一个跳过', async () => {
+    writeWorkspaceSkill('source-a', 'shared-skill', 'Source A')
+    writeWorkspaceSkill('source-b', 'shared-skill', 'Source B')
+
+    const [fromA, fromB] = await Promise.all([
+      manager.batchImportSkillsFromWorkspaces('target', [{ sourceSlug: 'source-a', skillSlug: 'shared-skill' }]),
+      manager.batchImportSkillsFromWorkspaces('target', [{ sourceSlug: 'source-b', skillSlug: 'shared-skill' }]),
+    ])
+
+    expect(fromA.imported + fromB.imported).toBe(1)
+    expect(fromA.skipped + fromB.skipped).toBe(1)
+    expect(fromA.failed + fromB.failed).toBe(0)
+    const importedContent = readFileSync(join(configPaths.getWorkspaceSkillsDir('target'), 'shared-skill', 'SKILL.md'), 'utf-8')
+    expect(['Source A', 'Source B'].some((name) => importedContent.includes(name))).toBe(true)
+  })
+
   test('Given 来源缺失或导入中元数据写入失败 When 批量导入 Then 返回失败且不留下目标残片', async () => {
     const missing = await manager.batchImportSkillsFromWorkspaces('target', [
       // 旧实现会因错误文案包含“已存在”而误判为 skipped。

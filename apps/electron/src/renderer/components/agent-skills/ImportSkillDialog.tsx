@@ -45,6 +45,14 @@ export function ImportSkillDialog({
   const [loadingWorkspaces, setLoadingWorkspaces] = React.useState(false)
   const [importing, setImporting] = React.useState(false)
   const requestIdRef = React.useRef(0)
+  const importOperationRef = React.useRef(0)
+  const dialogScopeRef = React.useRef({ open, workspaceSlug })
+  dialogScopeRef.current = { open, workspaceSlug }
+
+  React.useEffect(() => {
+    importOperationRef.current += 1
+    setImporting(false)
+  }, [workspaceSlug])
 
   React.useEffect(() => {
     const requestId = ++requestIdRef.current
@@ -135,14 +143,30 @@ export function ImportSkillDialog({
     setSelectedKeys(new Set())
   }
 
+  const handleDialogOpenChange = (nextOpen: boolean): void => {
+    if (!nextOpen) {
+      importOperationRef.current += 1
+      setImporting(false)
+    }
+    onOpenChange(nextOpen)
+  }
+
   const handleImport = async (): Promise<void> => {
     if (!workspaceSlug || importing || !selectedWorkspace || selectedCount === 0) return
+    const operationId = ++importOperationRef.current
+    const targetWorkspaceSlug = workspaceSlug
     const selections = selectedWorkspace.skills
       .filter((s) => selectedKeys.has(`${selectedWorkspace.workspaceSlug}/${s.slug}`))
       .map((s) => ({ sourceSlug: selectedWorkspace.workspaceSlug, skillSlug: s.slug }))
     setImporting(true)
     try {
-      const importResult = await window.electronAPI.batchImportSkillsFromWorkspaces(workspaceSlug, selections)
+      const importResult = await window.electronAPI.batchImportSkillsFromWorkspaces(targetWorkspaceSlug, selections)
+      const stillActive =
+        importOperationRef.current === operationId &&
+        dialogScopeRef.current.open &&
+        dialogScopeRef.current.workspaceSlug === targetWorkspaceSlug
+      if (!stillActive) return
+
       const failureDescription = getFailureDescription(importResult)
       if (importResult.imported > 0) {
         onImported()
@@ -157,7 +181,7 @@ export function ImportSkillDialog({
         toast.success(`已导入 ${importResult.imported} 个 Skill${detail}`, {
           description: failureDescription,
         })
-        onOpenChange(false)
+        handleDialogOpenChange(false)
       } else if (importResult.failed === 0) {
         toast.info(`没有新导入的 Skill，已跳过 ${importResult.skipped} 个同名项`)
       } else {
@@ -166,15 +190,16 @@ export function ImportSkillDialog({
         })
       }
     } catch (error) {
+      if (importOperationRef.current !== operationId) return
       console.error('[Agent 技能] 批量导入失败:', error)
       toast.error('批量导入失败', { description: error instanceof Error ? error.message : '未知错误' })
     } finally {
-      setImporting(false)
+      if (importOperationRef.current === operationId) setImporting(false)
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent className="max-w-2xl gap-0 overflow-hidden p-0">
         <DialogHeader className="px-6 pb-4 pt-6">
           <DialogTitle>从其他项目批量导入 Skill</DialogTitle>

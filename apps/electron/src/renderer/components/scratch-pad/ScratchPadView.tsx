@@ -62,6 +62,10 @@ import {
   isVoiceDictationTargetInput,
   setLastFocusedVoiceInputId,
 } from '@/lib/voice-input-focus'
+import {
+  isVoiceDictationPreviewRangeCurrent,
+  type VoiceDictationPreviewRange,
+} from '@/lib/voice-dictation-preview'
 import { SelectionActionPopover } from '@/components/selection/SelectionActionPopover'
 import { SELECTION_ACTION_POPOVER_SELECTOR } from '@/lib/quoted-selection'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -142,7 +146,7 @@ function ScratchPadEditor({ variant }: ScratchPadEditorProps): React.ReactElemen
   const pointerSelectingRef = React.useRef(false)
   const captureTimerRef = React.useRef<number | null>(null)
   const openSideChatPendingRef = React.useRef(false)
-  const voicePreviewRef = React.useRef<{ sessionId: string; from: number; to: number } | null>(null)
+  const voicePreviewRef = React.useRef<VoiceDictationPreviewRange | null>(null)
 
   // Image lightbox state for edit functionality
   const [lightboxSrc, setLightboxSrc] = React.useState<string | null>(null)
@@ -567,6 +571,7 @@ function ScratchPadEditor({ variant }: ScratchPadEditorProps): React.ReactElemen
         sessionId: current.sessionId,
         from: from.pos,
         to: Math.max(from.pos, to.pos),
+        text: current.text,
       }
     }
 
@@ -590,14 +595,17 @@ function ScratchPadEditor({ variant }: ScratchPadEditorProps): React.ReactElemen
       const from = current?.from ?? editor.state.selection.from
       const to = current?.to ?? editor.state.selection.to
       editor.view.dispatch(editor.state.tr.insertText(previewText, from, to))
-      voicePreviewRef.current = { sessionId, from, to: from + previewText.length }
+      voicePreviewRef.current = { sessionId, from, to: from + previewText.length, text: previewText }
       event.preventDefault()
     }
 
     const clearPreviewRange = (): void => {
       const current = voicePreviewRef.current
       if (!current) return
-      if (!editor.view.isDestroyed) {
+      if (!editor.view.isDestroyed && isVoiceDictationPreviewRangeCurrent(
+        current,
+        (from, to) => editor.state.doc.textBetween(from, to, '\n', '\n'),
+      )) {
         editor.view.dispatch(editor.state.tr.delete(current.from, current.to))
       }
       voicePreviewRef.current = null

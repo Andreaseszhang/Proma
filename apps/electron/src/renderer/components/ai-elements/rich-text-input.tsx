@@ -48,6 +48,10 @@ import {
   isVoiceDictationTargetInput,
   setLastFocusedVoiceInputId,
 } from '@/lib/voice-input-focus'
+import {
+  isVoiceDictationPreviewRangeCurrent,
+  type VoiceDictationPreviewRange,
+} from '@/lib/voice-dictation-preview'
 
 // ===== 行数计算 =====
 
@@ -191,7 +195,7 @@ export const RichTextInput = forwardRef<RichTextInputHandle, RichTextInputProps>
 }: RichTextInputProps, ref: React.Ref<RichTextInputHandle>): React.ReactElement {
   const [isExpanded, setIsExpanded] = useState(false)
   const inputIdRef = useRef(voiceInputId ?? `rich-text-input-${Math.random().toString(36).slice(2)}`)
-  const voicePreviewRef = useRef<{ sessionId: string; from: number; to: number } | null>(null)
+  const voicePreviewRef = useRef<VoiceDictationPreviewRange | null>(null)
   // 手动折叠状态：用户主动折叠输入框
   const [isManuallyCollapsed, setIsManuallyCollapsed] = useState(false)
   // 跟踪 isExpanded 最新值（对比后再 setState，避免每键无谓 setState 触发重渲染）
@@ -793,6 +797,7 @@ export const RichTextInput = forwardRef<RichTextInputHandle, RichTextInputProps>
         sessionId: current.sessionId,
         from: from.pos,
         to: Math.max(from.pos, to.pos),
+        text: current.text,
       }
     }
 
@@ -817,14 +822,17 @@ export const RichTextInput = forwardRef<RichTextInputHandle, RichTextInputProps>
       const from = current?.from ?? editor.state.selection.from
       const to = current?.to ?? editor.state.selection.to
       editor.view.dispatch(editor.state.tr.insertText(previewText, from, to))
-      voicePreviewRef.current = { sessionId, from, to: from + previewText.length }
+      voicePreviewRef.current = { sessionId, from, to: from + previewText.length, text: previewText }
       event.preventDefault()
     }
 
     const clearPreviewRange = (): void => {
       const current = voicePreviewRef.current
       if (!current) return
-      if (!editor.view.isDestroyed) {
+      if (!editor.view.isDestroyed && isVoiceDictationPreviewRangeCurrent(
+        current,
+        (from, to) => editor.state.doc.textBetween(from, to, '\n', '\n'),
+      )) {
         editor.view.dispatch(editor.state.tr.delete(current.from, current.to))
       }
       voicePreviewRef.current = null

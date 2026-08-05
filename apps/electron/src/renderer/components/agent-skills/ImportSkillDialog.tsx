@@ -128,12 +128,38 @@ export function ImportSkillDialog({
     ).length
   }, [selectedWorkspace, selectedKeys])
 
+  // 当前来源项目的全部技能是否都已选中
+  const allSelected = React.useMemo(() => {
+    if (!selectedWorkspace) return false
+    return (
+      selectedWorkspace.skills.length > 0 &&
+      selectedWorkspace.skills.every((s) =>
+        selectedKeys.has(`${selectedWorkspace.workspaceSlug}/${s.slug}`),
+      )
+    )
+  }, [selectedWorkspace, selectedKeys])
+
   const toggleSelection = (sourceSlug: string, skillSlug: string): void => {
     setSelectedKeys((prev) => {
       const next = new Set(prev)
       const key = `${sourceSlug}/${skillSlug}`
       if (next.has(key)) next.delete(key)
       else next.add(key)
+      return next
+    })
+  }
+
+  // 一键全选 / 取消全选当前来源项目的全部技能
+  const handleToggleSelectAll = (): void => {
+    if (!selectedWorkspace) return
+    const workspaceKey = selectedWorkspace.workspaceSlug
+    setSelectedKeys((prev) => {
+      const next = new Set(prev)
+      selectedWorkspace.skills.forEach((s) => {
+        const key = `${workspaceKey}/${s.slug}`
+        if (allSelected) next.delete(key)
+        else next.add(key)
+      })
       return next
     })
   }
@@ -246,10 +272,39 @@ export function ImportSkillDialog({
             <>
               <div className="mb-3 flex items-center justify-between gap-3 text-sm text-muted-foreground">
                 <span className="truncate">{selectedWorkspace.workspaceName}</span>
-                <span className="shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium tabular-nums">
-                  {selectedWorkspace.skills.length} 个
-                </span>
+                <div className="flex shrink-0 items-center gap-2">
+                  {/* 全选：勾选框视觉与技能卡片一致，放在计数徽章左侧 */}
+                  <button
+                    type="button"
+                    aria-pressed={allSelected}
+                    disabled={importing}
+                    onClick={handleToggleSelectAll}
+                    className={cn(
+                      'inline-flex items-center gap-1.5 rounded-md text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60',
+                      allSelected ? 'text-primary' : 'text-foreground hover:text-primary',
+                    )}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        'flex size-4 shrink-0 items-center justify-center rounded border transition-colors',
+                        allSelected
+                          ? 'border-primary bg-primary text-primary-foreground'
+                          : 'border-border/80 text-transparent',
+                      )}
+                    >
+                      <Check size={11} />
+                    </span>
+                    {allSelected ? '取消全选' : '全选'}
+                  </button>
+                  <span className="shrink-0 rounded-md bg-muted px-2 py-1 text-xs font-medium tabular-nums">
+                    {selectedCount > 0
+                      ? `已选 ${selectedCount}/${selectedWorkspace.skills.length}`
+                      : `${selectedWorkspace.skills.length} 个`}
+                  </span>
+                </div>
               </div>
+
               <div className="grid gap-3 sm:grid-cols-2">
                 {selectedWorkspace.skills.map((skill) => {
                   const checked = selectedKeys.has(`${selectedWorkspace.workspaceSlug}/${skill.slug}`)

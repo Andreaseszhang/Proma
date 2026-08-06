@@ -2801,7 +2801,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
           <div className="px-2 pb-3">
             {conversationGroups.map((group) => (
               <div key={group.label} className="mb-1">
-                <div className="ml-[4px] px-1.5 pt-2 pb-1 text-[11px] font-medium text-foreground/40 select-none">
+                <div className="ml-[4px] px-1.5 pt-2 pb-1 text-[13px] font-medium leading-[18px] text-foreground/40 select-none">
                   {group.label}
                 </div>
                 <div className="flex flex-col gap-0.5">
@@ -2903,7 +2903,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
 
           {/* 下区标题：项目历史 */}
           <div className="px-2 pt-2 pb-1 flex items-center justify-between flex-shrink-0">
-            <span className="px-1.5 text-[11px] font-medium text-foreground/40 select-none">项目</span>
+            <span className="px-1.5 text-[13px] font-medium leading-[18px] text-foreground/40 select-none">项目</span>
             <div className="flex items-center gap-0.5">
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -3024,7 +3024,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
               /* Chat 归档：对话按日期分组 */
               conversationGroups.map((group) => (
                 <div key={group.label} className="mb-1">
-                  <div className="px-3 pt-2 pb-1 text-[11px] font-medium text-foreground/40 select-none">
+                  <div className="px-3 pt-2 pb-1 text-[13px] font-medium leading-[18px] text-foreground/40 select-none">
                     {group.label}
                   </div>
                   <div className="flex flex-col gap-0.5">
@@ -3050,7 +3050,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
               /* Agent 模式归档：Agent 会话按日期分组，含委派树 */
               archivedAgentSessionTrees.map((group) => (
                 <div key={group.label} className="mb-1">
-                  <div className="px-3 pt-2 pb-1 text-[11px] font-medium text-foreground/40 select-none">
+                  <div className="px-3 pt-2 pb-1 text-[13px] font-medium leading-[18px] text-foreground/40 select-none">
                     {group.label}
                   </div>
                   <div className="flex flex-col gap-0.5">

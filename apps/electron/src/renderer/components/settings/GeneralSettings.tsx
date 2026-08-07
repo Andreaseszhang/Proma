@@ -410,6 +410,7 @@ export function GeneralSettings(): React.ReactElement {
           />
         </SettingsCard>
       </SettingsSection>
+
     </div>
   )
 }

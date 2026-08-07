@@ -43,6 +43,8 @@ type OnboardingStep = 'welcome' | 'guide' | 'files' | 'project' | 'automation' |
 
 interface OnboardingViewProps {
   onComplete: (openTutorial?: boolean) => void
+  /** 从设置重放时可跳过欢迎页。 */
+  initialStep?: OnboardingStep
 }
 
 /** 图片内归一化锚点（0-1） */
@@ -638,8 +640,8 @@ function ProgressMap({ current }: { current: Exclude<OnboardingStep, 'welcome' |
   )
 }
 
-export function OnboardingView({ onComplete }: OnboardingViewProps) {
-  const [step, setStep] = useState<OnboardingStep>('welcome')
+export function OnboardingView({ onComplete, initialStep = 'welcome' }: OnboardingViewProps) {
+  const [step, setStep] = useState<OnboardingStep>(initialStep)
   const [flash, setFlash] = useState(false)
   const [fading, setFading] = useState(false)
   const [faqBackStep, setFaqBackStep] = useState<'subagent' | 'sideanswer'>('sideanswer')
@@ -999,7 +1001,6 @@ export function OnboardingView({ onComplete }: OnboardingViewProps) {
         )}
       </div>
 
-      {/* ===== 底部进度地图（欢迎页不显示） ===== */}
       {step !== 'welcome' && step !== 'environment' && <ProgressMap current={step} />}
 
       {step === 'subagent' && (

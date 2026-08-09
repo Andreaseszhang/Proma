@@ -674,6 +674,24 @@ export interface ElectronAPI {
   /** 写入工作区长期记忆文件 */
   writeWorkspaceAutoMemoryFile: (workspaceSlug: string, relativePath: string, content: string) => Promise<void>
 
+  /** 打开或聚焦当前 workspace 的独立 Memory 编辑窗口，可选定位到某个记忆文件。 */
+  openWorkspaceMemoryWindow: (workspaceSlug: string, relativePath?: string) => Promise<void>
+
+  /** 独立 Memory 编辑窗口接收主进程转发的文件定位请求。 */
+  onWorkspaceMemoryWindowOpenFile: (callback: (relativePath: string) => void) => () => void
+  /** 主进程请求独立窗口确认未保存内容后的关闭。 */
+  onWorkspaceMemoryWindowCloseRequested: (callback: () => void) => () => void
+  /** 保存或明确丢弃后确认关闭当前独立记忆窗口。 */
+  confirmWorkspaceMemoryWindowClose: (workspaceSlug: string) => Promise<void>
+  /** 声明独立记忆窗口已可处理关闭请求。 */
+  markWorkspaceMemoryWindowReady: (workspaceSlug: string) => Promise<void>
+
+  /** 仅在当前 Memory 页面存活时订阅当前 workspace 的 memory/ 文件变化。 */
+  subscribeWorkspaceMemoryChanges: (
+    workspaceSlug: string,
+    callback: (change: import('@proma/shared').WorkspaceMemoryFileChange) => void,
+  ) => () => void
+
   /** 记录用户对 Agent 主动维护两份 AGENTS.md 的明确授权。 */
   approveWorkspaceProjectKnowledgeMaintenance: (workspaceSlug: string) => Promise<void>
 
@@ -1895,6 +1913,42 @@ const electronAPI: ElectronAPI = {
 
   writeWorkspaceAutoMemoryFile: (workspaceSlug: string, relativePath: string, content: string) => {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.WRITE_WORKSPACE_AUTO_MEMORY_FILE, workspaceSlug, relativePath, content)
+  },
+
+  openWorkspaceMemoryWindow: (workspaceSlug: string, relativePath?: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.OPEN_WORKSPACE_MEMORY_WINDOW, workspaceSlug, relativePath)
+  },
+
+  onWorkspaceMemoryWindowOpenFile: (callback: (relativePath: string) => void) => {
+    const listener = (_: unknown, relativePath: string): void => callback(relativePath)
+    ipcRenderer.on(AGENT_IPC_CHANNELS.WORKSPACE_MEMORY_WINDOW_OPEN_FILE, listener)
+    return () => { ipcRenderer.removeListener(AGENT_IPC_CHANNELS.WORKSPACE_MEMORY_WINDOW_OPEN_FILE, listener) }
+  },
+
+  onWorkspaceMemoryWindowCloseRequested: (callback: () => void) => {
+    const listener = (): void => callback()
+    ipcRenderer.on(AGENT_IPC_CHANNELS.WORKSPACE_MEMORY_WINDOW_CLOSE_REQUESTED, listener)
+    return () => { ipcRenderer.removeListener(AGENT_IPC_CHANNELS.WORKSPACE_MEMORY_WINDOW_CLOSE_REQUESTED, listener) }
+  },
+
+  confirmWorkspaceMemoryWindowClose: (workspaceSlug: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.CONFIRM_WORKSPACE_MEMORY_WINDOW_CLOSE, workspaceSlug)
+  },
+
+  markWorkspaceMemoryWindowReady: (workspaceSlug: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.WORKSPACE_MEMORY_WINDOW_READY, workspaceSlug)
+  },
+
+  subscribeWorkspaceMemoryChanges: (workspaceSlug: string, callback: (change: import('@proma/shared').WorkspaceMemoryFileChange) => void) => {
+    const listener = (_: unknown, payload: { workspaceSlug: string; change: import('@proma/shared').WorkspaceMemoryFileChange }): void => {
+      if (payload.workspaceSlug === workspaceSlug) callback(payload.change)
+    }
+    ipcRenderer.on(AGENT_IPC_CHANNELS.WORKSPACE_MEMORY_FILE_CHANGED, listener)
+    void ipcRenderer.invoke(AGENT_IPC_CHANNELS.START_WORKSPACE_MEMORY_WATCH, workspaceSlug)
+    return () => {
+      ipcRenderer.removeListener(AGENT_IPC_CHANNELS.WORKSPACE_MEMORY_FILE_CHANGED, listener)
+      void ipcRenderer.invoke(AGENT_IPC_CHANNELS.STOP_WORKSPACE_MEMORY_WATCH, workspaceSlug)
+    }
   },
 
 

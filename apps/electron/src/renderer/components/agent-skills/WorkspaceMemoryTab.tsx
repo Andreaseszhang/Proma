@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { useAtom, useSetAtom } from 'jotai'
+import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import { toast } from 'sonner'
 import { AlertTriangle, ChevronDown, ChevronRight, Code2, Eye, FileText, FolderOpen, Loader2, RefreshCw, Save, Sparkles } from 'lucide-react'
 import type { SkillFileNode, WorkspaceMemorySummary } from '@proma/shared'
@@ -10,7 +10,7 @@ import { DefaultAppOpenButton } from '@/components/diff/DefaultAppOpenButton'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { MessageResponse } from '@/components/ai-elements/message'
 import { agentPendingPromptAtom } from '@/atoms/agent-atoms'
-import { memoryNavigationRequestAtom } from '@/atoms/memory-atoms'
+import { memoryFileNavigationAtom, workspaceMemoryChangesAtom } from '@/atoms/memory-change-atoms'
 import { useCreateSession } from '@/hooks/useCreateSession'
 import { cn } from '@/lib/utils'
 import {
@@ -70,7 +70,9 @@ function filterNodes(nodes: SkillFileNode[], query: string): SkillFileNode[] {
 export function WorkspaceMemoryTab({ workspaceSlug, search }: WorkspaceMemoryTabProps): React.ReactElement {
   const { createAgent } = useCreateSession()
   const setPendingPrompt = useSetAtom(agentPendingPromptAtom)
-  const [memoryNavigationRequest, setMemoryNavigationRequest] = useAtom(memoryNavigationRequestAtom)
+  const [memoryNavigationRequest, setMemoryNavigationRequest] = useAtom(memoryFileNavigationAtom)
+  const workspaceMemoryChanges = useAtomValue(workspaceMemoryChangesAtom)
+  const latestMemoryChange = workspaceMemoryChanges.get(workspaceSlug)?.[0]
   const [summary, setSummary] = React.useState<WorkspaceMemorySummary | null>(null)
   const [autoFiles, setAutoFiles] = React.useState<SkillFileNode[]>([])
   const [selected, setSelected] = React.useState<SelectedMemoryFile | null>(null)
@@ -222,6 +224,11 @@ export function WorkspaceMemoryTab({ workspaceSlug, search }: WorkspaceMemoryTab
       setMemoryNavigationRequest(null)
     })()
   }, [memoryNavigationRequest, openAutoFile, setMemoryNavigationRequest, workspaceSlug])
+
+  React.useEffect(() => {
+    if (!latestMemoryChange) return
+    void refreshSummaryAndTree().catch((error) => console.error('[工作区记忆] 刷新全局变更失败:', error))
+  }, [latestMemoryChange?.changedAt, refreshSummaryAndTree])
 
   const refresh = React.useCallback(async (): Promise<void> => {
     await flushPendingSave()

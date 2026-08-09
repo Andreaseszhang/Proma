@@ -665,14 +665,18 @@ export interface ElectronAPI {
   /** 写入工作区 AGENTS.md */
   writeWorkspaceAgentsMd: (workspaceSlug: string, content: string) => Promise<void>
 
-  /** 列出工作区 auto memory 文件树 */
+  /** 列出工作区长期记忆文件树 */
   listWorkspaceAutoMemoryFiles: (workspaceSlug: string) => Promise<import('@proma/shared').SkillFileNode[]>
 
-  /** 读取工作区 auto memory 文件 */
+  /** 读取工作区长期记忆文件 */
   readWorkspaceAutoMemoryFile: (workspaceSlug: string, relativePath: string) => Promise<import('@proma/shared').SkillFileContent>
 
-  /** 写入工作区 auto memory 文件 */
+  /** 写入工作区长期记忆文件 */
   writeWorkspaceAutoMemoryFile: (workspaceSlug: string, relativePath: string, content: string) => Promise<void>
+
+  /** 记录用户对 Agent 主动维护两份 AGENTS.md 的明确授权。 */
+  approveWorkspaceProjectKnowledgeMaintenance: (workspaceSlug: string) => Promise<void>
+
 
   /** 订阅 Agent 流式事件（返回清理函数） */
   onAgentStreamEvent: (callback: (event: AgentStreamEvent) => void) => () => void
@@ -1891,6 +1895,11 @@ const electronAPI: ElectronAPI = {
 
   writeWorkspaceAutoMemoryFile: (workspaceSlug: string, relativePath: string, content: string) => {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.WRITE_WORKSPACE_AUTO_MEMORY_FILE, workspaceSlug, relativePath, content)
+  },
+
+
+  approveWorkspaceProjectKnowledgeMaintenance: (workspaceSlug: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.APPROVE_WORKSPACE_PROJECT_KNOWLEDGE_MAINTENANCE, workspaceSlug)
   },
 
   onAgentStreamEvent: (callback: (event: AgentStreamEvent) => void) => {

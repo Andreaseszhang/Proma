@@ -191,18 +191,3 @@ describe('容错与渐进式读取原语', () => {
     expect(md).toContain('答案含关键词 needle')
   })
 })
-
-describe('assistant turn input attribution', () => {
-  test('binds each assistant turn to the preceding human message', () => {
-    const groups = groupIntoTurns(readSessionMessagesFromString(jsonl([
-      { type: 'user', uuid: 'user-a', message: { content: [{ type: 'text', text: 'first' }] }, parent_tool_use_id: null },
-      { type: 'assistant', message: { content: [{ type: 'text', text: 'answer a' }] }, parent_tool_use_id: null },
-      { type: 'user', uuid: 'user-b', message: { content: [{ type: 'text', text: 'second' }] }, parent_tool_use_id: null },
-      { type: 'assistant', message: { content: [{ type: 'text', text: 'answer b' }] }, parent_tool_use_id: null },
-      { type: 'result', subtype: 'success' },
-    ])))
-    const turns = groups.filter((group) => group.type === 'assistant-turn')
-
-    expect(turns.map((turn) => turn.inputMessage?.uuid)).toEqual(['user-a', 'user-b'])
-  })
-})

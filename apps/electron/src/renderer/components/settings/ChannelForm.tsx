@@ -53,6 +53,11 @@ import {
   resolveOpenAIResponsesUrl,
 } from '@proma/core'
 import { getProviderLogo } from '@/lib/model-logo'
+import openaiModelLogo from '@/assets/models/official/openai.png'
+import claudeModelLogo from '@/assets/models/official/claude.png'
+import deepseekModelLogo from '@/assets/models/official/deepseek.png'
+import moonshotModelLogo from '@/assets/models/official/moonshot.png'
+import zhipuModelLogo from '@/assets/models/official/zhipu.png'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
   AlertDialog,
@@ -75,6 +80,8 @@ import {
 interface ChannelFormProps {
   /** 编辑模式下传入已有渠道，创建模式传 null */
   channel: Channel | null
+  /** 首次配置时隐藏返回操作，完成创建后才进入主工作区。 */
+  initialSetup?: boolean
   onSaved: (channel?: Channel) => void
   onCancel: () => void
 }
@@ -198,7 +205,65 @@ function buildZhipuTeamSecret(secret: ZhipuTeamSecretForm): string {
 /** auto-save 防抖延迟 */
 const AUTO_SAVE_DELAY = 600
 
-export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): React.ReactElement {
+const OFFICIAL_MODEL_CHANNELS = [
+  { provider: 'OpenAI', model: 'GPT 5.6 最新模型', logo: openaiModelLogo },
+  { provider: 'Anthropic', model: 'Claude 最新模型', logo: claudeModelLogo },
+  { provider: 'DeepSeek', model: 'DeepSeek V4', logo: deepseekModelLogo },
+  { provider: 'Moonshot', model: 'Kimi K3', logo: moonshotModelLogo },
+  { provider: '智谱', model: 'GLM-5.2', logo: zhipuModelLogo },
+] as const
+
+function openPromaCommercialDownload(): void {
+  void window.electronAPI.openExternal('https://proma.cool/download')
+}
+
+function OfficialCloudChannelNotice(): React.ReactElement {
+  return (
+    <SettingsSection
+      title="没有可用渠道？"
+      description="当前为 Proma 开源版，下载并于 Proma 商业版登录即可使用以下官方内置模型渠道，也保留第三方渠道配置。"
+    >
+      <div className="relative mt-5 border-2 border-foreground bg-card px-5 pb-5 pt-8 shadow-xl sm:px-6 sm:pb-6">
+        <div className="absolute -left-0.5 -top-3 bg-foreground px-3 py-1 text-[11px] font-semibold tracking-[0.16em] text-background">
+          Proma 商业版
+        </div>
+
+        <div>
+          <p className="text-sm font-semibold text-foreground">当前 Proma 官方 Agent 渠道</p>
+          <ul className="mt-5 grid grid-cols-1 gap-x-10 gap-y-4 text-sm text-muted-foreground sm:grid-cols-2 xl:grid-cols-3">
+            {OFFICIAL_MODEL_CHANNELS.map(({ provider, model, logo }) => (
+              <li key={provider} className="flex min-w-0 items-center gap-2.5">
+                <img src={logo} alt="" aria-hidden="true" className="h-5 w-5 shrink-0 rounded-md" />
+                <span className="whitespace-nowrap">{provider} · {model}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="mt-7 border-t border-foreground/20 pt-5">
+          <p className="text-sm leading-6 text-muted-foreground">
+            官方托管链路提供 Agent 协议兼容与模型健康监控；精选模型享受 Proma Cloud 优惠，并包含 WebSearch、GPT Image 2 等内嵌能力。
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            className="mt-4 gap-1.5 border-foreground bg-foreground text-background hover:bg-foreground/90 hover:text-background"
+            onClick={openPromaCommercialDownload}
+          >
+            <Download size={15} />
+            <span>下载 Proma 商业版</span>
+          </Button>
+        </div>
+
+        <p className="mt-5 border-t border-foreground/20 pt-3 text-xs text-muted-foreground">
+          可用模型、价格和权益会随时间调整，以商业版应用内当期展示为准。
+        </p>
+      </div>
+    </SettingsSection>
+  )
+}
+
+export function ChannelForm({ channel, initialSetup = false, onSaved, onCancel }: ChannelFormProps): React.ReactElement {
   const isEdit = channel !== null
 
   // 表单状态
@@ -783,9 +848,9 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
     }
   }
 
-  /** 创建渠道（仅新建模式） */
+  /** 创建渠道（仅新建模式）。首次 onboarding 可先保存空模型渠道，后续再补充模型。 */
   const handleCreate = async (): Promise<void> => {
-    if (models.length === 0) {
+    if (!initialSetup && models.length === 0) {
       toast.warning('尚未配置模型，建议先从供应商获取或手动添加', { id: 'no-models-warn' })
       return
     }
@@ -863,16 +928,22 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
 
   return (
     <div className="space-y-6">
+      {!isEdit && <OfficialCloudChannelNotice />}
+
       {/* 标题栏 */}
       <div className="flex items-center gap-3">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          onClick={handleBack}
-        >
-          <ArrowLeft size={18} />
-        </Button>
+        {!initialSetup && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={handleBack}
+            title="返回模型配置列表"
+            aria-label="返回模型配置列表"
+          >
+            <ArrowLeft size={18} />
+          </Button>
+        )}
         <h3 className="text-lg font-medium text-foreground flex-1">
           {isEdit ? '编辑模型配置' : '添加模型配置'}
         </h3>

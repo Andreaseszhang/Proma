@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { useAtom, useStore } from 'jotai'
 import { AppShell } from './components/app-shell/AppShell'
+import { InitialModelSetupView } from './components/onboarding/InitialModelSetupView'
 import { OnboardingView } from './components/onboarding/OnboardingView'
 import { TutorialBanner } from './components/tutorial/TutorialBanner'
 import { EnvironmentCheckDialog } from './components/environment/EnvironmentCheckDialog'
@@ -17,6 +18,7 @@ import { onboardingReplayRequestedAtom } from './atoms/onboarding'
 import { settingsOpenAtom, settingsTabAtom } from './atoms/settings-tab'
 import { tabsAtom, activeTabIdAtom, openTab, TUTORIAL_TAB_ID } from './atoms/tab-atoms'
 import { hasCompletedCurrentOnboarding } from '../types'
+import { requiresInitialModelSetup } from './lib/model-setup'
 import hopperSeasideWhiteHouse from './assets/onboarding/hopper-seaside-white-house.png'
 import promaMarkWhite from './assets/onboarding/proma-mark-white.svg'
 import type { AppShellContextType } from './contexts/AppShellContext'
@@ -27,6 +29,8 @@ export default function App(): React.ReactElement {
   const store = useStore()
   const [isLoading, setIsLoading] = React.useState(true)
   const [showOnboarding, setShowOnboarding] = React.useState(false)
+  const [showInitialModelSetup, setShowInitialModelSetup] = React.useState(false)
+  const [initialModelSetupCreatesWelcome, setInitialModelSetupCreatesWelcome] = React.useState(false)
   const [onboardingReplayRequested, setOnboardingReplayRequested] = useAtom(onboardingReplayRequestedAtom)
   const [isReplayingOnboarding, setIsReplayingOnboarding] = React.useState(false)
   const isWindows = React.useMemo(() => detectIsWindows(), [])
@@ -37,9 +41,14 @@ export default function App(): React.ReactElement {
   React.useEffect(() => {
     const initialize = async () => {
       try {
-        const settings = await window.electronAPI.getSettings()
+        const [settings, channels] = await Promise.all([
+          window.electronAPI.getSettings(),
+          window.electronAPI.listChannels(),
+        ])
         if (!hasCompletedCurrentOnboarding(settings)) {
           setShowOnboarding(true)
+        } else if (requiresInitialModelSetup(channels)) {
+          setShowInitialModelSetup(true)
         }
       } catch (error) {
         console.error('[App] 初始化失败:', error)
@@ -60,18 +69,7 @@ export default function App(): React.ReactElement {
     setOnboardingReplayRequested(false)
   }, [isLoading, onboardingReplayRequested, setOnboardingReplayRequested])
 
-  // 完成 onboarding 回调：创建欢迎对话，可选打开教程 Tab
-  const handleOnboardingComplete = async (openTutorial?: boolean) => {
-    const replayingOnboarding = isReplayingOnboarding
-    setShowOnboarding(false)
-    setIsReplayingOnboarding(false)
-
-    if (replayingOnboarding) {
-      store.set(settingsTabAtom, 'onboarding')
-      store.set(settingsOpenAtom, true)
-      return
-    }
-
+  const enterProma = async (openTutorial?: boolean): Promise<void> => {
     if (openTutorial) {
       const tabs = store.get(tabsAtom)
       const result = openTab(tabs, { type: 'tutorial', sessionId: TUTORIAL_TAB_ID, title: 'Proma 使用教程' })
@@ -98,6 +96,45 @@ export default function App(): React.ReactElement {
     } catch (error) {
       console.error('[App] 创建欢迎对话失败:', error)
     }
+  }
+
+  // 完成 onboarding 后，首次没有保存过渠道的用户必须先走完设置页的创建表单。
+  const handleOnboardingComplete = async (openTutorial?: boolean): Promise<void> => {
+    const replayingOnboarding = isReplayingOnboarding
+    setIsReplayingOnboarding(false)
+
+    if (replayingOnboarding) {
+      setShowOnboarding(false)
+      store.set(settingsTabAtom, 'onboarding')
+      store.set(settingsOpenAtom, true)
+      return
+    }
+
+    try {
+      const [settings, channels] = await Promise.all([
+        window.electronAPI.getSettings(),
+        window.electronAPI.listChannels(),
+      ])
+      if (requiresInitialModelSetup(channels)) {
+        setInitialModelSetupCreatesWelcome(true)
+        setShowInitialModelSetup(true)
+        setShowOnboarding(false)
+        return
+      }
+    } catch (error) {
+      // 无法读取渠道时不阻止用户进入应用，避免临时 IPC 错误造成无法启动。
+      console.error('[App] 检查首次模型配置失败:', error)
+    }
+
+    setShowOnboarding(false)
+    await enterProma(openTutorial)
+  }
+
+  const handleInitialModelSetupComplete = async (): Promise<void> => {
+    setShowInitialModelSetup(false)
+    if (!initialModelSetupCreatesWelcome) return
+    setInitialModelSetupCreatesWelcome(false)
+    await enterProma()
   }
 
   // 加载中状态
@@ -140,6 +177,7 @@ export default function App(): React.ReactElement {
       <FaqDialog />
       <TutorialBanner />
       <GlobalEnvironmentCheckDialog />
+      {showInitialModelSetup && <InitialModelSetupView onComplete={handleInitialModelSetupComplete} />}
     </TooltipProvider>
   )
 }

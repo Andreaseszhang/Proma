@@ -945,12 +945,20 @@ export function resolveAppIconPath(variantId: string): string | null {
 function releaseDirectoryWatcherIfUnreferenced(dirPath: string): void {
   const isStillReferenced = listAgentWorkspaces().some((workspace) =>
     workspace.projectRootPath === dirPath
-    || getWorkspaceAttachedDirectories(workspace.slug).includes(dirPath),
+    || getWorkspaceAttachedDirectories(workspace.slug).includes(dirPath)
+    || getWorkspaceAttachedFiles(workspace.slug).some((filePath) => dirname(filePath) === dirPath),
   ) || listAgentSessions().some((session) =>
-    session.attachedDirectories?.includes(dirPath),
+    session.attachedDirectories?.includes(dirPath)
+    || session.attachedFiles?.some((filePath) => dirname(filePath) === dirPath),
   )
 
   if (!isStillReferenced) unwatchAttachedDirectory(dirPath)
+}
+
+function releaseAttachedFileWatchers(filePaths: readonly string[] | undefined): void {
+  for (const dirPath of new Set((filePaths ?? []).map((filePath) => dirname(filePath)))) {
+    releaseDirectoryWatcherIfUnreferenced(dirPath)
+  }
 }
 
 async function withOAuthDeviceCodeQr<T extends CodexOAuthDeviceCode | XaiOAuthDeviceCode>(deviceCode: T): Promise<T> {
@@ -2092,6 +2100,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     AGENT_IPC_CHANNELS.DELETE_SESSION,
     async (_, id: string): Promise<void> => {
+      const attachedFiles = getAgentSessionMeta(id)?.attachedFiles
       // 清理权限服务中该会话的白名单
       permissionService.clearSessionWhitelist(id)
       permissionService.clearSessionPending(id)
@@ -2099,7 +2108,8 @@ export function registerIpcHandlers(): void {
       askUserService.clearSessionPending(id)
       // 清理 ExitPlanMode 服务中的待处理请求
       exitPlanService.clearSessionPending(id)
-      return deleteAgentSession(id)
+      deleteAgentSession(id)
+      releaseAttachedFileWatchers(attachedFiles)
     }
   )
 
@@ -2240,6 +2250,9 @@ export function registerIpcHandlers(): void {
       const workspaces = listAgentWorkspaces()
       for (const workspace of workspaces) {
         if (workspace.projectRootPath) watchAttachedDirectory(workspace.projectRootPath)
+        for (const filePath of getWorkspaceAttachedFiles(workspace.slug)) {
+          watchAttachedDirectory(dirname(filePath))
+        }
       }
       return workspaces
     }
@@ -2329,9 +2342,13 @@ export function registerIpcHandlers(): void {
         throw new Error('至少需要保留一个项目')
       }
 
-      const affectedSessionIds = listAgentSessions()
+      const affectedSessions = listAgentSessions()
         .filter((session) => session.workspaceId === id)
-        .map((session) => session.id)
+      const affectedSessionIds = affectedSessions.map((session) => session.id)
+      const deletedAttachedFiles = [
+        ...affectedSessions.flatMap((session) => session.attachedFiles ?? []),
+        ...getWorkspaceAttachedFiles(deletingWorkspace.slug),
+      ]
       const affectedAutomationIds = listAutomations()
         .filter((automation) => automation.workspaceId === id)
         .map((automation) => automation.id)
@@ -2364,6 +2381,7 @@ export function registerIpcHandlers(): void {
       }
       deleteAgentWorkspace(id)
 
+      releaseAttachedFileWatchers(deletedAttachedFiles)
       if (deletedProjectRoot) releaseDirectoryWatcherIfUnreferenced(deletedProjectRoot)
     }
   )
@@ -3121,6 +3139,7 @@ export function registerIpcHandlers(): void {
 
       const updated = [...existing, safePath]
       updateAgentSessionMeta(input.sessionId, { attachedFiles: updated })
+      watchAttachedDirectory(dirname(safePath))
       return updated
     }
   )
@@ -3135,6 +3154,7 @@ export function registerIpcHandlers(): void {
       const existing = meta.attachedFiles ?? []
       const updated = existing.filter((f) => f !== input.filePath)
       updateAgentSessionMeta(input.sessionId, { attachedFiles: updated })
+      releaseDirectoryWatcherIfUnreferenced(dirname(input.filePath))
       return updated
     }
   )
@@ -3169,7 +3189,9 @@ export function registerIpcHandlers(): void {
       const stats = statSync(safePath)
       if (!stats.isFile()) throw new Error('只能附加文件')
 
-      return attachWorkspaceFile(input.workspaceSlug, safePath)
+      const updated = attachWorkspaceFile(input.workspaceSlug, safePath)
+      watchAttachedDirectory(dirname(safePath))
+      return updated
     }
   )
 
@@ -3177,7 +3199,9 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     AGENT_IPC_CHANNELS.DETACH_WORKSPACE_FILE,
     async (_, input: WorkspaceAttachFileInput): Promise<string[]> => {
-      return detachWorkspaceFile(input.workspaceSlug, input.filePath)
+      const updated = detachWorkspaceFile(input.workspaceSlug, input.filePath)
+      releaseDirectoryWatcherIfUnreferenced(dirname(input.filePath))
+      return updated
     }
   )
 

@@ -470,6 +470,8 @@ function normalizeFileAccessOptions(value?: FileAccessOptions | string[]): FileA
   return {
     sessionId: typeof value.sessionId === 'string' ? value.sessionId : undefined,
     workspaceSlug: typeof value.workspaceSlug === 'string' ? value.workspaceSlug : undefined,
+    workspaceSkillSlug: typeof value.workspaceSkillSlug === 'string' ? value.workspaceSkillSlug : undefined,
+    legacySkillFilePath: typeof value.legacySkillFilePath === 'string' ? value.legacySkillFilePath : undefined,
     candidateBasePaths: Array.isArray(value.candidateBasePaths)
       ? value.candidateBasePaths.filter((p): p is string => typeof p === 'string' && p.length > 0)
       : undefined,
@@ -492,13 +494,35 @@ function getWorkspaceSlugsForAccess(options?: FileAccessOptions): string[] {
   return Array.from(workspaceSlugs)
 }
 
+function getManagedSkillBasePath(options?: FileAccessOptions): string | undefined {
+  const workspaceSlug = options?.workspaceSkillSlug
+  if (!workspaceSlug || !getWorkspaceSlugsForAccess(options).includes(workspaceSlug)) return undefined
+  const workspace = listAgentWorkspaces().find((item) => item.slug === workspaceSlug)
+  return workspace ? getWorkspaceSkillsDir(workspace.slug) : undefined
+}
+
 function getAllowedCandidateBasePaths(options?: FileAccessOptions): string[] | undefined {
-  const allowed = options?.candidateBasePaths?.filter((p) => isPathAllowed(p, options)) ?? []
+  const allowed = (getPreviewCandidateBasePaths(options) ?? []).filter((p) => isPathAllowed(p, options))
   return allowed.length > 0 ? allowed : undefined
+}
+
+function getLegacySkillBasePath(options?: FileAccessOptions): string | undefined {
+  const legacyFilePath = options?.legacySkillFilePath
+  if (!legacyFilePath) return undefined
+  const normalized = legacyFilePath.replace(/\\/g, '/')
+  return normalized.match(/^(.*\/skills)\/[^/]+\/SKILL\.md$/i)?.[1]
 }
 
 function getPreviewCandidateBasePaths(options?: FileAccessOptions): string[] | undefined {
   const bases = options?.candidateBasePaths?.filter((p) => typeof p === 'string' && p.length > 0) ?? []
+  const managedSkillBasePath = getManagedSkillBasePath(options)
+  if (managedSkillBasePath && !bases.includes(managedSkillBasePath)) {
+    bases.unshift(managedSkillBasePath)
+  }
+  const legacySkillBasePath = getLegacySkillBasePath(options)
+  if (legacySkillBasePath && !bases.includes(legacySkillBasePath)) {
+    bases.push(legacySkillBasePath)
+  }
   return bases.length > 0 ? bases : undefined
 }
 

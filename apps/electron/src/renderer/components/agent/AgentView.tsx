@@ -18,7 +18,7 @@ import { unstable_batchedUpdates } from 'react-dom'
 import { useAtom, useAtomValue, useSetAtom, useStore } from 'jotai'
 import { toast } from 'sonner'
 import { CornerDownLeft, Square, Settings, X, Copy, Check, Brain, Sparkles, ListTodo, Paperclip } from 'lucide-react'
-import { AgentMessages } from './AgentMessages'
+import { AgentMessages, type AgentHistoryQuoteNavigationRequest } from './AgentMessages'
 import { AgentHeader } from './AgentHeader'
 import { AgentMessageQueue } from './AgentMessageQueue'
 import { ContextUsageBadge } from './ContextUsageBadge'
@@ -120,7 +120,7 @@ import type { AgentSendInput, AgentPendingFile, AgentThinkingLevel, FileDialogLa
 import { inferContextWindow, inferReasoningTransport, isCodexFastModeSupportedModel, MAX_ATTACHMENT_SIZE, normalizeReasoningCapabilityLevel, normalizeReasoningLevel, resolveReasoningCapability, resolveReasoningProfile } from '@proma/shared'
 import { fileToBase64, formatFileNames, getFileParentPath } from '@/lib/file-utils'
 import { getFilePanelDragData, INSERT_FILE_MENTION_EVENT, type FilePanelDragItem } from '@/lib/file-panel-drag'
-import { buildQuotedSelectionBlock } from '@/lib/quoted-selection'
+import { buildQuotedSelectionBlock, expandAgentHistoryQuoteMentions } from '@/lib/quoted-selection'
 import { createClipboardPendingFile, createClipboardTextDraft, makeUniqueAttachmentName } from '@/lib/clipboard-text-attachment'
 import { copyTextToClipboard } from '@/lib/clipboard'
 import {
@@ -624,6 +624,31 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
   const pendingFilesRef = React.useRef(pendingFiles)
   // RichTextInput 命令接口 ref（右侧文件面板拖入时插入 @file 引用）
   const richTextInputRef = React.useRef<RichTextInputHandle>(null)
+  const historyQuoteNavigationRequestIdRef = React.useRef(0)
+  const [historyQuoteNavigation, setHistoryQuoteNavigation] = React.useState<AgentHistoryQuoteNavigationRequest | null>(null)
+  const handleAddHistoryQuote = React.useCallback((quote: QuotedSelection): boolean => {
+    return richTextInputRef.current?.insertAgentHistoryQuoteMention(quote) ?? false
+  }, [])
+  const handleAgentHistoryQuoteClick = React.useCallback((quote: QuotedSelection): void => {
+    if (
+      quote.sourceType !== 'agent-history'
+      || !quote.messageId
+      || quote.selectionStart == null
+      || quote.selectionEnd == null
+      || quote.selectionEnd <= quote.selectionStart
+    ) {
+      return
+    }
+    historyQuoteNavigationRequestIdRef.current += 1
+    setHistoryQuoteNavigation({
+      sessionId,
+      quote,
+      requestId: historyQuoteNavigationRequestIdRef.current,
+    })
+  }, [sessionId])
+  React.useEffect(() => {
+    setHistoryQuoteNavigation(null)
+  }, [sessionId])
   // 父组件同步生成的 ID，同时提供给 RichTextInput 与 SpeechButton，避免工具栏 memo 捕获空值。
   const agentVoiceInputId = React.useId()
   React.useEffect(() => {
@@ -2153,11 +2178,11 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
     }
 
     // 2. 构建最终消息
-    const finalMessage = fileReferences + effectiveText
+    const finalMessage = fileReferences + expandAgentHistoryQuoteMentions(effectiveText)
     const mentions = parseQueuedMessageMentions(effectiveText)
     // Agent 侧使用解码后的 SDK 文本（@file 路径还原为真实路径，Agent 可读取）；
-    // 气泡展示/持久化使用编码原文（remarkMentions 解码显示），与排队路径 rawText/sdkText 分离语义一致。
-    const sdkMessage = fileReferences + mentions.cleanedText
+    // 历史 quote marker 仅在此刻展开为精确上下文，草稿本身始终保持可编辑 chip。
+    const sdkMessage = fileReferences + expandAgentHistoryQuoteMentions(mentions.cleanedText)
 
     // 清除打断状态（上一轮的打断标记不再显示）
     store.set(stoppedByUserSessionsAtom, (prev: Set<string>) => {
@@ -2937,6 +2962,9 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
           onRewind={isLegacyTranscript ? undefined : handleRewindRequest}
           onCreateTodo={handleOpenReplyTodoDialog}
           onCompact={handleCompact}
+          onAddHistoryQuote={handleAddHistoryQuote}
+          onAgentHistoryQuoteClick={handleAgentHistoryQuoteClick}
+          historyQuoteNavigation={historyQuoteNavigation}
         />
 
         {/* 权限请求横幅 */}
@@ -3082,6 +3110,7 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
               htmlValue={inputHtmlContent}
               onHtmlChange={setInputHtmlContent}
               sendWithCmdEnter={sendWithCmdEnter}
+              onAgentHistoryQuoteClick={handleAgentHistoryQuoteClick}
             />
 
             {/* Footer 工具栏 — 容器变窄时尾部按钮自动折叠进「更多」Popover */}

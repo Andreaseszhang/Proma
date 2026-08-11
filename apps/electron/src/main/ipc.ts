@@ -470,6 +470,8 @@ function normalizeFileAccessOptions(value?: FileAccessOptions | string[]): FileA
   return {
     sessionId: typeof value.sessionId === 'string' ? value.sessionId : undefined,
     workspaceSlug: typeof value.workspaceSlug === 'string' ? value.workspaceSlug : undefined,
+    workspaceSkillSlug: typeof value.workspaceSkillSlug === 'string' ? value.workspaceSkillSlug : undefined,
+    legacySkillFilePath: typeof value.legacySkillFilePath === 'string' ? value.legacySkillFilePath : undefined,
     candidateBasePaths: Array.isArray(value.candidateBasePaths)
       ? value.candidateBasePaths.filter((p): p is string => typeof p === 'string' && p.length > 0)
       : undefined,
@@ -492,14 +494,45 @@ function getWorkspaceSlugsForAccess(options?: FileAccessOptions): string[] {
   return Array.from(workspaceSlugs)
 }
 
+function getManagedSkillBasePath(options?: FileAccessOptions): string | undefined {
+  const workspaceSlug = options?.workspaceSkillSlug
+  if (!workspaceSlug || !getWorkspaceSlugsForAccess(options).includes(workspaceSlug)) return undefined
+  const workspace = listAgentWorkspaces().find((item) => item.slug === workspaceSlug)
+  return workspace ? getWorkspaceSkillsDir(workspace.slug) : undefined
+}
+
 function getAllowedCandidateBasePaths(options?: FileAccessOptions): string[] | undefined {
-  const allowed = options?.candidateBasePaths?.filter((p) => isPathAllowed(p, options)) ?? []
+  const allowed = (getPreviewCandidateBasePaths(options) ?? []).filter((p) => isPathAllowed(p, options))
   return allowed.length > 0 ? allowed : undefined
+}
+
+function getLegacySkillBasePath(options?: FileAccessOptions): string | undefined {
+  const legacyFilePath = options?.legacySkillFilePath
+  if (!legacyFilePath) return undefined
+  const normalized = legacyFilePath.replace(/\\/g, '/')
+  return normalized.match(/^(.*\/skills)\/[^/]+\/SKILL\.md$/i)?.[1]
 }
 
 function getPreviewCandidateBasePaths(options?: FileAccessOptions): string[] | undefined {
   const bases = options?.candidateBasePaths?.filter((p) => typeof p === 'string' && p.length > 0) ?? []
+  const managedSkillBasePath = getManagedSkillBasePath(options)
+  if (managedSkillBasePath && !bases.includes(managedSkillBasePath)) {
+    bases.unshift(managedSkillBasePath)
+  }
+  const legacySkillBasePath = getLegacySkillBasePath(options)
+  if (legacySkillBasePath && !bases.includes(legacySkillBasePath)) {
+    bases.push(legacySkillBasePath)
+  }
   return bases.length > 0 ? bases : undefined
+}
+
+/** Resolve preview-only relative paths before handing them to OS-level file actions. */
+async function resolveFileAccessPath(filePath: string, options?: FileAccessOptions): Promise<string> {
+  const [{ resolve }, { resolveFilePath }] = await Promise.all([
+    import('node:path'),
+    import('./lib/file-preview-service'),
+  ])
+  return resolveFilePath(filePath, getPreviewCandidateBasePaths(options)) ?? resolve(filePath)
 }
 
 async function getAccessRootMainRepo(root: string): Promise<string | null> {
@@ -841,10 +874,9 @@ async function getWindowsDefaultAppInfo(filePath: string): Promise<{ appPath: st
 
 async function getDefaultAppInfoForFile(
   filePath: string,
-  _options?: FileAccessOptions,
+  options?: FileAccessOptions,
 ): Promise<import('@proma/shared').DefaultAppInfo | null> {
-  const { resolve } = await import('node:path')
-  const absPath = resolve(filePath)
+  const absPath = await resolveFileAccessPath(filePath, options)
 
   const cacheKey = `${process.platform}:${extOf(filePath) || filePath}`
   const cachedInfo = defaultAppCache.get(cacheKey) ?? getCachedDefaultAppInfo(cacheKey)
@@ -1193,9 +1225,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     IPC_CHANNELS.SYSTEM_OPEN_FILE,
     async (_, filePath: string, appName?: string, access?: FileAccessOptions | string[]): Promise<void> => {
-      const { resolve } = await import('node:path')
-      const absPath = resolve(filePath)
       const options = normalizeFileAccessOptions(access)
+      const absPath = await resolveFileAccessPath(filePath, options)
       if (!isPathAllowed(absPath, options)) {
         console.warn('[IPC] shell:system-open-file 拒绝越界路径:', absPath)
         return
@@ -1246,12 +1277,13 @@ export function registerIpcHandlers(): void {
       if (!filePath || typeof filePath !== 'string') return null
       try {
         const options = normalizeFileAccessOptions(access)
-        if (options && !isPathAllowed(filePath, options)) {
-          console.warn('[IPC] shell:get-default-app-for-file 拒绝越界路径:', filePath)
+        const resolvedPath = await resolveFileAccessPath(filePath, options)
+        if (options && !isPathAllowed(resolvedPath, options)) {
+          console.warn('[IPC] shell:get-default-app-for-file 拒绝越界路径:', resolvedPath)
           return null
         }
-        console.log('[IPC] get-default-app-for-file 收到请求:', filePath)
-        const result = await getDefaultAppInfoForFile(filePath, options)
+        console.log('[IPC] get-default-app-for-file 收到请求:', resolvedPath)
+        const result = await getDefaultAppInfoForFile(resolvedPath, options)
         console.log('[IPC] get-default-app-for-file 返回:', result ? `name=${result.name} appPath=${result.appPath} iconLen=${result.iconDataUrl?.length}` : 'null')
         return result
       } catch (err) {

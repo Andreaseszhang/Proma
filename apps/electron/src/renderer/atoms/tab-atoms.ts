@@ -236,12 +236,18 @@ function createScratchPadTab(): TabItem {
  * 将固定草稿 Tab 放回顶部并聚焦，同时保留现有会话/预览上下文。
  * 草稿被拖到右侧分屏时会暂时从 tabsAtom 移除，Ctrl+Tab 需要通过此入口恢复它。
  */
-export function focusScratchPadTab(tabs: TabItem[]): { tabs: TabItem[]; activeTabId: string } {
+export function focusScratchPadTab(tabs: TabItem[]): {
+  tabs: TabItem[]
+  activeTabId: string
+  scratchPanelOpen: false
+} {
   const scratchTab = tabs.find((tab) => tab.id === SCRATCH_PAD_ID && tab.type === 'scratch')
     ?? createScratchPadTab()
   return {
     tabs: [scratchTab, ...tabs.filter((tab) => tab.id !== SCRATCH_PAD_ID)],
     activeTabId: SCRATCH_PAD_ID,
+    // 从右侧分屏回到完整草稿页时，必须关闭分屏；否则下次切回 Agent 会话会出现重复草稿。
+    scratchPanelOpen: false,
   }
 }
 

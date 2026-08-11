@@ -17,6 +17,7 @@ import {
   sessionViewStateMapAtom,
   tabMruAtom,
   tabsAtom,
+  scratchPadPanelOpenAtom,
   focusScratchPadTab,
   SCRATCH_PAD_ID,
   SCRATCH_PAD_TITLE,
@@ -74,6 +75,7 @@ export function TabSwitcher(): ReactElement | null {
   const tabs = useAtomValue(tabsAtom)
   const setTabs = useSetAtom(tabsAtom)
   const setActiveTabId = useSetAtom(activeTabIdAtom)
+  const setScratchPadPanelOpen = useSetAtom(scratchPadPanelOpenAtom)
   // MRU 与 Ctrl+Tab 起始定位均按会话 ID 归一化：预览 Tab 复用其 owner 会话 ID，
   // 与候选列表（会话 ID）对齐，避免处于预览 Tab 时需按两下才能切换。
   const activeSessionId = useAtomValue(activeSessionIdAtom)
@@ -263,6 +265,7 @@ export function TabSwitcher(): ReactElement | null {
         const nextTab = focusScratchPadTab(tabsRef.current)
         setTabs(nextTab.tabs)
         setActiveTabId(nextTab.activeTabId)
+        setScratchPadPanelOpen(nextTab.scratchPanelOpen)
         activeSessionIdRef.current = candidate.id
         setTabMru((prev) => {
           const next = promoteTabMru(prev, candidate.id)
@@ -329,6 +332,7 @@ export function TabSwitcher(): ReactElement | null {
       appMode,
       setActiveTabId,
       setActiveView,
+      setScratchPadPanelOpen,
       setAppMode,
       setAutomationForm,
       setCurrentAgentSessionId,

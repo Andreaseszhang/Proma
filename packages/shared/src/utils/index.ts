@@ -40,8 +40,10 @@ export {
 export { normalizePathForCompare } from './normalize-path'
 export {
   findBestSearchMatch,
+  insertTopSearchResult,
   type SearchMatch,
   type SearchMatchKind,
+  type SearchResultRank,
 } from './search-matching'
 export {
   AUTOMATION_OCCURRENCE_SAMPLES_PER_DAY,

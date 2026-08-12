@@ -17,7 +17,7 @@ import {
 } from './config-paths'
 import { deleteConversationAttachments, deleteAttachment } from './attachment-service'
 import type { ConversationMeta, ChatMessage, RecentMessagesResult, MessageSearchResult } from '@proma/shared'
-import { findBestSearchMatch } from '@proma/shared'
+import { findBestSearchMatch, insertTopSearchResult } from '@proma/shared'
 
 /**
  * 对话索引文件格式
@@ -479,23 +479,19 @@ async function findMatchesInJsonl(
         (snippetEnd < msg.content.length ? '...' : '')
       const matchStart = match.matchStart - snippetStart + (snippetStart > 0 ? 3 : 0)
 
-      hits.push({
+      insertTopSearchResult(hits, {
         messageId: msg.id,
         role: msg.role,
         snippet,
         matchStart,
         matchLength: match.matchLength,
         score: match.score,
-      })
+      }, MAX_SEARCH_HITS_PER_SESSION)
     }
   } finally {
     rl.close()
     stream.destroy()
   }
 
-  return hits.sort((a, b) => {
-    const roleScore = (role: ConversationSearchHit['role']): number => role === 'user' ? 0 : 1
-    return b.score - a.score
-      || roleScore(a.role) - roleScore(b.role)
-  })
+  return hits
 }

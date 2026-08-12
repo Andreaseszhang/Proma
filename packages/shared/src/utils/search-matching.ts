@@ -14,7 +14,6 @@ interface NormalizedText {
 }
 
 const IGNORABLE_SEPARATOR_RE = /^[\s,.!?;:，。！？、；：“”‘’（）()【】\[\]《》<>〈〉「」『』·…—–\-_\\/]+$/u
-const MAX_FUZZY_WINDOW_STARTS = 2000
 
 function normalizeText(text: string): NormalizedText {
   const chars: string[] = []
@@ -69,13 +68,18 @@ function buildMatch(
   return { matchStart: originalStart, matchLength: Math.max(0, originalEnd - originalStart), score, kind }
 }
 
-function editDistance(left: string[], right: string[]): number {
-  let previous = Array.from({ length: right.length + 1 }, (_, index) => index)
-  for (let leftIndex = 1; leftIndex <= left.length; leftIndex++) {
+function editDistanceAt(
+  needle: string[],
+  haystack: string[],
+  haystackStart: number,
+  length: number,
+): number {
+  let previous = Array.from({ length: length + 1 }, (_, index) => index)
+  for (let leftIndex = 1; leftIndex <= needle.length; leftIndex++) {
     const current = [leftIndex]
     let rowMinimum = current[0]!
-    for (let rightIndex = 1; rightIndex <= right.length; rightIndex++) {
-      const cost = left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1
+    for (let rightIndex = 1; rightIndex <= length; rightIndex++) {
+      const cost = needle[leftIndex - 1] === haystack[haystackStart + rightIndex - 1] ? 0 : 1
       const value = Math.min(previous[rightIndex]! + 1, current[rightIndex - 1]! + 1, previous[rightIndex - 1]! + cost)
       current.push(value)
       rowMinimum = Math.min(rowMinimum, value)
@@ -83,7 +87,36 @@ function editDistance(left: string[], right: string[]): number {
     if (rowMinimum > 1) return rowMinimum
     previous = current
   }
-  return previous[right.length]!
+  return previous[length]!
+}
+
+export interface SearchResultRank {
+  score: number
+  role: 'user' | 'assistant'
+}
+
+/** Maintains a fixed-size, score-sorted set of the best message search results. */
+export function insertTopSearchResult<T extends SearchResultRank>(
+  results: T[],
+  candidate: T,
+  maxResults: number,
+): void {
+  if (maxResults <= 0) return
+
+  const candidateRoleScore = candidate.role === 'user' ? 0 : 1
+  const insertAt = results.findIndex((result) => {
+    const resultRoleScore = result.role === 'user' ? 0 : 1
+    return candidate.score > result.score
+      || (candidate.score === result.score && candidateRoleScore < resultRoleScore)
+  })
+
+  if (insertAt < 0) {
+    if (results.length < maxResults) results.push(candidate)
+  } else {
+    results.splice(insertAt, 0, candidate)
+  }
+
+  if (results.length > maxResults) results.pop()
 }
 
 /**
@@ -114,9 +147,9 @@ export function findBestSearchMatch(text: string, query: string): SearchMatch | 
 
   for (let length = Math.max(2, needle.length - 1); length <= needle.length + 1; length++) {
     if (length > haystack.length) continue
-    const lastStart = Math.min(haystack.length - length, MAX_FUZZY_WINDOW_STARTS - 1)
+    const lastStart = haystack.length - length
     for (let haystackStart = 0; haystackStart <= lastStart; haystackStart++) {
-      if (editDistance(needle, haystack.slice(haystackStart, haystackStart + length)) > 1) continue
+      if (editDistanceAt(needle, haystack, haystackStart, length) > 1) continue
       const candidate = buildMatch(normalizedHaystack, haystackStart, length, 650 - Math.abs(needle.length - length) * 20, 'fuzzy')
       if (!best || candidate.score > best.score) best = candidate
     }

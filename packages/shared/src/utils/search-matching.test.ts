@@ -20,6 +20,15 @@ describe('search matching', () => {
     expect(findBestSearchMatch('这是搜索优先方案', '搜索优化方案')?.kind).toBe('fuzzy')
   })
 
+  test('fuzzy 匹配覆盖正文前 2000 个字符之后的位置', () => {
+    const text = `${'前'.repeat(2_100)}搜索优方案`
+
+    expect(findBestSearchMatch(text, '搜索优化方案')).toMatchObject({
+      kind: 'fuzzy',
+      matchStart: 2_100,
+    })
+  })
+
   test('匹配忽略大小写、全角形式、空格和常见标点', () => {
     expect(findBestSearchMatch('Use SearchDialog now', 'ｓｅａｒｃｈ　ｄｉａｌｏｇ')).toMatchObject({
       kind: 'exact',

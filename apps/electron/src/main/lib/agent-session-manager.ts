@@ -44,7 +44,7 @@ import type {
   AgentActiveWorktree,
   SessionWorkbenchLayout,
 } from '@proma/shared'
-import { migratePermissionMode, mergeSkillActivations, findBestSearchMatch } from '@proma/shared'
+import { migratePermissionMode, mergeSkillActivations, findBestSearchMatch, insertTopSearchResult } from '@proma/shared'
 import { getConversationMessages } from './conversation-manager'
 // 旧格式 → SDKMessage 的转换逻辑下沉到 @proma/session-core 作为唯一真源，避免主进程与渲染层各存一份。
 import { convertLegacyMessage } from '@proma/session-core'
@@ -1340,9 +1340,16 @@ async function findMatchesInAgentJsonl(
       const matchStart = match.matchStart - snippetStart + (snippetStart > 0 ? 3 : 0)
       const hit = { messageId, role, snippet, matchStart, matchLength: match.matchLength, score: match.score }
       if (messageId) {
-        hitsByMessageId.set(messageId, hit)
+        const existingHit = hitsByMessageId.get(messageId)
+        if (!existingHit) {
+          hitsByMessageId.set(messageId, hit)
+        } else {
+          const bestHit = [existingHit]
+          insertTopSearchResult(bestHit, hit, 1)
+          hitsByMessageId.set(messageId, bestHit[0]!)
+        }
       } else {
-        anonymousHits.push(hit)
+        insertTopSearchResult(anonymousHits, hit, MAX_SEARCH_HITS_PER_SESSION)
       }
     }
   } finally {
@@ -1350,12 +1357,14 @@ async function findMatchesInAgentJsonl(
     stream.destroy()
   }
 
-  const hits = [...hitsByMessageId.values(), ...anonymousHits]
-  return hits.sort((a, b) => {
-    const roleScore = (value: AgentSearchHit['role']): number => value === 'user' ? 0 : 1
-    return b.score - a.score
-      || roleScore(a.role) - roleScore(b.role)
-  })
+  const hits: AgentSearchHit[] = []
+  for (const hit of hitsByMessageId.values()) {
+    insertTopSearchResult(hits, hit, MAX_SEARCH_HITS_PER_SESSION)
+  }
+  for (const hit of anonymousHits) {
+    insertTopSearchResult(hits, hit, MAX_SEARCH_HITS_PER_SESSION)
+  }
+  return hits
 }
 
 /**

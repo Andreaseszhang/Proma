@@ -335,6 +335,47 @@ describe('Agent 会话正文搜索', () => {
     expect(results.every((result) => result.role === 'user' || result.role === 'assistant')).toBe(true)
   })
 
+  test('Given 单会话中有多个不同质量的命中 When 搜索 Then 只保留两条最佳结果并让 user 同分优先', async () => {
+    writeAgentSessionsIndex([{
+      id: 'ranked-search-session',
+      title: '排序搜索测试',
+      workspaceId: 'workspace-a',
+      createdAt: 1,
+      updatedAt: 1,
+    }])
+    writeAgentSessionJsonl('ranked-search-session', [
+      JSON.stringify({ type: 'assistant', uuid: 'fuzzy', message: { content: [{ type: 'text', text: '搜索优方案' }] } }),
+      JSON.stringify({ type: 'assistant', uuid: 'fragment', message: { content: [{ type: 'text', text: '搜索优化内容' }] } }),
+      JSON.stringify({ type: 'assistant', uuid: 'assistant-exact', message: { content: [{ type: 'text', text: '搜索优化方案' }] } }),
+      JSON.stringify({ type: 'user', uuid: 'user-exact', message: { content: [{ type: 'text', text: '搜索优化方案' }] } }),
+    ])
+
+    const results = await manager.searchAgentSessionMessages('搜索优化方案')
+
+    expect(results.map((result) => result.messageId)).toEqual(['user-exact', 'assistant-exact'])
+    expect(results.map((result) => result.role)).toEqual(['user', 'assistant'])
+  })
+
+  test('Given 重复的 Agent SDK snapshot When 搜索 Then 每个 messageId 只返回最佳命中一次', async () => {
+    writeAgentSessionsIndex([{
+      id: 'deduplicated-search-session',
+      title: '去重搜索测试',
+      workspaceId: 'workspace-a',
+      createdAt: 1,
+      updatedAt: 1,
+    }])
+    writeAgentSessionJsonl('deduplicated-search-session', [
+      JSON.stringify({ type: 'assistant', uuid: 'duplicate', message: { content: [{ type: 'text', text: '搜索优方案' }] } }),
+      JSON.stringify({ type: 'assistant', uuid: 'duplicate', message: { content: [{ type: 'text', text: '搜索优化方案' }] } }),
+      JSON.stringify({ type: 'user', uuid: 'user-exact', message: { content: [{ type: 'text', text: '搜索优化方案' }] } }),
+    ])
+
+    const results = await manager.searchAgentSessionMessages('搜索优化方案')
+
+    expect(results.map((result) => result.messageId)).toEqual(['user-exact', 'duplicate'])
+    expect(results).toHaveLength(2)
+  })
+
   test('Given 超过 100 个命中会话 When 搜索 Then 最多返回 100 个会话且每个最多两个命中', async () => {
     const sessions = createIndexedSessions(101)
     writeAgentSessionsIndex(sessions)

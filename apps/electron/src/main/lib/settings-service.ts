@@ -39,6 +39,7 @@ export function getSettings(): AppSettings {
       windowsShellPreference: 'auto',
       agentThinking: { type: 'adaptive' },
       gitAttributionEnabled: true,
+      browserAutoOpenPanelEnabled: true,
     }
   }
 
@@ -72,6 +73,7 @@ export function getSettings(): AppSettings {
       agentThinking: settings.agentThinking ?? { type: 'adaptive' },
       // 缺省 true：老配置文件未写该字段时保持推广默认开启
       gitAttributionEnabled: settings.gitAttributionEnabled ?? true,
+      browserAutoOpenPanelEnabled: settings.browserAutoOpenPanelEnabled ?? true,
       // 仅保留 macOS 原生 Island 开关；清理旧非原生 surface 的持久化残留字段。
       agentIsland: sanitizeAgentIslandSettings(data.agentIsland),
     }
@@ -91,6 +93,7 @@ export function getSettings(): AppSettings {
       windowsShellPreference: 'auto',
       agentThinking: { type: 'adaptive' },
       gitAttributionEnabled: true,
+      browserAutoOpenPanelEnabled: true,
     }
   }
 }

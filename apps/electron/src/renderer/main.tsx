@@ -56,6 +56,7 @@ import {
   longTextPasteAsAttachmentEnabledAtom,
   richTextRenderingEnabledAtom,
   sessionHoverPreviewEnabledAtom,
+  browserAutoOpenPanelEnabledAtom,
   initializeUiPreferences,
 } from './atoms/ui-preferences'
 import {
@@ -615,15 +616,17 @@ function UiPreferencesInitializer(): null {
   const setLongTextPasteAsAttachmentEnabled = useSetAtom(longTextPasteAsAttachmentEnabledAtom)
   const setRichTextRenderingEnabled = useSetAtom(richTextRenderingEnabledAtom)
   const setSessionHoverPreviewEnabled = useSetAtom(sessionHoverPreviewEnabledAtom)
+  const setBrowserAutoOpenPanelEnabled = useSetAtom(browserAutoOpenPanelEnabledAtom)
 
   useEffect(() => {
     initializeUiPreferences(
       setStickyUserMessageEnabled,
       setLongTextPasteAsAttachmentEnabled,
       setRichTextRenderingEnabled,
-      setSessionHoverPreviewEnabled
+      setSessionHoverPreviewEnabled,
+      setBrowserAutoOpenPanelEnabled
     )
-  }, [setStickyUserMessageEnabled, setLongTextPasteAsAttachmentEnabled, setRichTextRenderingEnabled, setSessionHoverPreviewEnabled])
+  }, [setStickyUserMessageEnabled, setLongTextPasteAsAttachmentEnabled, setRichTextRenderingEnabled, setSessionHoverPreviewEnabled, setBrowserAutoOpenPanelEnabled])
 
   return null
 }

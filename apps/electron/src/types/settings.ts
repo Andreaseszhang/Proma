@@ -361,6 +361,12 @@ export interface AppSettings {
    * 关闭后不注入任何 Proma 归因，并覆盖 Claude SDK 默认 Co-Authored-By。
    */
   gitAttributionEnabled?: boolean
+  /**
+   * Agent 使用受管浏览器时是否自动展开浏览器面板。
+   * 默认 true：Agent 导航/操作网页时自动打开右侧浏览器面板以便观察。
+   * 关闭后面板保持当前状态，需从工具栏按钮手动打开。
+   */
+  browserAutoOpenPanelEnabled?: boolean
   /** macOS 原生 Agent 灵动岛偏好。 */
   agentIsland?: AgentIslandSettings
   /** 主窗口状态（大小、位置、是否最大化） */

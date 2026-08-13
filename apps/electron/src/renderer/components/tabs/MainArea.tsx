@@ -33,6 +33,7 @@ import { activeViewAtom } from '@/atoms/active-view'
 import { interfaceVariantAtom } from '@/atoms/theme'
 import { cn } from '@/lib/utils'
 import { browserPanelOpenMapAtom, browserPendingNavigationMapAtom, browserStateMapAtom } from '@/atoms/browser-atoms'
+import { browserAutoOpenPanelEnabledAtom } from '@/atoms/ui-preferences'
 import { BrowserPanel } from '@/components/browser/BrowserPanel'
 
 export function MainArea(): React.ReactElement {
@@ -57,6 +58,7 @@ export function MainArea(): React.ReactElement {
   const previewOpenMap = useAtomValue(previewPanelOpenMapAtom)
   const [browserOpenMap, setBrowserOpenMap] = useAtom(browserPanelOpenMapAtom)
   const [browserStateMap, setBrowserStateMap] = useAtom(browserStateMapAtom)
+  const browserAutoOpenPanelEnabled = useAtomValue(browserAutoOpenPanelEnabledAtom)
   const setPendingNavigationMap = useSetAtom(browserPendingNavigationMapAtom)
   const [splitRatio, setSplitRatio] = useAtom(previewSplitRatioAtom)
   const [rightWorkspaceRatio, setRightWorkspaceRatio] = useAtom(rightWorkspaceSplitRatioAtom)
@@ -66,8 +68,12 @@ export function MainArea(): React.ReactElement {
 
   const publishBrowserState = React.useCallback((state: BrowserViewState) => {
     setBrowserStateMap((previous) => { const next = new Map(previous); next.set(state.sessionId, state); return next })
-    setBrowserOpenMap((previous) => { const next = new Map(previous); next.set(state.sessionId, true); return next })
-  }, [setBrowserOpenMap, setBrowserStateMap])
+    // 用户关闭“自动展开面板”后，仅同步状态数据，不再把浏览器面板强行拉起；
+    // 面板的打开与否完全交给用户从工具栏手动控制。
+    if (browserAutoOpenPanelEnabled) {
+      setBrowserOpenMap((previous) => { const next = new Map(previous); next.set(state.sessionId, true); return next })
+    }
+  }, [setBrowserOpenMap, setBrowserStateMap, browserAutoOpenPanelEnabled])
 
   React.useEffect(() => {
     // Vite renderer 可在 preload 热重载前先更新；旧 bridge 时浏览器功能不可用，

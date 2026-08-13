@@ -42,10 +42,12 @@ import {
   richTextRenderingEnabledAtom,
   stickyUserMessageEnabledAtom,
   sessionHoverPreviewEnabledAtom,
+  browserAutoOpenPanelEnabledAtom,
   updateLongTextPasteAsAttachmentEnabled,
   updateRichTextRenderingEnabled,
   updateStickyUserMessageEnabled,
   updateSessionHoverPreviewEnabled,
+  updateBrowserAutoOpenPanelEnabled,
 } from '@/atoms/ui-preferences'
 import { cn } from '@/lib/utils'
 import { detectIsMac } from '@/lib/platform'
@@ -71,6 +73,7 @@ export function GeneralSettings(): React.ReactElement {
   const [longTextPasteAsAttachmentEnabled, setLongTextPasteAsAttachmentEnabled] = useAtom(longTextPasteAsAttachmentEnabledAtom)
   const [richTextRenderingEnabled, setRichTextRenderingEnabled] = useAtom(richTextRenderingEnabledAtom)
   const [sessionHoverPreviewEnabled, setSessionHoverPreviewEnabled] = useAtom(sessionHoverPreviewEnabledAtom)
+  const [browserAutoOpenPanelEnabled, setBrowserAutoOpenPanelEnabled] = useAtom(browserAutoOpenPanelEnabledAtom)
   const [isEditingName, setIsEditingName] = React.useState(false)
   const [nameInput, setNameInput] = React.useState(userProfile.userName)
   const [showEmojiPicker, setShowEmojiPicker] = React.useState(false)
@@ -392,6 +395,15 @@ export function GeneralSettings(): React.ReactElement {
             onCheckedChange={(checked) => {
               setSessionHoverPreviewEnabled(checked)
               updateSessionHoverPreviewEnabled(checked)
+            }}
+          />
+          <SettingsToggle
+            label="浏览器自动展开面板"
+            description="Agent 使用受管浏览器访问网页时，自动展开右侧浏览器面板；关闭后需从会话工具栏手动打开"
+            checked={browserAutoOpenPanelEnabled}
+            onCheckedChange={(checked) => {
+              setBrowserAutoOpenPanelEnabled(checked)
+              updateBrowserAutoOpenPanelEnabled(checked)
             }}
           />
           {isMac && (

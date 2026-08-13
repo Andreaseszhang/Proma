@@ -20,6 +20,9 @@ export const richTextRenderingEnabledAtom = atom<boolean>(false)
 /** 左侧会话列表悬浮预览迷你地图（默认关闭，需手动开启） */
 export const sessionHoverPreviewEnabledAtom = atom<boolean>(false)
 
+/** Agent 使用受管浏览器时是否自动展开浏览器面板（默认开启） */
+export const browserAutoOpenPanelEnabledAtom = atom<boolean>(true)
+
 // ===== 初始化 =====
 
 /**
@@ -29,7 +32,8 @@ export async function initializeUiPreferences(
   setStickyUserMessageEnabled: (enabled: boolean) => void,
   setLongTextPasteAsAttachmentEnabled?: (enabled: boolean) => void,
   setRichTextRenderingEnabled?: (enabled: boolean) => void,
-  setSessionHoverPreviewEnabled?: (enabled: boolean) => void
+  setSessionHoverPreviewEnabled?: (enabled: boolean) => void,
+  setBrowserAutoOpenPanelEnabled?: (enabled: boolean) => void
 ): Promise<void> {
   try {
     const settings = await window.electronAPI.getSettings()
@@ -37,6 +41,7 @@ export async function initializeUiPreferences(
     setLongTextPasteAsAttachmentEnabled?.(settings.longTextPasteAsAttachmentEnabled ?? false)
     setRichTextRenderingEnabled?.(settings.richTextRenderingEnabled ?? false)
     setSessionHoverPreviewEnabled?.(settings.sessionHoverPreviewEnabled ?? false)
+    setBrowserAutoOpenPanelEnabled?.(settings.browserAutoOpenPanelEnabled ?? true)
   } catch (error) {
     console.error('[UI偏好] 初始化失败:', error)
   }
@@ -85,5 +90,16 @@ export async function updateSessionHoverPreviewEnabled(enabled: boolean): Promis
     await window.electronAPI.updateSettings({ sessionHoverPreviewEnabled: enabled })
   } catch (error) {
     console.error('[UI偏好] 更新会话悬浮预览设置失败:', error)
+  }
+}
+
+/**
+ * 更新 Agent 浏览器自动展开面板开关并持久化
+ */
+export async function updateBrowserAutoOpenPanelEnabled(enabled: boolean): Promise<void> {
+  try {
+    await window.electronAPI.updateSettings({ browserAutoOpenPanelEnabled: enabled })
+  } catch (error) {
+    console.error('[UI偏好] 更新浏览器自动展开面板设置失败:', error)
   }
 }

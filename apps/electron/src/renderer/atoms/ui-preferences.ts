@@ -23,6 +23,9 @@ export const sessionHoverPreviewEnabledAtom = atom<boolean>(false)
 /** Agent 使用受管浏览器时是否自动展开浏览器面板（默认开启） */
 export const browserAutoOpenPanelEnabledAtom = atom<boolean>(true)
 
+/** 浏览器自动展开设置是否已从主进程加载完成。 */
+export const browserAutoOpenPanelReadyAtom = atom<boolean>(false)
+
 // ===== 初始化 =====
 
 /**
@@ -33,7 +36,8 @@ export async function initializeUiPreferences(
   setLongTextPasteAsAttachmentEnabled?: (enabled: boolean) => void,
   setRichTextRenderingEnabled?: (enabled: boolean) => void,
   setSessionHoverPreviewEnabled?: (enabled: boolean) => void,
-  setBrowserAutoOpenPanelEnabled?: (enabled: boolean) => void
+  setBrowserAutoOpenPanelEnabled?: (enabled: boolean) => void,
+  setBrowserAutoOpenPanelReady?: (ready: boolean) => void
 ): Promise<void> {
   try {
     const settings = await window.electronAPI.getSettings()
@@ -44,6 +48,8 @@ export async function initializeUiPreferences(
     setBrowserAutoOpenPanelEnabled?.(settings.browserAutoOpenPanelEnabled ?? true)
   } catch (error) {
     console.error('[UI偏好] 初始化失败:', error)
+  } finally {
+    setBrowserAutoOpenPanelReady?.(true)
   }
 }
 

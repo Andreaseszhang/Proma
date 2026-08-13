@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { buildAssistantTurnRenderItems, buildProcessGroupToolNames } from './ProcessBlockGroup'
+import { buildAssistantTurnRenderItems, buildProcessGroupToolNames, getStreamingTurnPreview } from './ProcessBlockGroup'
 import type { SDKContentBlock } from '@proma/shared'
 
 const tool = (id: string, name = 'Read'): SDKContentBlock => ({
@@ -129,6 +129,40 @@ describe('Agent 过程块折叠分组', () => {
     if (items[0]?.type === 'process-group') {
       expect(items[0].items.map((item) => item.index)).toEqual([0, 1])
     }
+  })
+
+  test('given a long streaming text block when building a preview then keeps only its latest tail', () => {
+    const value = `${'a'.repeat(700)}tail`
+
+    const preview = getStreamingTurnPreview([text(value)])
+
+    expect(preview).toBe(`…${value.slice(-600)}`)
+    expect(preview.endsWith('tail')).toBe(true)
+  })
+
+  test('given process blocks followed by text when building a streaming preview then uses the latest non-empty text', () => {
+    const preview = getStreamingTurnPreview([
+      thinking(),
+      tool('tool-1'),
+      text(''),
+      text('最新输出'),
+    ])
+
+    expect(preview).toBe('最新输出')
+  })
+
+  test('given no text block when building a streaming preview then returns an empty preview', () => {
+    expect(getStreamingTurnPreview([thinking(), tool('tool-1')])).toBe('')
+  })
+
+  test('given a Unicode supplementary character at the truncation boundary then keeps the character intact', () => {
+    const value = `${'a'.repeat(599)}😀${'b'.repeat(599)}`
+
+    const preview = getStreamingTurnPreview([text(value)])
+
+    expect(preview).toStartWith('…😀')
+    expect(preview).not.toContain('�')
+    expect(Array.from(preview.slice(1))).toHaveLength(600)
   })
 
   test('given repeated tools when building capability icons then returns unique tool names in order', () => {

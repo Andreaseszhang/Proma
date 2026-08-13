@@ -192,8 +192,10 @@ export class BrowserController {
   private owner: BrowserWindow | null = null
   private readonly sessions = new Map<string, BrowserSessionRecord>()
   private readonly configurations = new Map<string, BrowserSessionConfiguration>()
-  /** Electron persistent partition 生命周期长于 Agent session；同一 Session 只安装一次 guard。 */
+  /** Electron persistent partition 生命周期长于 Agent session；同一 Session 只安装一次网络 guard。 */
   private readonly guardedSessions = new WeakSet<Session>()
+  /** 下载事件属于 Electron Session，不能随 Proma 会话重复注册或闭包捕获已关闭的会话。 */
+  private readonly downloadGuardedSessions = new WeakSet<Session>()
   /** 自定义 partition 不继承 default session 的协议处理器，必须单独注册本地预览协议。 */
   private readonly previewProtocolSessions = new WeakSet<Session>()
   /** 跨 Session 的唯一原生 WebContentsView 前台所有权。 */
@@ -432,9 +434,22 @@ export class BrowserController {
     })
   }
 
-  private installDownloadGuard(record: BrowserSessionRecord): void {
-    record.browserSession.on('will-download', (_event, item, webContents) => {
-      this.handleDownload(record, item, webContents)
+  /**
+   * 下载事件属于 Electron Session，而 workspace profile 会被多个 Proma 会话复用。
+   * 因而监听器只注册一次；每次触发时再用 WebContents 找到仍存活的来源 tab，避免
+   * 关闭会话遗留的 handler 重复 pause/resume/cancel 同一个 DownloadItem。
+   */
+  private installDownloadGuard(electronBrowserSession: Session): void {
+    if (this.downloadGuardedSessions.has(electronBrowserSession)) return
+    this.downloadGuardedSessions.add(electronBrowserSession)
+    electronBrowserSession.on('will-download', (_event, item, webContents) => {
+      const origin = this.findManagedDownloadOrigin(electronBrowserSession, webContents)
+      // 同 partition 中若存在非受管来源，默认拒绝，不能绕过受管浏览器的下载边界。
+      if (!origin) {
+        item.cancel()
+        return
+      }
+      this.handleDownload(origin.browserSession, origin.tab, item)
     })
   }
 
@@ -443,34 +458,41 @@ export class BrowserController {
    * Electron 会在 will-download 回调返回后立即决定是否显示 Save As，因此必须同步
    * setSavePath；随后暂停下载进行异步 DNS 校验，安全后才 resume，失败则 cancel。
    */
-  private handleDownload(browserSession: BrowserSessionRecord, item: DownloadItem, webContents: WebContents): void {
+  private handleDownload(browserSession: BrowserSessionRecord, tab: BrowserTabRecord, item: DownloadItem): void {
     const url = item.getURL()
     const filename = sanitizeDownloadFilename(item.getFilename())
-    const tab = this.findTabByWebContents(browserSession, webContents)
     item.setSavePath(path.join(app.getPath('downloads'), filename))
     item.pause()
     item.once('done', (_event, state) => {
-      if (!tab) return
+      if (!this.isManagedTabCurrent(browserSession, tab)) return
       if (state === 'completed') this.trace(browserSession, tab, 'download', `已下载 ${filename}`, 'verified')
       else this.trace(browserSession, tab, 'download', `下载 ${filename} 未完成（${state}）`, 'failed')
     })
     void assertSafeBrowserDownloadUrl(url)
       .then(() => {
-        if (tab) this.trace(browserSession, tab, 'download', `下载 ${filename} 到「下载」目录`, 'dispatched')
+        if (this.isManagedTabCurrent(browserSession, tab)) this.trace(browserSession, tab, 'download', `下载 ${filename} 到「下载」目录`, 'dispatched')
+        // 已通过校验的下载在来源 tab 被关闭后仍可继续，符合浏览器的常规下载行为。
         item.resume()
       })
       .catch(() => {
         item.cancel()
-        if (tab) this.trace(browserSession, tab, 'download', '已阻止不安全或不受支持的下载', 'failed')
+        if (this.isManagedTabCurrent(browserSession, tab)) this.trace(browserSession, tab, 'download', '已阻止不安全或不受支持的下载', 'failed')
       })
   }
 
-  /** 通过触发下载的 WebContents 反查所属 tab，用于写入脱敏账本；找不到时仍照常处理下载。 */
-  private findTabByWebContents(browserSession: BrowserSessionRecord, webContents: WebContents): BrowserTabRecord | null {
-    for (const tab of browserSession.tabs.values()) {
-      if (!tab.view.webContents.isDestroyed() && tab.view.webContents === webContents) return tab
+  /** 从共享 Electron Session 的所有当前 Proma 会话中定位下载来源，绝不保留过期会话引用。 */
+  private findManagedDownloadOrigin(electronBrowserSession: Session, webContents: WebContents): { browserSession: BrowserSessionRecord; tab: BrowserTabRecord } | null {
+    for (const browserSession of this.sessions.values()) {
+      if (browserSession.browserSession !== electronBrowserSession) continue
+      for (const tab of browserSession.tabs.values()) {
+        if (!tab.view.webContents.isDestroyed() && tab.view.webContents === webContents) return { browserSession, tab }
+      }
     }
     return null
+  }
+
+  private isManagedTabCurrent(browserSession: BrowserSessionRecord, tab: BrowserTabRecord): boolean {
+    return this.sessions.get(browserSession.sessionId) === browserSession && browserSession.tabs.get(tab.tabId) === tab
   }
 
   private installPreviewProtocol(browserSession: Session): void {
@@ -504,7 +526,7 @@ export class BrowserController {
     this.installSessionGuards(browserSession)
     this.installPreviewProtocol(browserSession)
     this.sessions.set(sessionId, record)
-    this.installDownloadGuard(record)
+    this.installDownloadGuard(browserSession)
     return record
   }
 

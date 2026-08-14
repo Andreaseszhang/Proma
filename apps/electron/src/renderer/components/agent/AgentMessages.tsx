@@ -304,12 +304,12 @@ function EmptyState(): React.ReactElement {
   return <WelcomeEmptyState />
 }
 
-function AssistantLogo({ model }: { model?: string }): React.ReactElement {
+function AssistantLogo({ model, channelId }: { model?: string; channelId?: string }): React.ReactElement {
   const channels = useAtomValue(channelsAtom)
   if (model) {
     return (
       <img
-        src={getModelLogo(model, resolveModelProvider(model, channels))}
+        src={getModelLogo(model, resolveModelProvider(model, channels, channelId))}
         alt={model}
         className="size-[35px] rounded-[25%] object-cover"
       />
@@ -714,7 +714,10 @@ export const AgentMessages = React.memo(function AgentMessages({
   // 从 streamState 属性中计算派生值
   const streamingContent = streamState?.content ?? ''
   const streamingModelId = streamState?.model || sessionModelId
-  const agentStreamingModel = streamingModelId ? resolveModelDisplayName(streamingModelId, channels) : undefined
+  const streamingChannelId = streamState?.channelId
+  const agentStreamingModel = streamingModelId
+    ? resolveModelDisplayName(streamingModelId, channels, streamingChannelId)
+    : undefined
   const retrying = streamState?.retrying
   const startedAt = streamState?.startedAt
 
@@ -873,6 +876,7 @@ export const AgentMessages = React.memo(function AgentMessages({
       preview: getGroupPreview(group),
       avatar: group.type === 'user' ? userProfile.avatar : undefined,
       model: group.type === 'assistant-turn' ? group.model : undefined,
+      channelId: group.type === 'assistant-turn' ? group.channelId : undefined,
     })),
     [visibleGroups, userProfile.avatar]
   )
@@ -1008,7 +1012,7 @@ export const AgentMessages = React.memo(function AgentMessages({
                   <MessageHeader
                     model={agentStreamingModel}
                     time={formatMessageTime(Date.now())}
-                    logo={<AssistantLogo model={streamingModelId} />}
+                    logo={<AssistantLogo model={streamingModelId} channelId={streamingChannelId} />}
                   />
                   <MessageContent>
                     {retrying && <RetryingNotice retrying={retrying} />}

@@ -22,7 +22,6 @@ import {
 import { ScrollMinimap } from '@/components/ai-elements/scroll-minimap'
 import type { MinimapItem } from '@/components/ai-elements/scroll-minimap'
 import { StickyUserMessage } from '@/components/ai-elements/sticky-user-message'
-import { useSmoothStream } from '@proma/ui'
 import { formatMessageTime } from '@/components/chat/ChatMessageItem'
 import { getModelLogo, resolveModelDisplayName, resolveModelProvider } from '@/lib/model-logo'
 import { userProfileAtom } from '@/atoms/user-profile'
@@ -32,17 +31,16 @@ import { ScrollPositionManager } from '@/hooks/useScrollPositionMemory'
 import { cn } from '@/lib/utils'
 import { Spinner } from '@/components/ui/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { groupIntoTurns, MessageGroupRenderer, getGroupId, getGroupPreview, extractUserText, parseAttachedFiles as sdkParseAttachedFiles, isImageFile as sdkIsImageFile, buildTaskProgressDataForTurn, type MessageGroup } from './SDKMessageRenderer'
+import { groupIntoTurns, MessageGroupRenderer, getGroupId, getGroupPreview, extractUserText, parseAttachedFiles as sdkParseAttachedFiles, isImageFile as sdkIsImageFile, buildTaskProgressDataForTurn, type AssistantTurn, type MessageGroup } from './SDKMessageRenderer'
 import { buildLiveGroupSet } from './live-group-set'
-import { ContentBlock } from './ContentBlock'
 import { AgentBrowserLinkProvider } from '@/components/browser/AgentBrowserLinkProvider'
-import { parseThinkTagsFromText } from './thinking-tag-parser'
 import { AgentHistorySelectionLayer } from './AgentHistorySelectionLayer'
 import { TaskProgressOverlay, type ContextCompactionProgress } from './TaskProgressOverlay'
 import { createMessageGroupRenderCache, groupMessagesForRendering } from './message-group-rendering'
+import { useAgentLiveTranscriptMessages } from '@/lib/agent-live-transcript-store'
 import type { AgentEventUsage, RetryAttempt, SDKMessage, SDKSystemMessage } from '@proma/shared'
 import { getSDKCompactStatus } from '@proma/shared'
-import { agentLiveMessagesAtomFamily, agentSessionStreamingStateAtomFamily, type AgentStreamState } from '@/atoms/agent-atoms'
+import { agentLiveMessagesAtomFamily, agentSessionMessagesStreamStateAtomFamily, type AgentStreamState } from '@/atoms/agent-atoms'
 import type { QuotedSelection } from '@/atoms/preview-atoms'
 
 const EMPTY_SDK_MESSAGES: SDKMessage[] = []
@@ -590,6 +588,177 @@ function AgentRunningIndicator({ startedAt }: { startedAt?: number }): React.Rea
   )
 }
 
+interface AgentTranscriptTailProps {
+  sessionId: string
+  sessionModelId?: string
+  finalGroup?: AssistantTurn
+  finalGroupStreaming: boolean
+  /** 运行中在当前 partial 之后注入、但尚未等到前一 assistant stable final 的用户边界。 */
+  pendingBoundaryGroups: MessageGroup[]
+  groupHistoryTurns: Map<MessageGroup, number>
+  allMessages: SDKMessage[]
+  externalMetadataSignature: string
+  basePath?: string
+  historyTurn: number
+  running: boolean
+  retrying?: AgentStreamState['retrying']
+  startedAt?: number
+  suppressRunning: boolean
+  streamingModel?: string
+  streamingModelId?: string
+  streamingChannelId?: string
+  stoppedByUser?: boolean
+  onFork?: (upToMessageUuid: string) => void
+  onRewind?: (assistantMessageUuid: string) => void
+  onAgentHistoryQuoteClick?: (quote: QuotedSelection) => void
+  onCreateTodo?: (text: string) => void
+  onRetry?: () => void
+  onRetryInNewSession?: () => void
+  onCompact?: () => void
+  onRelinkProjectRoot?: () => void
+  onRestoreProjectRoot?: () => void
+}
+
+function mergeAssistantTurns(finalGroup: AssistantTurn, previewGroup: AssistantTurn): AssistantTurn {
+  return {
+    ...finalGroup,
+    assistantMessages: [...finalGroup.assistantMessages, ...previewGroup.assistantMessages],
+    turnMessages: [...finalGroup.turnMessages, ...previewGroup.turnMessages],
+    model: previewGroup.model ?? finalGroup.model,
+    channelId: previewGroup.channelId ?? finalGroup.channelId,
+  }
+}
+
+/**
+ * 当前 turn 的唯一 React 槽位。partial → final 始终在这里替换，避免跨父节点重挂载。
+ * 高频 canonical store 也只在这个子树中订阅。
+ */
+const AgentTranscriptTail = React.memo(function AgentTranscriptTail({
+  sessionId,
+  sessionModelId,
+  finalGroup,
+  finalGroupStreaming,
+  pendingBoundaryGroups,
+  groupHistoryTurns,
+  allMessages,
+  externalMetadataSignature,
+  basePath,
+  historyTurn,
+  running,
+  retrying,
+  startedAt,
+  suppressRunning,
+  streamingModel,
+  streamingModelId,
+  streamingChannelId,
+  stoppedByUser,
+  onFork,
+  onRewind,
+  onAgentHistoryQuoteClick,
+  onCreateTodo,
+  onRetry,
+  onRetryInNewSession,
+  onCompact,
+  onRelinkProjectRoot,
+  onRestoreProjectRoot,
+}: AgentTranscriptTailProps): React.ReactElement | null {
+  const liveTranscriptMessages = useAgentLiveTranscriptMessages(sessionId)
+  const previewGroup = React.useMemo(
+    () => groupIntoTurns(liveTranscriptMessages, sessionModelId)
+      .findLast((group): group is AssistantTurn => group.type === 'assistant-turn'),
+    [liveTranscriptMessages, sessionModelId],
+  )
+  // 只有 finalGroup 已属于当前 live run 时才能与 preview 原地交接；external/headless
+  // run 在 user boundary 到达前不得把新回答并入上一轮历史 assistant。
+  const shouldMerge = Boolean(finalGroup && previewGroup && finalGroupStreaming)
+  const stablePreviousGroup = finalGroup && previewGroup && !shouldMerge ? finalGroup : undefined
+  const group = shouldMerge
+    ? mergeAssistantTurns(finalGroup!, previewGroup!)
+    : previewGroup ?? finalGroup
+  const isStreaming = previewGroup !== undefined || (finalGroupStreaming && !stablePreviousGroup)
+  const isErrorGroup = group?.assistantMessages.some((message) => !!message.error) ?? false
+  const disableActions = isStreaming && !isErrorGroup
+  const showRunningState = !suppressRunning && (running || retrying !== undefined)
+
+  if (!group && !showRunningState && pendingBoundaryGroups.length === 0) return null
+
+  return (
+    <>
+      {stablePreviousGroup && (
+        <MessageGroupRenderer
+          group={stablePreviousGroup}
+          allMessages={allMessages}
+          externalMetadataSignature={externalMetadataSignature}
+          basePath={basePath}
+          onFork={onFork}
+          onRewind={onRewind}
+          onAgentHistoryQuoteClick={onAgentHistoryQuoteClick}
+          onCreateTodo={onCreateTodo}
+          onRetry={onRetry}
+          onRetryInNewSession={onRetryInNewSession}
+          onCompact={onCompact}
+          onRelinkProjectRoot={onRelinkProjectRoot}
+          onRestoreProjectRoot={onRestoreProjectRoot}
+          historyTurn={historyTurn}
+          stoppedByUser={stoppedByUser || undefined}
+          sessionModelId={sessionModelId}
+        />
+      )}
+      {group && (
+        <MessageGroupRenderer
+          group={group}
+          allMessages={allMessages}
+          externalMetadataSignature={externalMetadataSignature}
+          basePath={basePath}
+          onFork={disableActions ? undefined : onFork}
+          onRewind={disableActions ? undefined : onRewind}
+          onAgentHistoryQuoteClick={onAgentHistoryQuoteClick}
+          onCreateTodo={disableActions ? undefined : onCreateTodo}
+          onRetry={disableActions ? undefined : onRetry}
+          onRetryInNewSession={disableActions ? undefined : onRetryInNewSession}
+          onCompact={disableActions ? undefined : onCompact}
+          onRelinkProjectRoot={disableActions ? undefined : onRelinkProjectRoot}
+          onRestoreProjectRoot={disableActions ? undefined : onRestoreProjectRoot}
+          historyTurn={stablePreviousGroup ? historyTurn + 1 : historyTurn}
+          isStreaming={isStreaming || undefined}
+          stoppedByUser={!isStreaming && stoppedByUser ? true : undefined}
+          sessionModelId={sessionModelId}
+        />
+      )}
+      {pendingBoundaryGroups.map((boundaryGroup, index) => (
+        <MessageGroupRenderer
+          key={getGroupId(boundaryGroup)}
+          group={boundaryGroup}
+          allMessages={EMPTY_SDK_MESSAGES}
+          externalMetadataSignature=""
+          basePath={basePath}
+          onAgentHistoryQuoteClick={onAgentHistoryQuoteClick}
+          historyTurn={groupHistoryTurns.get(boundaryGroup) ?? historyTurn + index + 1}
+          sessionModelId={sessionModelId}
+        />
+      ))}
+      {showRunningState && (group || pendingBoundaryGroups.length > 0 ? (
+        <div className="pl-[56px] min-h-[28px]">
+          {retrying && <RetryingNotice retrying={retrying} />}
+          {running && <AgentRunningIndicator startedAt={startedAt} />}
+        </div>
+      ) : (
+        <Message from="assistant">
+          <MessageHeader
+            model={streamingModel}
+            time={formatMessageTime(Date.now())}
+            logo={<AssistantLogo model={streamingModelId} channelId={streamingChannelId} />}
+          />
+          <MessageContent>
+            {retrying && <RetryingNotice retrying={retrying} />}
+            {running && <AgentRunningIndicator startedAt={startedAt} />}
+          </MessageContent>
+        </Message>
+      ))}
+    </>
+  )
+})
+
 export const AgentMessages = React.memo(function AgentMessages({
   sessionId,
   sessionModelId,
@@ -614,9 +783,9 @@ export const AgentMessages = React.memo(function AgentMessages({
   historyQuoteNavigation,
 }: AgentMessagesProps): React.ReactElement {
   // 高频 token/live message 状态在历史区内闭环，避免唤醒 AgentView 输入框和工具栏。
-  const streamState = useAtomValue(agentSessionStreamingStateAtomFamily(sessionId))
+  const streamState = useAtomValue(agentSessionMessagesStreamStateAtomFamily(sessionId))
   const liveMessages = useAtomValue(agentLiveMessagesAtomFamily(sessionId))
-  const streaming = streamState?.running ?? false
+  const streaming = streamState.running
   const userProfile = useAtomValue(userProfileAtom)
   const setMinimapCache = useSetAtom(tabMinimapCacheAtom)
   const channels = useAtomValue(channelsAtom)
@@ -694,7 +863,7 @@ export const AgentMessages = React.memo(function AgentMessages({
     if (messagesLoaded === false) return
 
     // 流式进行中且有实时内容 → 跳过 fade 直接显示
-    if (streaming && liveMessages && liveMessages.length > 0) {
+    if (streaming && (liveMessages?.length ?? 0) > 0) {
       setReady(true)
       return
     }
@@ -712,7 +881,6 @@ export const AgentMessages = React.memo(function AgentMessages({
   }, [streaming, liveMessages, persistedSDKMessages, messagesLoaded])
 
   // 从 streamState 属性中计算派生值
-  const streamingContent = streamState?.content ?? ''
   const streamingModelId = streamState?.model || sessionModelId
   const streamingChannelId = streamState?.channelId
   const agentStreamingModel = streamingModelId
@@ -720,22 +888,6 @@ export const AgentMessages = React.memo(function AgentMessages({
     : undefined
   const retrying = streamState?.retrying
   const startedAt = streamState?.startedAt
-
-  const { displayedContent: rawSmoothContent } = useSmoothStream({
-    content: streamingContent,
-    isStreaming: streaming,
-  })
-
-  // 防闪屏守卫：useSmoothStream 通过 useEffect 重置 displayedContent，比 render 晚一帧。
-  // 当 streamingContent 已清空但 smoothContent 仍持有旧值时，
-  // 会导致 fallback 气泡与持久化消息同时渲染一帧（重复内容闪烁）。
-  // 用原始 streamingContent 作为守卫：内容已清空且不在流式中，立即归零。
-  const smoothContent = (streaming || streamingContent) ? rawSmoothContent : ''
-  const smoothContentBlocks = React.useMemo(() => {
-    if (!smoothContent) return []
-    return parseThinkTagsFromText(smoothContent)
-  }, [smoothContent])
-  const hasSmoothTextContent = smoothContentBlocks.some((block) => block.type === 'text')
 
   /**
    * 流式完成过渡：streaming 结束到持久化消息加载完成之间，
@@ -750,7 +902,7 @@ export const AgentMessages = React.memo(function AgentMessages({
 
   // render-phase 判断：是否处于需要 instant resize 的过渡期
   // liveMessages 非空说明持久化消息还没加载完（加载完后会清空 liveMessages）
-  const needsInstant = !streaming && (!!streamingContent || !!smoothContent || (liveMessages != null && liveMessages.length > 0))
+  const needsInstant = !streaming && liveMessages != null && liveMessages.length > 0
 
   React.useEffect(() => {
     // 刚从 streaming → not-streaming：启动 cooldown
@@ -855,6 +1007,25 @@ export const AgentMessages = React.memo(function AgentMessages({
     () => allGroups.filter((group) => !isCompactionControlHistoryGroup(group)),
     [allGroups],
   )
+  // queue/interrupt 用户消息可能先于当前 partial 的 stable final 进入 Jotai。它们先从
+  // transcript 主序列拿出，交给稳定 tail 在 partial 之后渲染；final 到达后 listener 会
+  // 原位插入 assistant 并解除用户边界标记，下一次分组自然恢复 canonical 顺序。
+  const pendingBoundaryGroups = React.useMemo(
+    () => visibleGroups.filter((group) => group.type === 'user'
+      && (group.message as unknown as Record<string, unknown>)._promaPendingAfterLiveAssistant === true),
+    [visibleGroups],
+  )
+  const orderedVisibleGroups = React.useMemo(
+    () => pendingBoundaryGroups.length === 0
+      ? visibleGroups
+      : visibleGroups.filter((group) => !pendingBoundaryGroups.includes(group)),
+    [pendingBoundaryGroups, visibleGroups],
+  )
+  // 最后一条 assistant turn 永久使用独立 tail 槽位；partial → final 不跨父节点迁移。
+  const finalTailGroup = orderedVisibleGroups.at(-1)?.type === 'assistant-turn'
+    ? orderedVisibleGroups.at(-1) as AssistantTurn
+    : undefined
+  const transcriptGroups = finalTailGroup ? orderedVisibleGroups.slice(0, -1) : orderedVisibleGroups
 
   // 标记哪些 group 属于实时流式消息（用于 isStreaming / onFork 差异化渲染）
   const liveGroupSet = React.useMemo(() => {
@@ -866,9 +1037,13 @@ export const AgentMessages = React.memo(function AgentMessages({
     })
   }, [allGroups, liveMessages, streaming, streamState?.startedAt])
 
-  // 迷你地图数据 — 直接使用统一的 allGroups（无需去重）
+  const renderOrderedGroups = React.useMemo(
+    () => [...orderedVisibleGroups, ...pendingBoundaryGroups],
+    [orderedVisibleGroups, pendingBoundaryGroups],
+  )
+  // 迷你地图只追踪 immutable transcript，避免每个 token 更新 Tab 级缓存。
   const minimapItems: MinimapItem[] = React.useMemo(
-    () => visibleGroups.map((group) => ({
+    () => renderOrderedGroups.map((group) => ({
       id: getGroupId(group),
       role: group.type === 'user' ? 'user' as const
         : group.type === 'system' ? 'status' as const
@@ -878,7 +1053,7 @@ export const AgentMessages = React.memo(function AgentMessages({
       model: group.type === 'assistant-turn' ? group.model : undefined,
       channelId: group.type === 'assistant-turn' ? group.channelId : undefined,
     })),
-    [visibleGroups, userProfile.avatar]
+    [renderOrderedGroups, userProfile.avatar]
   )
 
   // 同步 minimap 缓存到 Tab 级别（供 Tab hover 预览使用）
@@ -894,7 +1069,7 @@ export const AgentMessages = React.memo(function AgentMessages({
 
   // 所有用户消息的数据 — 供 StickyUserMessage 使用
   const allUserMessagesData = React.useMemo(() => {
-    return visibleGroups
+    return renderOrderedGroups
       .filter((g): g is MessageGroup & { type: 'user' } => g.type === 'user')
       .map((g) => {
         const rawText = extractUserText(g.message) ?? ''
@@ -905,15 +1080,7 @@ export const AgentMessages = React.memo(function AgentMessages({
           attachments: files.map((f) => ({ filename: f.filename, isImage: sdkIsImageFile(f.filename) })),
         }
       })
-  }, [visibleGroups])
-
-  // 实时消息中是否已有可渲染的助手内容
-  // 流式中：通过 liveGroupSet 精确判断（只有 streaming 时 liveGroupSet 才非空）
-  // 流式结束后：直接检查 liveMessages 中是否有助手消息，
-  // 防止 streaming→false 到 liveMessages 被清除之间的过渡帧中 fallback 气泡重复渲染
-  const hasLiveAssistantContent = streaming
-    ? allGroups.some((g) => g.type === 'assistant-turn' && liveGroupSet.has(g))
-    : (liveMessages != null && liveMessages.some((m) => (m as { type: string }).type === 'assistant'))
+  }, [renderOrderedGroups])
 
   const messageBasePaths = React.useMemo(
     () => [sessionPath, ...(attachedDirs ?? [])].filter((path): path is string => Boolean(path)),
@@ -924,12 +1091,20 @@ export const AgentMessages = React.memo(function AgentMessages({
   const groupHistoryTurns = React.useMemo(() => {
     let turn = 0
     const turns = new Map<MessageGroup, number>()
-    for (const group of visibleGroups) {
+    for (const group of renderOrderedGroups) {
       if (group.type === 'user') turn += 1
       turns.set(group, Math.max(turn, 1))
     }
     return turns
-  }, [visibleGroups])
+  }, [renderOrderedGroups])
+  const firstPendingBoundaryTurn = pendingBoundaryGroups[0]
+    ? groupHistoryTurns.get(pendingBoundaryGroups[0])
+    : undefined
+  const tailHistoryTurn = finalTailGroup
+    ? (groupHistoryTurns.get(finalTailGroup) ?? Math.max(allUserMessagesData.length, 1))
+    : firstPendingBoundaryTurn != null
+      ? Math.max(firstPendingBoundaryTurn - 1, 1)
+      : Math.max(allUserMessagesData.length, 1)
 
   return (
     <BasePathsProvider basePaths={messageBasePaths}>
@@ -962,15 +1137,11 @@ export const AgentMessages = React.memo(function AgentMessages({
           ) : (
             <>
               {/* 统一消息渲染（持久化 + 实时合并为一个列表，确保 system 消息位置正确） */}
-              {visibleGroups.map((group, idx) => {
+              {transcriptGroups.map((group) => {
                 const isLive = liveGroupSet.has(group)
                 const isErrorGroup = group.type === 'assistant-turn'
                   && group.assistantMessages.some((m) => !!m.error)
                 const shouldDisableActions = isLive && !isErrorGroup
-                // 仅在最后一个 assistant-turn 上显示"已被用户中断" badge
-                const isLastAssistantTurn = !streaming && stoppedByUser
-                  && group.type === 'assistant-turn'
-                  && idx === visibleGroups.findLastIndex((g) => g.type === 'assistant-turn')
                 const renderer = (
                   <MessageGroupRenderer
                     group={group}
@@ -988,58 +1159,41 @@ export const AgentMessages = React.memo(function AgentMessages({
                     onCompact={shouldDisableActions ? undefined : onCompact}
                     historyTurn={groupHistoryTurns.get(group)}
                     isStreaming={isLive || undefined}
-                    stoppedByUser={isLastAssistantTurn || undefined}
                     sessionModelId={sessionModelId}
                   />
                 )
                 return <React.Fragment key={getGroupId(group)}>{renderer}</React.Fragment>
               })}
 
-              {/* 有实时助手内容时：显示运行指示器或占位（防止 streaming 结束到 Actions Bar 出现之间的高度跳动） */}
-              {/* 不使用 mt：ConversationContent 的 gap-1(4px) 已提供间距，
-                  匹配内部 MessageActions 的 gap-0.5(2px)+mt-0.5(2px)=4px 间距 */}
-              {hasLiveAssistantContent && !suppressAgentRunning && (
-                <div className="pl-[56px] min-h-[28px]">
-                  {retrying && <RetryingNotice retrying={retrying} />}
-                  {streaming && <AgentRunningIndicator startedAt={startedAt} />}
-                </div>
-              )}
-
-              {/* 无实时助手内容时：显示完整气泡（含头像/名称/时间） */}
-              {/* 注意：工具活动已通过 SDK 渲染路径（liveGroups）展示 */}
-              {!hasLiveAssistantContent && !suppressAgentRunning && (streaming || smoothContent || retrying) && (
-                <Message from="assistant">
-                  <MessageHeader
-                    model={agentStreamingModel}
-                    time={formatMessageTime(Date.now())}
-                    logo={<AssistantLogo model={streamingModelId} channelId={streamingChannelId} />}
-                  />
-                  <MessageContent>
-                    {retrying && <RetryingNotice retrying={retrying} />}
-                    {smoothContent ? (
-                      <>
-                        <div className={cn('space-y-2')}>
-                          {smoothContentBlocks.map((block, index) => (
-                            <ContentBlock
-                              key={index}
-                              block={block}
-                              allMessages={allSDKMessages}
-                              basePath={sessionPath || undefined}
-                              basePaths={attachedDirs}
-                              index={index}
-                              dimmed={hasSmoothTextContent && block.type !== 'text'}
-                              isStreaming={streaming}
-                            />
-                          ))}
-                        </div>
-                        {streaming && <AgentRunningIndicator startedAt={startedAt} />}
-                      </>
-                    ) : (
-                      streaming && <AgentRunningIndicator startedAt={startedAt} />
-                    )}
-                  </MessageContent>
-                </Message>
-              )}
+              <AgentTranscriptTail
+                sessionId={sessionId}
+                sessionModelId={sessionModelId}
+                finalGroup={finalTailGroup}
+                finalGroupStreaming={finalTailGroup ? liveGroupSet.has(finalTailGroup) : false}
+                pendingBoundaryGroups={pendingBoundaryGroups}
+                groupHistoryTurns={groupHistoryTurns}
+                allMessages={allSDKMessages}
+                externalMetadataSignature={taskNotificationSignature}
+                basePath={sessionPath || undefined}
+                historyTurn={tailHistoryTurn}
+                running={streaming}
+                retrying={retrying}
+                startedAt={startedAt}
+                suppressRunning={Boolean(suppressAgentRunning)}
+                streamingModel={agentStreamingModel}
+                streamingModelId={streamingModelId}
+                streamingChannelId={streamingChannelId}
+                stoppedByUser={!streaming && stoppedByUser}
+                onFork={onFork}
+                onRewind={onRewind}
+                onAgentHistoryQuoteClick={onAgentHistoryQuoteClick}
+                onCreateTodo={onCreateTodo}
+                onRetry={onRetry}
+                onRetryInNewSession={onRetryInNewSession}
+                onCompact={onCompact}
+                onRelinkProjectRoot={onRelinkProjectRoot}
+                onRestoreProjectRoot={onRestoreProjectRoot}
+              />
 
             </>
           )}

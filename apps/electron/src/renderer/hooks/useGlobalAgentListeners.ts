@@ -12,8 +12,6 @@ import { unstable_batchedUpdates } from 'react-dom'
 import { useStore } from 'jotai'
 import {
   agentStreamingStatesAtom,
-  agentSessionStreamingStateAtomFamily,
-  agentRunningSessionIdsAtom,
   agentStreamErrorsAtom,
   agentSessionMessageQueueAtom,
   agentSessionsAtom,
@@ -82,8 +80,7 @@ import { getPlanModeChangeFromToolName, updatePlanModeSessionSet } from '@/lib/a
 import { buildTodoAgentPrompt } from '@/lib/todo-agent-prompt'
 import { detectIsWindows } from '@/lib/platform'
 import { getSessionFileChangeKind, arePathsEqual, isPathWithinRoot, upsertSessionFileChange } from '@/lib/session-file-changes'
-import { buildQueuedMessageSendPayload, removeQueuedMessage, restoreQueuedMessageToFront, shouldAutoDispatchQueuedMessage } from '@/lib/agent-message-queue'
-import { buildQuotedSelectionBlock } from '@/lib/quoted-selection'
+import { removeQueuedMessage } from '@/lib/agent-message-queue'
 import { createAgentStreamEventBatcher } from '@/lib/agent-stream-event-batcher'
 
 /** 触发右侧文件浏览器自动定位的写入类工具集合 */
@@ -561,217 +558,41 @@ export function useGlobalAgentListeners(): void {
     /** 正在执行的 git 突变 Bash 命令：toolUseId → sessionId（完成后触发 diff 刷新） */
     const pendingGitMutateTools = new Map<string, string>()
 
-    const queuedDispatchInFlight = new Set<string>()
-    const queuedDispatchScheduled = new Set<string>()
-    // IPC 拒绝后保留失败的队首，直到用户调整队列，避免订阅回调触发自动重试风暴。
-    const queuedDispatchSuppressedMessageIds = new Map<string, string>()
-
-    const getStreamState = (sessionId: string): AgentStreamState | undefined =>
-      store.get(agentSessionStreamingStateAtomFamily(sessionId))
-
-    const updateStreamState = (
-      sessionId: string,
-      update: (previous: AgentStreamState | undefined) => AgentStreamState | undefined,
-    ): void => {
-      store.set(agentSessionStreamingStateAtomFamily(sessionId), update)
-    }
-
-    const dispatchQueuedMessage = (sessionId: string): void => {
-      if (queuedDispatchInFlight.has(sessionId)) return
-
-      const queuedMessages = store.get(agentSessionMessageQueueAtom).get(sessionId) ?? []
-      if (queuedDispatchSuppressedMessageIds.get(sessionId) === queuedMessages[0]?.id) return
-      queuedDispatchSuppressedMessageIds.delete(sessionId)
-      const streamState = getStreamState(sessionId)
-      const session = store.get(agentSessionsAtom).find((item) => item.id === sessionId)
-      if (session?.legacyTranscript?.continuationRequired) return
-
-      const channelId = session?.channelId
-        ?? store.get(agentSessionChannelMapAtom).get(sessionId)
-        ?? store.get(agentChannelIdAtom)
-      const modelId = session?.modelId
-        ?? store.get(agentSessionModelMapAtom).get(sessionId)
-        ?? store.get(agentModelIdAtom)
-      const channels = store.get(channelsAtom)
-      const hasAvailableModel = channels.some((channel) => (
-        channel.enabled && channel.models.some((model) => model.enabled)
-      ))
-      const hasBlockingRequests =
-        (store.get(allPendingPermissionRequestsAtom).get(sessionId)?.length ?? 0) > 0 ||
-        (store.get(allPendingAskUserRequestsAtom).get(sessionId)?.length ?? 0) > 0 ||
-        (store.get(allPendingExitPlanRequestsAtom).get(sessionId)?.length ?? 0) > 0
-
-      if (!shouldAutoDispatchQueuedMessage({
-        queueLength: queuedMessages.length,
-        running: streamState?.running ?? false,
-        backgroundWaiting: streamState?.backgroundWaiting ?? false,
-        stoppedByUser: store.get(stoppedByUserSessionsAtom).has(sessionId),
-        hasBlockingRequests,
-        hasChannel: Boolean(channelId),
-        hasAvailableModel,
-      })) {
-        return
-      }
-
-      const message = queuedMessages[0]
-      if (!message || !channelId) return
-
-      const streamStartedAt = Date.now()
-      const quotedSelectionBlock = message.quotedSelection
-        ? buildQuotedSelectionBlock(message.quotedSelection)
-        : ''
-      const payload = buildQueuedMessageSendPayload(message, quotedSelectionBlock)
-      let dequeued = false
-      queuedDispatchInFlight.add(sessionId)
-      store.set(agentSessionMessageQueueAtom, (prev) => {
-        const current = prev.get(sessionId) ?? []
-        if (current[0]?.id !== message.id) return prev
-        const map = new Map(prev)
-        const next = removeQueuedMessage(current, message.id)
-        if (next.length === 0) map.delete(sessionId)
-        else map.set(sessionId, next)
-        dequeued = true
-        return map
-      })
-      if (!dequeued) {
-        queuedDispatchInFlight.delete(sessionId)
-        return
-      }
-
-      const optimisticMessageUuid = `queued-${message.id}`
-      const optimisticMessage: SDKMessage = {
-        type: 'user',
-        uuid: optimisticMessageUuid,
-        message: { content: [{ type: 'text', text: payload.rawText }] },
-        parent_tool_use_id: null,
-        _createdAt: streamStartedAt,
-        _promaLiveRunStartedAt: streamStartedAt,
-      } as unknown as SDKMessage
-      store.set(liveMessagesMapAtom, (prev) => {
-        const map = new Map(prev)
-        map.set(sessionId, [...(map.get(sessionId) ?? []), optimisticMessage])
-        return map
-      })
-      store.set(agentStreamErrorsAtom, (prev) => {
-        if (!prev.has(sessionId)) return prev
-        const map = new Map(prev)
-        map.delete(sessionId)
-        return map
-      })
-      store.set(agentStreamingStatesAtom, (prev) => {
-        const map = new Map(prev)
-        map.set(sessionId, {
-          running: true,
-          model: modelId || undefined,
-          startedAt: streamStartedAt,
-          inputTokens: prev.get(sessionId)?.inputTokens,
-          contextWindow: prev.get(sessionId)?.contextWindow,
-        })
-        return map
-      })
-
-      const rollbackFailedDispatch = (): void => {
-        queuedDispatchSuppressedMessageIds.set(sessionId, message.id)
+    const cleanupQueuedMessageStatus = window.electronAPI.onAgentQueuedMessageStatus((status) => {
+      unstable_batchedUpdates(() => {
         store.set(agentSessionMessageQueueAtom, (prev) => {
+          const current = prev.get(status.sessionId) ?? []
+          const next = removeQueuedMessage(current, status.messageId)
+          if (next.length === current.length) return prev
           const map = new Map(prev)
-          map.set(sessionId, restoreQueuedMessageToFront(map.get(sessionId) ?? [], message))
+          if (next.length === 0) map.delete(status.sessionId)
+          else map.set(status.sessionId, next)
           return map
         })
         store.set(liveMessagesMapAtom, (prev) => {
-          const current = prev.get(sessionId) ?? []
-          const next = current.filter((item) => (item as unknown as { uuid?: string }).uuid !== optimisticMessageUuid)
-          if (next.length === current.length) return prev
+          const current = prev.get(status.sessionId) ?? []
+          const uuid = `queued-`
+          if (current.some((message) => (message as unknown as { uuid?: string }).uuid === uuid)) return prev
+          const optimisticMessage: SDKMessage = {
+            type: "user",
+            uuid,
+            message: { content: [{ type: "text", text: status.rawUserMessage ?? status.userMessage }] },
+            parent_tool_use_id: null,
+            _createdAt: status.startedAt,
+            _promaLiveRunStartedAt: status.startedAt,
+          } as unknown as SDKMessage
           const map = new Map(prev)
-          if (next.length === 0) map.delete(sessionId)
-          else map.set(sessionId, next)
+          map.set(status.sessionId, [...current, optimisticMessage])
           return map
         })
-        store.set(agentStreamingStatesAtom, (prev) => {
-          const current = prev.get(sessionId)
-          if (!current || current.startedAt !== streamStartedAt) return prev
+        store.set(agentStreamErrorsAtom, (prev) => {
+          if (!prev.has(status.sessionId)) return prev
           const map = new Map(prev)
-          map.set(sessionId, { ...current, running: false })
+          map.delete(status.sessionId)
           return map
         })
-      }
-
-      const queuedAdditionalDirectories = message.additionalDirectories ?? []
-      const workspaceId = session?.workspaceId ?? store.get(currentAgentWorkspaceIdAtom) ?? undefined
-      const attachedDirectories = store.get(agentAttachedDirectoriesMapAtom).get(sessionId)
-        ?? session?.attachedDirectories
-        ?? []
-      const attachedFiles = store.get(agentAttachedFilesMapAtom).get(sessionId)
-        ?? session?.attachedFiles
-        ?? []
-      const workspaceAttachedFiles = workspaceId
-        ? (store.get(workspaceAttachedFilesMapAtom).get(workspaceId) ?? [])
-        : []
-      const additionalDirectories = Array.from(new Set([
-        ...attachedDirectories,
-        ...[...attachedFiles, ...workspaceAttachedFiles].map(getParentDir).filter(Boolean),
-        ...queuedAdditionalDirectories,
-      ]))
-      const permissionMode = store.get(agentPermissionModeMapAtom).get(sessionId)
-        ?? session?.permissionMode
-        ?? store.get(agentDefaultPermissionModeAtom)
-
-      try {
-        const sendPromise = window.electronAPI.sendAgentMessage({
-          sessionId,
-          userMessage: payload.sdkText,
-          rawUserMessage: payload.rawText,
-          channelId,
-          modelId: modelId || undefined,
-          workspaceId,
-          startedAt: streamStartedAt,
-          permissionModeOverride: permissionMode,
-          ...(additionalDirectories.length > 0 && { additionalDirectories }),
-          ...(payload.mentions.mentionedSkills.length > 0 && { mentionedSkills: payload.mentions.mentionedSkills }),
-          ...(payload.mentions.mentionedMcpServers.length > 0 && { mentionedMcpServers: payload.mentions.mentionedMcpServers }),
-          ...(payload.mentions.mentionedSessionIds.length > 0 && { mentionedSessionIds: payload.mentions.mentionedSessionIds }),
-          ...(payload.mentions.mentionedTodoIds.length > 0 && { mentionedTodoIds: payload.mentions.mentionedTodoIds }),
-          ...(payload.mentions.mentionedCalendarEventIds.length > 0 && { mentionedCalendarEventIds: payload.mentions.mentionedCalendarEventIds }),
-        })
-        queuedDispatchInFlight.delete(sessionId)
-        void sendPromise.catch((error) => {
-          console.error('[GlobalAgentListeners] 自动发送队列消息失败:', error)
-          rollbackFailedDispatch()
-          toast.error('自动发送队列消息失败', { description: String(error) })
-        })
-      } catch (error) {
-        queuedDispatchInFlight.delete(sessionId)
-        console.error('[GlobalAgentListeners] 自动发送队列消息初始化失败:', error)
-        rollbackFailedDispatch()
-        toast.error('自动发送队列消息失败', { description: String(error) })
-      }
-    }
-
-    const scheduleQueuedMessageDispatch = (sessionId: string): void => {
-      if (queuedDispatchScheduled.has(sessionId)) return
-      queuedDispatchScheduled.add(sessionId)
-      queueMicrotask(() => {
-        queuedDispatchScheduled.delete(sessionId)
-        dispatchQueuedMessage(sessionId)
       })
-    }
-
-    const scheduleAllQueuedMessageDispatches = (): void => {
-      for (const sessionId of store.get(agentSessionMessageQueueAtom).keys()) {
-        scheduleQueuedMessageDispatch(sessionId)
-      }
-    }
-
-    const queuedDispatchUnsubscribers = [
-      store.sub(agentSessionMessageQueueAtom, scheduleAllQueuedMessageDispatches),
-      store.sub(agentRunningSessionIdsAtom, scheduleAllQueuedMessageDispatches),
-      store.sub(agentSessionsAtom, scheduleAllQueuedMessageDispatches),
-      store.sub(agentSessionChannelMapAtom, scheduleAllQueuedMessageDispatches),
-      store.sub(agentChannelIdAtom, scheduleAllQueuedMessageDispatches),
-      store.sub(allPendingPermissionRequestsAtom, scheduleAllQueuedMessageDispatches),
-      store.sub(allPendingAskUserRequestsAtom, scheduleAllQueuedMessageDispatches),
-      store.sub(allPendingExitPlanRequestsAtom, scheduleAllQueuedMessageDispatches),
-      store.sub(channelsAtom, scheduleAllQueuedMessageDispatches),
-    ]
+    })
 
     /** 构建导航到指定会话的回调 */
     const makeNavigateToSession = (sessionId: string, sessionTitle: string) => () => {
@@ -796,7 +617,7 @@ export function useGlobalAgentListeners(): void {
 
     const activateExternalAgentRun = (event: Extract<PromaEvent, { type: 'external_run_started' }>): void => {
       const applyActivation = (sessions: AgentSessionMeta[]): void => {
-        const currentStreamState = getStreamState(event.sessionId)
+        const currentStreamState = store.get(agentStreamingStatesAtom).get(event.sessionId)
         if (!shouldActivateExternalAgentRun(currentStreamState, event.startedAt)) {
           return
         }
@@ -1116,7 +937,7 @@ export function useGlobalAgentListeners(): void {
         // Phase 2: 直接累积 SDKMessage 到 liveMessagesMapAtom（跳过 replay 消息，避免与持久化消息重复）
         if (payload.kind === 'sdk_delta') {
           const deltaPayload = payload.delta
-          const currentRunStartedAt = getStreamState(sessionId)?.startedAt
+          const currentRunStartedAt = store.get(agentStreamingStatesAtom).get(sessionId)?.startedAt
           // Delta 必须携带产生它的 run 标识。迟到的旧 run Delta 不能借用当前 run，
           // 否则会被 live-group-set 误判为新一轮消息；无标识的旧协议事件也不强行归类。
           if (currentRunStartedAt != null && deltaPayload.runStartedAt !== currentRunStartedAt) return
@@ -1164,12 +985,15 @@ export function useGlobalAgentListeners(): void {
           // 不会触碰 AgentStreamState，从而避免重新引入逐 token 的第二次 Map 更新。
           const hasAssistantActivity = deltaPayload.deltas.some((delta) => delta.type !== 'start')
           if (hasAssistantActivity) {
-            updateStreamState(sessionId, (current) => {
+            store.set(agentStreamingStatesAtom, (prev) => {
+              const current = prev.get(sessionId)
               const shouldResume = current?.retrying !== undefined
                 || current?.contextCompaction?.status === 'success'
                 || current?.contextCompaction?.status === 'noop'
-              if (!current || !shouldResume) return current
-              return resumeAgentStreamState(current)
+              if (!current || !shouldResume) return prev
+              const map = new Map(prev)
+              map.set(sessionId, resumeAgentStreamState(current))
+              return map
             })
           }
         }
@@ -1184,7 +1008,7 @@ export function useGlobalAgentListeners(): void {
             // thinking_tokens 是高频进度估算，只更新流式状态，不进入消息转录。
           } else if (!msgRecord.isReplay) {
             // 当前 run 的 assistant 消息沿用 run 起始时间，与首个 Delta 预览和乐观 header 保持一致。
-            const activeRunStartedAt = getStreamState(sessionId)?.startedAt
+            const activeRunStartedAt = store.get(agentStreamingStatesAtom).get(sessionId)?.startedAt
             // 为实时消息补充 _createdAt 时间戳（与持久化时的逻辑一致），
             // 避免 AssistantTurnRenderer 因缺少时间戳导致 header 时间消失
             if (typeof msgRecord._createdAt !== 'number') {
@@ -1253,7 +1077,7 @@ export function useGlobalAgentListeners(): void {
         for (const event of legacyEvents) {
           // 带 run 标识的 retry 事件必须在所有外围副作用前严格匹配当前流；
           // 否则旧 IPC 事件会复活已结束的 stream，或错误清掉新 run 的完成提醒。
-          const eventStreamState = getStreamState(sessionId)
+          const eventStreamState = store.get(agentStreamingStatesAtom).get(sessionId)
           if (isRunScopedRetryEvent(event) && event.runStartedAt != null && (
             !eventStreamState || !isRetryEventForCurrentStream(eventStreamState, event)
           )) {
@@ -1262,7 +1086,7 @@ export function useGlobalAgentListeners(): void {
 
           // 会话首次进入 running 时，清除旧的完成提醒状态
           if (event.type !== 'prompt_suggestion') {
-            const prevState = getStreamState(sessionId)
+            const prevState = store.get(agentStreamingStatesAtom).get(sessionId)
             if (!prevState || !prevState.running) {
               store.set(unviewedCompletedSessionIdsAtom, (prev: Set<string>) => {
                 if (!prev.has(sessionId)) return prev
@@ -1275,12 +1099,13 @@ export function useGlobalAgentListeners(): void {
 
           // 更新流式状态（prompt_suggestion 不影响流式状态，跳过以避免在 session 结束后用默认值 running:true 重新激活）
           if (event.type !== 'prompt_suggestion') {
-            updateStreamState(sessionId, (existing) => {
+            store.set(agentStreamingStatesAtom, (prev) => {
+              const existing = prev.get(sessionId)
               // 再做一次 scope 校验，防止同一 batch 内其它回调更新流状态后旧事件落入。
               if (isRunScopedRetryEvent(event) && event.runStartedAt != null && (
                 !existing || !isRetryEventForCurrentStream(existing, event)
               )) {
-                return existing
+                return prev
               }
               const current: AgentStreamState = existing ?? {
                 running: true,
@@ -1288,11 +1113,14 @@ export function useGlobalAgentListeners(): void {
                 // 无 run 标识的历史事件才允许 fallback；带标识的 retry 必须已在上方匹配。
                 startedAt: undefined,
               }
-              return applyAgentEvent(current, event)
+              const next = applyAgentEvent(current, event)
+              const map = new Map(prev)
+              map.set(sessionId, next)
+              return map
             })
           }
 
-          const activeRunStartedAt = getStreamState(sessionId)?.startedAt
+          const activeRunStartedAt = store.get(agentStreamingStatesAtom).get(sessionId)?.startedAt
           if (activeRunStartedAt != null) {
             const activeRunId = String(activeRunStartedAt)
             store.set(agentFileChangesCurrentRunAtom, (prev) => {
@@ -1306,7 +1134,7 @@ export function useGlobalAgentListeners(): void {
           // Pi 原生重试成功后仍会沿用同一会话；仅在事件属于当前 stream run 时
           // 清掉过期错误，避免迟到的旧 retry_cleared 掩盖新一轮真实失败。
           if (event.type === 'retry_cleared') {
-            const current = getStreamState(sessionId)
+            const current = store.get(agentStreamingStatesAtom).get(sessionId)
             if (current && isRetryEventForCurrentStream(current, event)) {
               store.set(agentStreamErrorsAtom, (prev) => clearAgentStreamError(prev, sessionId))
             }
@@ -1322,7 +1150,7 @@ export function useGlobalAgentListeners(): void {
               ?? (input?.path as string | undefined)
               ?? (input?.notebook_path as string | undefined)
             const runId = store.get(agentFileChangesCurrentRunAtom).get(sessionId)
-              ?? String(getStreamState(sessionId)?.startedAt ?? event.turnId ?? Date.now())
+              ?? String(store.get(agentStreamingStatesAtom).get(sessionId)?.startedAt ?? event.turnId ?? Date.now())
             const entry = {
               path: targetPath || '',
               sessionId,
@@ -1702,10 +1530,6 @@ export function useGlobalAgentListeners(): void {
           return prev
         })
 
-        if (!backgroundTasksPending) {
-          scheduleQueuedMessageDispatch(data.sessionId)
-        }
-
         // 非正常结束时显示截断提示
         if (data.resultSubtype && data.resultSubtype !== 'success' && !data.stoppedByUser) {
           const messages: Record<string, string> = {
@@ -1734,7 +1558,7 @@ export function useGlobalAgentListeners(): void {
 
         /** 竞态保护：检查该会话是否已有新的流式请求正在运行 */
         const isNewStreamRunning = (): boolean => {
-          const state = getStreamState(data.sessionId)
+          const state = store.get(agentStreamingStatesAtom).get(data.sessionId)
           return state?.running === true
         }
 
@@ -1803,7 +1627,7 @@ export function useGlobalAgentListeners(): void {
         })
 
         // 递增消息刷新版本号，通知 AgentView 重新加载消息
-        const state = getStreamState(data.sessionId)
+        const state = store.get(agentStreamingStatesAtom).get(data.sessionId)
         if (!state?.running) {
           store.set(agentMessageRefreshAtom, (prev) => {
             const map = new Map(prev)
@@ -1977,7 +1801,7 @@ export function useGlobalAgentListeners(): void {
       cleanupTitleUpdated()
       cleanupPlaySound()
       cleanupWatchedFileChanges()
-      queuedDispatchUnsubscribers.forEach((unsubscribe) => unsubscribe())
+      cleanupQueuedMessageStatus()
       clearInterval(pruneTimer)
       window.removeEventListener('focus', onWindowFocus)
     }

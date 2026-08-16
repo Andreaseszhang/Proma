@@ -115,7 +115,7 @@ import { AgentSessionProvider } from '@/contexts/session-context'
 import { draftSessionIdsAtom } from '@/atoms/draft-session-atoms'
 import { sendWithCmdEnterAtom } from '@/atoms/shortcut-atoms'
 import { useOpenPreview } from '@/components/diff/preview-opener'
-import type { AgentSendInput, AgentPendingFile, AgentThinkingLevel, FileDialogLargeFile, FileDialogResult, ModelOption, ReasoningCapability, SDKMessage, SDKUserMessage } from '@proma/shared'
+import type { AgentDeferredQueueMessageInput, AgentSendInput, AgentPendingFile, AgentThinkingLevel, FileDialogLargeFile, FileDialogResult, ModelOption, ReasoningCapability, SDKMessage, SDKUserMessage } from '@proma/shared'
 import { inferContextWindow, inferReasoningTransport, isCodexFastModeSupportedModel, MAX_ATTACHMENT_SIZE, normalizeReasoningCapabilityLevel, normalizeReasoningLevel, resolveReasoningCapability, resolveReasoningProfile } from '@proma/shared'
 import { fileToBase64, formatFileNames, getFileParentPath } from '@/lib/file-utils'
 import { getFilePanelDragData, INSERT_FILE_MENTION_EVENT, type FilePanelDragItem } from '@/lib/file-panel-drag'
@@ -129,7 +129,6 @@ import {
   parseQueuedMessageMentions,
   queuedTextToParagraphHtml,
   removeQueuedMessage,
-  restoreQueuedMessageToFront,
 } from '@/lib/agent-message-queue'
 import type { AgentQueuedAttachment, AgentQueuedMessage, QueueDropPlacement } from '@/lib/agent-message-queue'
 
@@ -483,6 +482,23 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
   const [pendingPrompt, setPendingPrompt] = useAtom(agentPendingPromptAtom)
   const [pendingFiles, setPendingFiles] = useAtom(agentPendingFilesAtomFamily(sessionId))
   const [queuedMessages, setQueuedMessages] = useAtom(agentMessageQueueAtomFamily(sessionId))
+  React.useEffect(() => {
+    let disposed = false
+    void window.electronAPI.listAgentQueuedMessages(sessionId)
+      .then((messages) => {
+        if (disposed) return
+        setQueuedMessages((current) => {
+          const mainIds = new Set(messages.map((message) => message.id))
+          return [...messages, ...current.filter((message) => !mainIds.has(message.id))]
+        })
+      })
+      .catch((error) => {
+        console.warn('[AgentView] 恢复主进程队列失败:', error)
+      })
+    return () => {
+      disposed = true
+    }
+  }, [sessionId, setQueuedMessages])
   const workspaces = useAtomValue(agentWorkspacesAtom)
   const setWorkspaces = useSetAtom(agentWorkspacesAtom)
   const [restoreProjectRootDialogOpen, setRestoreProjectRootDialogOpen] = React.useState(false)
@@ -2112,17 +2128,49 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
       if (pendingFilesSnapshot.length > 0 && !attachmentContext) return
 
       const quotedSelection = consumeQuotedSelection()
-      setQueuedMessages((prev) => [
-        ...prev,
-        createAgentQueuedMessage(effectiveText, crypto.randomUUID(), Date.now(), quotedSelection, attachmentContext
-          ? {
-              fileReferenceBlock: attachmentContext.referenceBlock,
-              attachments: attachmentContext.attachments,
-              additionalDirectories: attachmentContext.additionalDirectories,
-            }
-          : undefined),
-      ])
-      // 入队后消息会出现在队列 UI 中，用户可见；不再弹 toast 打扰。
+      const message = createAgentQueuedMessage(effectiveText, crypto.randomUUID(), Date.now(), quotedSelection, attachmentContext
+        ? {
+            fileReferenceBlock: attachmentContext.referenceBlock,
+            attachments: attachmentContext.attachments,
+            additionalDirectories: attachmentContext.additionalDirectories,
+          }
+        : undefined)
+      const quotedSelectionBlock = quotedSelection
+        ? buildQuotedSelectionBlock(quotedSelection)
+        : ''
+      const queuePayload = buildQueuedMessageSendPayload(message, quotedSelectionBlock)
+      const deferredInput: AgentDeferredQueueMessageInput = {
+        queueMessageId: message.id,
+        displayMessage: message,
+        sessionId,
+        userMessage: queuePayload.sdkText,
+        rawUserMessage: queuePayload.rawText,
+        channelId: agentChannelId,
+        modelId: agentModelId || undefined,
+        workspaceId: currentWorkspaceId || undefined,
+        additionalDirectories: message.additionalDirectories,
+        permissionModeOverride: permissionMode,
+        mentionedSkills: queuePayload.mentions.mentionedSkills,
+        mentionedMcpServers: queuePayload.mentions.mentionedMcpServers,
+        mentionedSessionIds: queuePayload.mentions.mentionedSessionIds,
+        mentionedTodoIds: queuePayload.mentions.mentionedTodoIds,
+        mentionedCalendarEventIds: queuePayload.mentions.mentionedCalendarEventIds,
+      }
+      setQueuedMessages((prev) => [...prev, message])
+      void window.electronAPI.enqueueAgentQueuedMessage(deferredInput).catch((error) => {
+        console.error('[AgentView] 主进程队列入队失败:', error)
+        setQueuedMessages((prev) => removeQueuedMessage(prev, message.id))
+        restoreQueuedAttachmentsToPending(message.attachments)
+        if (quotedSelection) {
+          setQuotedSelectionMap((prev) => {
+            const map = new Map(prev)
+            map.set(sessionId, quotedSelection)
+            return map
+          })
+        }
+        toast.error('消息加入队列失败', { description: String(error) })
+      })
+      // 入队后消息会出现在队列 UI 中，主进程负责在当前 run 结束后启动。
       if (overrideText === undefined || fromEditor) {
         setInputContent('')
         setInputHtmlContent('')
@@ -2686,65 +2734,85 @@ export function AgentView({ sessionId }: { sessionId: string }): React.ReactElem
 
     queuedSendInFlightRef.current = true
     sendingQueuedMessageIdsRef.current.add(messageId)
-    setQueuedMessages((prev) => removeQueuedMessage(prev, messageId))
-    sendPlainTextAgentMessage(message)
+    clearStoppedByUser()
+    void window.electronAPI.promoteAgentQueuedMessage({
+      sessionId,
+      messageId,
+      interrupt: streaming,
+    })
+      .then((promoted) => {
+        if (!promoted) return
+        setQueuedMessages((prev) => removeQueuedMessage(prev, messageId))
+      })
       .catch((error) => {
-        console.error('[AgentView] 队列消息发送失败:', error)
+        console.error('[AgentView] 立即发送队列消息失败:', error)
         toast.error('队列消息发送失败', { description: String(error) })
-        setQueuedMessages((prev) => restoreQueuedMessageToFront(prev, message))
       })
       .finally(() => {
         sendingQueuedMessageIdsRef.current.delete(messageId)
         queuedSendInFlightRef.current = false
       })
-  }, [canSendQueuedNow, queuedMessages, sendPlainTextAgentMessage, setQueuedMessages, streaming])
+  }, [canSendQueuedNow, clearStoppedByUser, queuedMessages, sessionId, setQueuedMessages, streaming])
 
   const handleRecallQueuedMessage = React.useCallback((messageId: string): void => {
     const message = queuedMessages.find((item) => item.id === messageId)
     if (!message) return
 
-    setQueuedMessages((prev) => removeQueuedMessage(prev, messageId))
-    const recalledQuotedSelection = message.quotedSelection
-    if (recalledQuotedSelection) {
-      setQuotedSelectionMap((prev) => {
-        const map = new Map(prev)
-        map.set(sessionId, recalledQuotedSelection)
-        return map
+    void window.electronAPI.cancelAgentQueuedMessage({ sessionId, messageId })
+      .then((cancelled) => {
+        if (!cancelled) return
+        setQueuedMessages((prev) => removeQueuedMessage(prev, messageId))
+        const recalledQuotedSelection = message.quotedSelection
+        if (recalledQuotedSelection) {
+          setQuotedSelectionMap((prev) => {
+            const map = new Map(prev)
+            map.set(sessionId, recalledQuotedSelection)
+            return map
+          })
+        }
+        restoreQueuedAttachmentsToPending(message.attachments)
+
+        const currentDraft = store.get(agentSessionDraftsAtom).get(sessionId) ?? ''
+        const currentDraftHtml = store.get(agentSessionDraftHtmlAtom).get(sessionId) ?? ''
+        const hasDraft = currentDraft.trim().length > 0
+        const nextDraft = hasDraft
+          ? `${currentDraft.trimEnd()}\n\n${message.text}`
+          : message.text
+        setInputContent(nextDraft)
+
+        // 已有草稿时，用「原草稿 HTML + 队列文本段落 HTML」合并，保留原草稿的 mention 等富文本节点；
+        // 空草稿时留空 HTML，交给编辑器按纯文本重建（与正常输入渲染一致）。
+        if (hasDraft) {
+          const draftHtml = currentDraftHtml.trim().length > 0
+            ? currentDraftHtml
+            : queuedTextToParagraphHtml(currentDraft)
+          setInputHtmlContent(`${draftHtml}${queuedTextToParagraphHtml(message.text)}`)
+        } else {
+          setInputHtmlContent('')
+        }
       })
-    }
-    restoreQueuedAttachmentsToPending(message.attachments)
-
-    const currentDraft = store.get(agentSessionDraftsAtom).get(sessionId) ?? ''
-    const currentDraftHtml = store.get(agentSessionDraftHtmlAtom).get(sessionId) ?? ''
-    const hasDraft = currentDraft.trim().length > 0
-    const nextDraft = hasDraft
-      ? `${currentDraft.trimEnd()}\n\n${message.text}`
-      : message.text
-    setInputContent(nextDraft)
-
-    // 已有草稿时，用「原草稿 HTML + 队列文本段落 HTML」合并，保留原草稿的 mention 等富文本节点；
-    // 空草稿时留空 HTML，交给编辑器按纯文本重建（与正常输入渲染一致）。
-    if (hasDraft) {
-      const draftHtml = currentDraftHtml.trim().length > 0
-        ? currentDraftHtml
-        : queuedTextToParagraphHtml(currentDraft)
-      setInputHtmlContent(`${draftHtml}${queuedTextToParagraphHtml(message.text)}`)
-    } else {
-      setInputHtmlContent('')
-    }
+      .catch((error) => {
+        console.warn('[AgentView] 撤回主进程队列消息失败:', error)
+      })
   }, [queuedMessages, restoreQueuedAttachmentsToPending, sessionId, setInputContent, setInputHtmlContent, setQueuedMessages, setQuotedSelectionMap, store])
 
   const handleRemoveQueuedMessage = React.useCallback((messageId: string): void => {
+    void window.electronAPI.cancelAgentQueuedMessage({ sessionId, messageId }).catch((error) => {
+      console.warn('[AgentView] 取消主进程队列失败:', error)
+    })
     setQueuedMessages((prev) => removeQueuedMessage(prev, messageId))
-  }, [setQueuedMessages])
+  }, [sessionId, setQueuedMessages])
 
   const handleMoveQueuedMessage = React.useCallback((
     sourceId: string,
     targetId: string,
     placement: QueueDropPlacement,
   ): void => {
+    void window.electronAPI.moveAgentQueuedMessage({ sessionId, sourceId, targetId, placement }).catch((error) => {
+      console.warn('[AgentView] 调整主进程队列顺序失败:', error)
+    })
     setQueuedMessages((prev) => moveQueuedMessage(prev, sourceId, targetId, placement))
-  }, [setQueuedMessages])
+  }, [sessionId, setQueuedMessages])
 
   // ===== 预览面板状态（toggle 快捷键，分屏布局在 MainArea） =====
   const setPreviewOpenMap = useSetAtom(previewPanelOpenMapAtom)

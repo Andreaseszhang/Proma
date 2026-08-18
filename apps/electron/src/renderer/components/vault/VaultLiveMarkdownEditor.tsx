@@ -1,25 +1,5 @@
 import * as React from 'react'
-import { EditorState } from '@codemirror/state'
-import { EditorView, keymap, ViewPlugin, type ViewUpdate } from '@codemirror/view'
-import { hybridMarkdown } from 'codemirror-markdown-hybrid'
-
-function syncUnorderedListMarkers(view: EditorView): void {
-  for (const marker of view.dom.querySelectorAll<HTMLSpanElement>('.cm-markdown-preview .md-list-marker')) {
-    marker.toggleAttribute('data-vault-unordered-list-marker', /^[-*+]$/.test(marker.textContent?.trim() ?? ''))
-  }
-}
-
-const normalizeUnorderedListMarkers = ViewPlugin.fromClass(class {
-  constructor(view: EditorView) {
-    syncUnorderedListMarkers(view)
-  }
-
-  update(update: ViewUpdate): void {
-    if (update.docChanged || update.selectionSet || update.focusChanged || update.viewportChanged) {
-      syncUnorderedListMarkers(update.view)
-    }
-  }
-})
+import ink, { type Instance } from 'ink-mde'
 
 interface VaultLiveMarkdownEditorProps {
   value: string
@@ -33,9 +13,11 @@ export function VaultLiveMarkdownEditor({
   onSave,
 }: VaultLiveMarkdownEditorProps): React.ReactElement {
   const hostRef = React.useRef<HTMLDivElement>(null)
-  const viewRef = React.useRef<EditorView | null>(null)
+  const instanceRef = React.useRef<Instance | null>(null)
+  const valueRef = React.useRef(value)
   const onChangeRef = React.useRef(onChange)
   const onSaveRef = React.useRef(onSave)
+  valueRef.current = value
   onChangeRef.current = onChange
   onSaveRef.current = onSave
 
@@ -43,48 +25,90 @@ export function VaultLiveMarkdownEditor({
     const host = hostRef.current
     if (!host) return
 
-    const view = new EditorView({
-      state: EditorState.create({
-        doc: value,
-        extensions: [
-          EditorView.lineWrapping,
-          hybridMarkdown({
-            theme: document.documentElement.classList.contains('dark') ? 'dark' : 'light',
-            enableCollapse: false,
-          }),
-          normalizeUnorderedListMarkers,
-          keymap.of([
-            {
-              key: 'Mod-s',
-              run: () => {
-                onSaveRef.current()
-                return true
-              },
-            },
-          ]),
-          EditorView.updateListener.of((update) => {
-            if (update.docChanged) onChangeRef.current(update.state.doc.toString())
-          }),
-        ],
-      }),
-      parent: host,
+    // ink-mde's destroy() only tears down CodeMirror; the container it renders stays in the DOM.
+    // Give every effect run its own mount node so a discarded run (React StrictMode double-invoke,
+    // remount) cannot leave a full-height empty shell that pushes the live editor out of view.
+    const mount = document.createElement('div')
+    mount.className = 'h-full min-h-0'
+    host.appendChild(mount)
+
+    let ready = false
+    let disposed = false
+    let localInstance: Instance | null = null
+    const instancePromise = Promise.resolve(ink(mount, {
+      doc: value,
+      files: {
+        clipboard: false,
+        dragAndDrop: false,
+        injectMarkup: true,
+      },
+      hooks: {
+        afterUpdate: (nextValue) => {
+          if (ready) onChangeRef.current(nextValue)
+        },
+      },
+      interface: {
+        appearance: 'auto',
+        attribution: false,
+        autocomplete: false,
+        images: false,
+        lists: true,
+        readonly: false,
+        spellcheck: false,
+        toolbar: false,
+      },
+      search: false,
+      toolbar: {
+        bold: false,
+        code: false,
+        codeBlock: false,
+        heading: false,
+        image: false,
+        italic: false,
+        link: false,
+        list: false,
+        orderedList: false,
+        quote: false,
+        taskList: false,
+        upload: false,
+      },
+    }))
+    void instancePromise.then((instance) => {
+      localInstance = instance
+      if (disposed) {
+        instance.destroy()
+        return
+      }
+      instanceRef.current = instance
+      if (instance.getDoc() !== valueRef.current) instance.update(valueRef.current)
+      ready = true
     })
-    syncUnorderedListMarkers(view)
-    viewRef.current = view
+
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
+        event.preventDefault()
+        onSaveRef.current()
+      }
+    }
+    host.addEventListener('keydown', onKeyDown)
 
     return () => {
-      view.destroy()
-      viewRef.current = null
+      disposed = true
+      ready = false
+      host.removeEventListener('keydown', onKeyDown)
+      if (localInstance) localInstance.destroy()
+      if (instanceRef.current === localInstance) instanceRef.current = null
+      mount.remove()
     }
   // The editor owns its state after initialization; external file reloads use the effect below.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   React.useEffect(() => {
-    const view = viewRef.current
-    if (!view || view.state.doc.toString() === value) return
-    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: value } })
+    const instance = instanceRef.current
+    if (!instance || instance.getDoc() === value) return
+    instance.update(value)
   }, [value])
 
-  return <div ref={hostRef} className="vault-hybrid-markdown h-full min-h-0 [&_.cm-editor]:h-full [&_.cm-scroller]:overflow-auto [&_.cm-scroller]:font-sans [&_.cm-content]:min-h-full [&_.cm-content]:px-4 [&_.cm-content]:py-3 [&_.cm-content]:text-[length:var(--md-preview-font-size,15px)] [&_.cm-content]:leading-relaxed [&_.cm-gutters]:hidden" />
+  return <div ref={hostRef} className="vault-ink-mde h-full min-h-0 [&_.ink-mde]:h-full [&_.ink-mde-editor]:min-h-0 [&_.ink-mde-editor]:overflow-auto" />
 }

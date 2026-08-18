@@ -253,6 +253,12 @@ export function VaultView(): React.ReactElement {
   const [quoteTarget, setQuoteTarget] = React.useState('')
   const [quoteNewPath, setQuoteNewPath] = React.useState('')
   const [quoting, setQuoting] = React.useState(false)
+  const selectedFileRef = React.useRef(selectedFile)
+  const readRequestRef = React.useRef(0)
+
+  React.useEffect(() => {
+    selectedFileRef.current = selectedFile
+  }, [selectedFile])
 
   const refresh = React.useCallback(async (): Promise<void> => {
     setLoading(true)
@@ -263,13 +269,18 @@ export function VaultView(): React.ReactElement {
       if (!nextConfig) {
         setSelectedFile(null)
         setReadResult(null)
-      } else if (selectedFile) {
+      } else if (selectedFileRef.current) {
+        const relativePath = selectedFileRef.current
+        const requestId = ++readRequestRef.current
         try {
-          setReadResult(await window.electronAPI.readVaultFile(selectedFile))
+          const result = await window.electronAPI.readVaultFile(relativePath)
+          if (requestId === readRequestRef.current) setReadResult(result)
         } catch {
-          setSelectedFile(null)
-          setReadResult(null)
-          toast.message('已打开的笔记不存在或无法刷新')
+          if (requestId === readRequestRef.current) {
+            setSelectedFile(null)
+            setReadResult(null)
+            toast.message('已打开的笔记不存在或无法刷新')
+          }
         }
       }
     } catch (error) {
@@ -277,7 +288,7 @@ export function VaultView(): React.ReactElement {
     } finally {
       setLoading(false)
     }
-  }, [selectedFile, setReadResult, setSelectedFile])
+  }, [setReadResult, setSelectedFile])
 
   React.useEffect(() => {
     void refresh()
@@ -296,15 +307,19 @@ export function VaultView(): React.ReactElement {
   }, [config])
 
   const openFile = React.useCallback(async (relativePath: string): Promise<void> => {
+    const requestId = ++readRequestRef.current
     setSelectedFile(relativePath)
     setFileLoading(true)
     try {
-      setReadResult(await window.electronAPI.readVaultFile(relativePath))
+      const result = await window.electronAPI.readVaultFile(relativePath)
+      if (requestId === readRequestRef.current) setReadResult(result)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '无法打开笔记')
-      setReadResult(null)
+      if (requestId === readRequestRef.current) {
+        toast.error(error instanceof Error ? error.message : '无法打开笔记')
+        setReadResult(null)
+      }
     } finally {
-      setFileLoading(false)
+      if (requestId === readRequestRef.current) setFileLoading(false)
     }
   }, [setReadResult, setSelectedFile])
 

@@ -80,7 +80,7 @@ import {
 import { getPlanModeChangeFromToolName, updatePlanModeSessionSet } from '@/lib/agent-plan-mode'
 import { buildTodoAgentPrompt } from '@/lib/todo-agent-prompt'
 import { detectIsWindows } from '@/lib/platform'
-import { getSessionFileChangeKind, arePathsEqual, isPathWithinRoot, upsertSessionFileChange } from '@/lib/session-file-changes'
+import { getSessionFileChangeKind, getOwnedSessionWatcherPaths, upsertSessionFileChange } from '@/lib/session-file-changes'
 import { removeQueuedMessage, createQueuedAgentStreamState } from '@/lib/agent-message-queue'
 import { createAgentStreamEventBatcher } from '@/lib/agent-stream-event-batcher'
 
@@ -842,24 +842,16 @@ export function useGlobalAgentListeners(): void {
           const sessionPath = sessionPaths.get(sessionId)
           const workspaceFilesPath = await getWorkspaceFilesPathForSession(sessionId)
           const workspaceAttachments = await getWorkspaceAttachmentsForSession(sessionId)
-          if (!session || !workspaceAttachments.complete) {
-            // 缺少运行会话的权威附件配置时，任何路径都不能安全归属给其他会话。
-            return { sessionId, matchingPaths: [...filePaths] }
-          }
-          const directoryRoots = uniqueTruthyPaths([
+          const matchingPaths = getOwnedSessionWatcherPaths(filePaths, {
+            sessionExists: Boolean(session),
             sessionPath,
+            sessionAttachedDirectories: session?.attachedDirectories ?? [],
+            sessionAttachedFiles: session?.attachedFiles ?? [],
+            workspaceAttachmentsComplete: workspaceAttachments.complete,
             workspaceFilesPath,
-            ...(session.attachedDirectories ?? []),
-            ...workspaceAttachments.directories,
-          ])
-          const attachedFiles = uniqueTruthyPaths([
-            ...(session.attachedFiles ?? []),
-            ...workspaceAttachments.files,
-          ])
-          const matchingPaths = filePaths.filter((changedPath) => (
-            directoryRoots.some((rootPath) => isPathWithinRoot(rootPath, changedPath, isWindows))
-            || attachedFiles.some((filePath) => arePathsEqual(filePath, changedPath, isWindows))
-          ))
+            workspaceAttachedDirectories: workspaceAttachments.directories,
+            workspaceAttachedFiles: workspaceAttachments.files,
+          }, isWindows)
           return { sessionId, matchingPaths }
         }))
 

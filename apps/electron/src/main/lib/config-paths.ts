@@ -159,6 +159,14 @@ export function getSettingsPath(): string {
 }
 
 /**
+ * 获取用户授权的 Markdown Vault 配置路径。
+ * 内容仅保存 Vault 根目录与用户授予的能力，不保存笔记正文或索引。
+ */
+export function getVaultConfigPath(): string {
+  return join(getConfigDir(), 'vault.json')
+}
+
+/**
  * 获取系统默认 App 探测缓存路径
  *
  * @returns ~/.proma/default-apps.json

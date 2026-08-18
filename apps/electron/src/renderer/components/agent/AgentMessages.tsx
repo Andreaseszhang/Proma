@@ -230,6 +230,8 @@ interface AgentMessagesProps {
   onAddHistoryQuote?: (quote: QuotedSelection) => boolean
   /** 嵌入在右侧探索分支时关闭嵌套探索入口，避免没有容器的二级分叉。 */
   explorationEnabled?: boolean
+  /** 将用户明确选中的历史文字发送到 Vault 引用目标选择。 */
+  onQuoteHistoryToVault?: (quote: QuotedSelection) => void
   /** 已发送的 Agent 历史引用 chip 点击后请求定位与高亮。 */
   onAgentHistoryQuoteClick?: (quote: QuotedSelection) => void
   /** 输入框 quote chip 请求定位时的精确范围。 */
@@ -880,6 +882,7 @@ export const AgentMessages = React.memo(function AgentMessages({
   onCompact,
   onAddHistoryQuote,
   explorationEnabled = true,
+  onQuoteHistoryToVault,
   onAgentHistoryQuoteClick,
   historyQuoteNavigation,
 }: AgentMessagesProps): React.ReactElement {
@@ -1256,6 +1259,7 @@ export const AgentMessages = React.memo(function AgentMessages({
             rootRef={historySelectionRootRef}
             onAddToAgent={onAddHistoryQuote}
             explorationEnabled={explorationEnabled}
+            onQuoteToVault={onQuoteHistoryToVault}
           />
         </div>
       </AgentBrowserLinkProvider>

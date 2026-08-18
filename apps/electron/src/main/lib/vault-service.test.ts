@@ -1,0 +1,100 @@
+import { afterEach, describe, expect, test } from 'bun:test'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
+import {
+  createVaultFileSystem,
+  formatVaultSourceBlock,
+} from './vault-service'
+
+const tempRoots: string[] = []
+
+function makeTempRoot(): string {
+  const root = mkdtempSync(join(tmpdir(), 'proma-vault-'))
+  tempRoots.push(root)
+  return root
+}
+
+function writeFile(path: string, content: string): void {
+  mkdirSync(dirname(path), { recursive: true })
+  writeFileSync(path, content, 'utf-8')
+}
+
+afterEach(() => {
+  while (tempRoots.length > 0) {
+    rmSync(tempRoots.pop()!, { recursive: true, force: true })
+  }
+})
+
+describe('Vault file system', () => {
+  test('Given an authorized Vault When files are listed Then only visible Markdown files are returned', () => {
+    const root = makeTempRoot()
+    writeFile(join(root, 'Inbox', 'idea.md'), '# Idea')
+    writeFile(join(root, 'assets', 'image.png'), 'binary')
+    writeFile(join(root, '.obsidian', 'app.json'), '{}')
+    writeFile(join(root, '.hidden', 'private.md'), '# Private')
+
+    const vault = createVaultFileSystem(root)
+
+    expect(vault.listFiles().map((entry) => entry.relativePath)).toEqual(['Inbox/idea.md'])
+  })
+
+  test('Given a symlink to content outside the Vault When it is read Then access is rejected', () => {
+    const root = makeTempRoot()
+    const outside = join(root, '..', 'outside.md')
+    writeFile(outside, '# Outside')
+    symlinkSync(outside, join(root, 'escape.md'))
+
+    const vault = createVaultFileSystem(root)
+
+    expect(() => vault.readFile('escape.md')).toThrow('软链接')
+  })
+
+  test('Given an unchanged Markdown note When source mode saves Then content is written atomically', () => {
+    const root = makeTempRoot()
+    writeFile(join(root, 'Inbox', 'idea.md'), '# Before')
+    const vault = createVaultFileSystem(root)
+    const original = vault.readFile('Inbox/idea.md')
+
+    const result = vault.writeFile({
+      relativePath: 'Inbox/idea.md',
+      content: '# After\n\n[[Linked note]]\n\n```dataview\nLIST\n```',
+      expectedSha256: original.sha256,
+    })
+
+    expect(result.ok).toBe(true)
+    expect(vault.readFile('Inbox/idea.md').content).toContain('```dataview')
+    expect(existsSync(join(root, 'Inbox', 'idea.md.tmp'))).toBe(false)
+  })
+
+  test('Given an externally changed note When a stale save is requested Then the original is kept', () => {
+    const root = makeTempRoot()
+    writeFile(join(root, 'idea.md'), '# Before')
+    const vault = createVaultFileSystem(root)
+    const original = vault.readFile('idea.md')
+    writeFile(join(root, 'idea.md'), '# External')
+
+    const result = vault.writeFile({
+      relativePath: 'idea.md',
+      content: '# Agent overwrite',
+      expectedSha256: original.sha256,
+    })
+
+    expect(result).toMatchObject({ ok: false, reason: 'conflict' })
+    expect(vault.readFile('idea.md').content).toBe('# External')
+  })
+
+  test('Given a session snapshot When it is formatted Then the Vault contains a portable quote and source URI', () => {
+    const markdown = formatVaultSourceBlock({
+      type: 'agent-history',
+      label: 'Agent history: Vault discussion',
+      content: 'The Vault remains the canonical source.',
+      sourceUri: 'proma://session/session-1?messageId=message-1',
+      capturedAt: Date.UTC(2026, 7, 18),
+    })
+
+    expect(markdown).toContain('> [!quote]- Agent history: Vault discussion')
+    expect(markdown).toContain('> The Vault remains the canonical source.')
+    expect(markdown).toContain('proma://session/session-1?messageId=message-1')
+  })
+})

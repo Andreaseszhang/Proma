@@ -659,6 +659,12 @@ export interface ElectronAPI {
   /** 保存工作区 MCP 配置 */
   saveWorkspaceMcpConfig: (workspaceSlug: string, config: WorkspaceMcpConfig) => Promise<void>
 
+  /** 启动远程 MCP OAuth 授权；返回值不包含任何 access token。 */
+  startMcpOAuth: (input: import('@proma/shared').StartMcpOAuthInput) => Promise<import('@proma/shared').McpOAuthStartResult>
+
+  /** 将静态 MCP API Key / Token 加密保存到系统 Keychain。 */
+  saveMcpApiKey: (input: import('@proma/shared').SaveMcpApiKeyInput) => Promise<void>
+
   /** 测试 MCP 服务器连接 */
   testMcpServer: (name: string, entry: import('@proma/shared').McpServerEntry) => Promise<{ success: boolean; message: string }>
 
@@ -1930,6 +1936,14 @@ const electronAPI: ElectronAPI = {
 
   saveWorkspaceMcpConfig: (workspaceSlug: string, config: WorkspaceMcpConfig) => {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.SAVE_MCP_CONFIG, workspaceSlug, config)
+  },
+
+  startMcpOAuth: (input: import('@proma/shared').StartMcpOAuthInput) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.START_MCP_OAUTH, input)
+  },
+
+  saveMcpApiKey: (input: import('@proma/shared').SaveMcpApiKeyInput) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.SAVE_MCP_API_KEY, input)
   },
 
   testMcpServer: (name: string, entry: import('@proma/shared').McpServerEntry) => {

@@ -38,6 +38,9 @@ import { BuiltinMcpDetailSheet } from './BuiltinMcpDetailSheet'
 import { ImportSkillDialog } from './ImportSkillDialog'
 import { WorkspaceMemoryTab } from './WorkspaceMemoryTab'
 import { groupSkills } from './skillGrouping'
+import { IntegrationCatalog } from './IntegrationCatalog'
+import { CredentialDialog } from './CredentialDialog'
+import { MCP_INTEGRATION_CATALOG, matchesCatalogSearch, type CatalogCliIntegration, type CatalogCredentialIntegration, type CatalogGuidedIntegration, type CatalogMcpIntegration } from './integration-catalog'
 
 function buildSkillClassificationPrompt(input: {
   workspaceName: string
@@ -120,6 +123,8 @@ export function AgentSkillsView({
   const [isDeletingSkill, setIsDeletingSkill] = React.useState(false)
   const [isDeletingMcp, setIsDeletingMcp] = React.useState(false)
   const [classifyingSkills, setClassifyingSkills] = React.useState(false)
+  const [installingCatalogMcpId, setInstallingCatalogMcpId] = React.useState<string | null>(null)
+  const [pendingCredentialIntegration, setPendingCredentialIntegration] = React.useState<CatalogCredentialIntegration | null>(null)
 
   const q = search.trim().toLowerCase()
 
@@ -151,6 +156,30 @@ export function AgentSkillsView({
       server.tools.some((tool) => tool.name.toLowerCase().includes(q) || tool.description.toLowerCase().includes(q)),
     )
   }, [data.builtinMcpServers, q])
+
+  const catalogMcps = React.useMemo(() => {
+    return MCP_INTEGRATION_CATALOG.filter((integration): integration is CatalogMcpIntegration =>
+      integration.kind === 'mcp' && matchesCatalogSearch(integration, q),
+    )
+  }, [q])
+
+  const catalogClis = React.useMemo(() => {
+    return MCP_INTEGRATION_CATALOG.filter((integration): integration is CatalogCliIntegration =>
+      integration.kind === 'cli' && matchesCatalogSearch(integration, q),
+    )
+  }, [q])
+
+  const catalogGuided = React.useMemo(() => {
+    return MCP_INTEGRATION_CATALOG.filter((integration): integration is CatalogGuidedIntegration =>
+      integration.kind === 'guided' && matchesCatalogSearch(integration, q),
+    )
+  }, [q])
+
+  const catalogCredentials = React.useMemo(() => {
+    return MCP_INTEGRATION_CATALOG.filter((integration): integration is CatalogCredentialIntegration =>
+      integration.kind === 'credential' && matchesCatalogSearch(integration, q),
+    )
+  }, [q])
 
   // 不含搜索过滤的 MCP 总数（Tab 计数与空态判断用）
   const mcpCount = React.useMemo(
@@ -193,6 +222,92 @@ export function AgentSkillsView({
     setSettingsOpen(true)
     setSelectedBuiltinMcp(null)
   }, [setSettingsOpen, setSettingsTab, setToolSettingsFocus])
+
+  const installCatalogMcp = React.useCallback(async (integration: CatalogMcpIntegration): Promise<void> => {
+    if (installingCatalogMcpId) return
+    if (integration.authentication === 'oauth' && integration.oauthProvider && integration.entry.url) {
+      setInstallingCatalogMcpId(integration.id)
+      try {
+        const existing = data.mcpConfig.servers[integration.serverName]
+        if (!existing) {
+          const installed = await data.installMcp(integration.serverName, integration.entry)
+          if (!installed) return
+        }
+        await window.electronAPI.startMcpOAuth({
+          workspaceSlug: data.workspaceSlug,
+          serverName: integration.serverName,
+          provider: integration.oauthProvider,
+          serverUrl: integration.entry.url,
+        })
+        await data.toggleMcp(integration.serverName, true)
+        toast.success(`${integration.name} 已完成授权`, { description: 'OAuth token 已安全保存，MCP 已启用。' })
+      } catch (error) {
+        console.error(`[Agent 技能] ${integration.name} OAuth 失败:`, error)
+        toast.error(`${integration.name} 授权失败`, { description: error instanceof Error ? error.message : '请稍后重试' })
+      } finally {
+        setInstallingCatalogMcpId(null)
+      }
+      return
+    }
+
+    const existing = data.mcpConfig.servers[integration.serverName]
+    if (existing) {
+      setEditingMcp({ name: integration.serverName, entry: existing })
+      setMcpSheetOpen(true)
+      return
+    }
+    setInstallingCatalogMcpId(integration.id)
+    try {
+      const installed = await data.installMcp(integration.serverName, integration.entry)
+      if (!installed) return
+      toast.success(`已添加 ${integration.name}`, {
+        description: integration.authentication === 'none' ? '已启用，可在「我的 MCP」中测试连接。' : '已写入待配置模板。需要时可从卡片打开配置，不会自动跳转浏览器。',
+      })
+      return
+    } finally {
+      setInstallingCatalogMcpId(null)
+    }
+  }, [data, installingCatalogMcpId])
+
+  const connectCredentialIntegration = React.useCallback(async (integration: CatalogCredentialIntegration, value: string): Promise<void> => {
+    if (installingCatalogMcpId) return
+    setInstallingCatalogMcpId(integration.id)
+    try {
+      const existing = data.mcpConfig.servers[integration.serverName]
+      if (!existing) {
+        const installed = await data.installMcp(integration.serverName, integration.entry)
+        if (!installed) throw new Error('无法创建连接配置')
+      }
+      await window.electronAPI.saveMcpApiKey({
+        workspaceSlug: data.workspaceSlug,
+        serverName: integration.serverName,
+        headerName: integration.credential.headerName,
+        value,
+      })
+      await data.toggleMcp(integration.serverName, true)
+      toast.success(`${integration.name} 已配置`, { description: '凭据已加密保存到系统 Keychain，连接已启用。' })
+    } catch (error) {
+      console.error(`[Agent 技能] ${integration.name} 凭据配置失败:`, error)
+      toast.error(`${integration.name} 连接失败`, { description: error instanceof Error ? error.message : '请检查凭据后重试' })
+      throw error
+    } finally {
+      setInstallingCatalogMcpId(null)
+    }
+  }, [data, installingCatalogMcpId])
+
+  const openCatalogCli = React.useCallback((integration: CatalogCliIntegration): void => {
+    void window.electronAPI.openExternal(integration.setupUrl)
+  }, [])
+
+  const guideCatalogIntegration = React.useCallback(async (integration: CatalogGuidedIntegration): Promise<void> => {
+    const sessionId = await createAgent()
+    if (!sessionId) {
+      toast.error(`无法创建 ${integration.name} 配置会话`)
+      return
+    }
+    setPendingPrompt({ sessionId, message: integration.agentPrompt })
+    toast.success(`已创建 ${integration.name} 配置会话`)
+  }, [createAgent, setPendingPrompt])
 
   const handleClassifySkills = React.useCallback(async (): Promise<void> => {
     if (classifyingSkills) return
@@ -464,13 +579,23 @@ export function AgentSkillsView({
             <McpTab
               userEntries={userMcpEntries}
               builtinServers={builtinMcpServers}
-              total={mcpCount}
+              catalogMcps={catalogMcps}
+              catalogClis={catalogClis}
+              catalogGuided={catalogGuided}
+              catalogCredentials={catalogCredentials}
+              installedMcpNames={new Set(Object.keys(data.mcpConfig.servers ?? {}))}
+              enabledMcpNames={new Set(Object.entries(data.mcpConfig.servers ?? {}).filter(([, entry]) => entry.enabled !== false).map(([name]) => name))}
+              installingCatalogMcpId={installingCatalogMcpId}
               onOpen={(name, entry) => { setEditingMcp({ name, entry }); setMcpSheetOpen(true) }}
               onOpenBuiltin={setSelectedBuiltinMcp}
               onToggle={data.toggleMcp}
               onToggleBuiltin={data.toggleBuiltinMcp}
               onRequestDelete={setPendingDeleteMcpName}
               onAdd={() => { setEditingMcp(null); setMcpSheetOpen(true) }}
+              onInstallCatalogMcp={(integration) => { void installCatalogMcp(integration) }}
+              onOpenCatalogCli={openCatalogCli}
+              onGuideCatalogIntegration={(integration) => { void guideCatalogIntegration(integration) }}
+              onRequestCredential={setPendingCredentialIntegration}
             />
           ) : (
             <WorkspaceMemoryTab workspaceSlug={data.workspaceSlug} search={search} />
@@ -521,6 +646,12 @@ export function AgentSkillsView({
         server={selectedBuiltinMcp}
         onOpenChange={(open) => { if (!open) setSelectedBuiltinMcp(null) }}
         onConfigure={configureBuiltinMcp}
+      />
+
+      <CredentialDialog
+        integration={pendingCredentialIntegration}
+        onOpenChange={(open) => { if (!open) setPendingCredentialIntegration(null) }}
+        onSave={connectCredentialIntegration}
       />
 
       <ImportSkillDialog
@@ -654,41 +785,42 @@ function SkillSection({ title, skills, isBuiltin, updatingSkill, onOpen, onToggl
 interface McpTabProps {
   userEntries: Array<[string, McpServerEntry]>
   builtinServers: BuiltinMcpServerSummary[]
-  total: number
+  catalogMcps: CatalogMcpIntegration[]
+  catalogClis: CatalogCliIntegration[]
+  catalogGuided: CatalogGuidedIntegration[]
+  catalogCredentials: CatalogCredentialIntegration[]
+  installedMcpNames: Set<string>
+  enabledMcpNames: Set<string>
+  installingCatalogMcpId: string | null
   onOpen: (name: string, entry: McpServerEntry) => void
   onOpenBuiltin: (server: BuiltinMcpServerSummary) => void
   onToggle: (name: string, enabled: boolean) => void
   onToggleBuiltin: (id: string, enabled: boolean) => void
   onRequestDelete: (name: string) => void
   onAdd: () => void
+  onInstallCatalogMcp: (integration: CatalogMcpIntegration) => void
+  onOpenCatalogCli: (integration: CatalogCliIntegration) => void
+  onGuideCatalogIntegration: (integration: CatalogGuidedIntegration) => void
+  onRequestCredential: (integration: CatalogCredentialIntegration) => void
 }
 
-function McpTab({ userEntries, builtinServers, total, onOpen, onOpenBuiltin, onToggle, onToggleBuiltin, onRequestDelete, onAdd }: McpTabProps): React.ReactElement {
-  if (total === 0) {
-    return (
-      <EmptyState
-        icon={<Plus className="size-8 text-foreground/30" />}
-        title="还没有 MCP 服务器"
-        hint="点击右上角「添加服务器」开始，或在 Agent 模式下让 Proma 帮你查找并配置。"
-        action={
-          <button
-            type="button"
-            onClick={onAdd}
-            className="mt-2 flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-[13px] font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
-          >
-            <Plus size={14} />
-            <span>添加服务器</span>
-          </button>
-        }
-      />
-    )
-  }
-  if (userEntries.length === 0 && builtinServers.length === 0) {
+function McpTab({ userEntries, builtinServers, catalogMcps, catalogClis, catalogGuided, catalogCredentials, installedMcpNames, enabledMcpNames, installingCatalogMcpId, onOpen, onOpenBuiltin, onToggle, onToggleBuiltin, onRequestDelete, onAdd, onInstallCatalogMcp, onOpenCatalogCli, onGuideCatalogIntegration, onRequestCredential }: McpTabProps): React.ReactElement {
+  if (userEntries.length === 0 && builtinServers.length === 0 && catalogMcps.length === 0 && catalogClis.length === 0 && catalogGuided.length === 0 && catalogCredentials.length === 0) {
     return <EmptyState icon={<Search className="size-8 text-foreground/30" />} title="没有匹配的 MCP 服务器" hint="试试更换搜索关键词。" />
   }
 
   return (
     <div className="flex flex-col gap-8">
+      <div className="flex justify-end">
+        <button
+          type="button"
+          onClick={onAdd}
+          className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+        >
+          <Plus size={14} />
+          <span>手动添加 MCP</span>
+        </button>
+      </div>
       {userEntries.length > 0 && (
         <McpSection title="我的 MCP" count={userEntries.length}>
           {userEntries.map(([name, entry]) => (
@@ -727,6 +859,20 @@ function McpTab({ userEntries, builtinServers, total, onOpen, onOpenBuiltin, onT
           ))}
         </McpSection>
       )}
+
+      <IntegrationCatalog
+        mcps={catalogMcps}
+        clis={catalogClis}
+        guided={catalogGuided}
+        credentials={catalogCredentials}
+        installedMcpNames={installedMcpNames}
+        enabledMcpNames={enabledMcpNames}
+        installingMcpId={installingCatalogMcpId}
+        onInstallMcp={onInstallCatalogMcp}
+        onOpenCli={onOpenCatalogCli}
+        onGuide={onGuideCatalogIntegration}
+        onRequestCredential={onRequestCredential}
+      />
     </div>
   )
 }

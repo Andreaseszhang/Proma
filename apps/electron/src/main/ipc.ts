@@ -340,6 +340,7 @@ import {
 import { movePathSafely } from './lib/file-move-service'
 import { subscribeWorkspaceMemoryChanges } from './lib/workspace-memory-change-watcher'
 import { confirmWorkspaceMemoryWindowClose, markWorkspaceMemoryWindowReady } from './lib/workspace-memory-window'
+import { startMcpOAuth, saveMcpApiKey } from './lib/mcp-oauth-service'
 
 /** Renderer-scoped subscriptions; disposed on explicit tab cleanup or renderer destruction. */
 const workspaceMemoryWatchSubscriptions = new Map<number, Map<string, () => void>>()
@@ -2612,6 +2613,21 @@ export function registerIpcHandlers(): void {
     AGENT_IPC_CHANNELS.SAVE_MCP_CONFIG,
     async (_, workspaceSlug: string, config: WorkspaceMcpConfig): Promise<void> => {
       return saveWorkspaceMcpConfig(workspaceSlug, config)
+    }
+  )
+
+  // 启动远程 MCP OAuth。令牌仅保存在主进程的加密凭据文件中，不回传 renderer。
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.START_MCP_OAUTH,
+    async (_, input: import('@proma/shared').StartMcpOAuthInput): Promise<import('@proma/shared').McpOAuthStartResult> => {
+      return startMcpOAuth(input)
+    }
+  )
+
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.SAVE_MCP_API_KEY,
+    async (_, input: import('@proma/shared').SaveMcpApiKeyInput): Promise<void> => {
+      return saveMcpApiKey(input)
     }
   )
 

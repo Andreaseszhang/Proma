@@ -15,7 +15,7 @@ import {
   currentAgentWorkspaceIdAtom,
   workspaceCapabilitiesVersionAtom,
 } from '@/atoms/agent-atoms'
-import type { BuiltinMcpServerSummary, SkillMeta, WorkspaceCapabilities, WorkspaceMcpConfig } from '@proma/shared'
+import type { BuiltinMcpServerSummary, McpServerEntry, SkillMeta, WorkspaceCapabilities, WorkspaceMcpConfig } from '@proma/shared'
 
 export interface AgentSkillsData {
   /** 当前工作区（未选中时为 null） */
@@ -35,6 +35,7 @@ export interface AgentSkillsData {
   updateSkill: (slug: string) => Promise<void>
   refreshMcpConfig: () => Promise<void>
   toggleMcp: (name: string, enabled: boolean) => Promise<void>
+  installMcp: (name: string, entry: McpServerEntry) => Promise<boolean>
   toggleBuiltinMcp: (id: string, enabled: boolean) => Promise<void>
   deleteMcp: (name: string) => Promise<void>
 }
@@ -150,10 +151,13 @@ export function useAgentSkillsData(workspaceId?: string): AgentSkillsData {
 
   const toggleMcp = React.useCallback(async (name: string, enabled: boolean) => {
     try {
-      const entry = mcpConfig.servers[name]
+      // A catalog installation may have completed immediately before this action;
+      // fetch again so the follow-up enable operation never uses a stale closure.
+      const currentConfig = await window.electronAPI.getWorkspaceMcpConfig(workspaceSlug)
+      const entry = currentConfig.servers[name]
       if (!entry) return
       const newConfig: WorkspaceMcpConfig = {
-        servers: { ...mcpConfig.servers, [name]: { ...entry, enabled } },
+        servers: { ...currentConfig.servers, [name]: { ...entry, enabled } },
       }
       await window.electronAPI.saveWorkspaceMcpConfig(workspaceSlug, newConfig)
       setMcpConfig(newConfig)
@@ -161,6 +165,23 @@ export function useAgentSkillsData(workspaceId?: string): AgentSkillsData {
     } catch (error) {
       console.error('[Agent 技能] 切换 MCP 服务器状态失败:', error)
       toast.error('切换 MCP 状态失败')
+    }
+  }, [workspaceSlug, bumpCapabilitiesVersion])
+
+  const installMcp = React.useCallback(async (name: string, entry: McpServerEntry): Promise<boolean> => {
+    if (mcpConfig.servers[name]) return false
+    try {
+      const newConfig: WorkspaceMcpConfig = {
+        servers: { ...mcpConfig.servers, [name]: entry },
+      }
+      await window.electronAPI.saveWorkspaceMcpConfig(workspaceSlug, newConfig)
+      setMcpConfig(newConfig)
+      bumpCapabilitiesVersion((v) => v + 1)
+      return true
+    } catch (error) {
+      console.error('[Agent 技能] 安装 MCP 失败:', error)
+      toast.error('安装 MCP 失败')
+      return false
     }
   }, [workspaceSlug, mcpConfig, bumpCapabilitiesVersion])
 
@@ -211,6 +232,7 @@ export function useAgentSkillsData(workspaceId?: string): AgentSkillsData {
     updateSkill,
     refreshMcpConfig,
     toggleMcp,
+    installMcp,
     toggleBuiltinMcp,
     deleteMcp,
   }

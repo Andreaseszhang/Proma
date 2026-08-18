@@ -990,6 +990,32 @@ export interface WorkspaceMcpConfig {
   servers: Record<string, McpServerEntry>
 }
 
+/** OAuth-capable remote MCP provider currently supported by the built-in connector flow. */
+export type McpOAuthProvider = 'notion' | 'github'
+
+/** Renderer-to-main request for a remote MCP authorization-code + PKCE flow. */
+export interface StartMcpOAuthInput {
+  workspaceSlug: string
+  serverName: string
+  provider: McpOAuthProvider
+  serverUrl: string
+}
+
+/** OAuth connection result that deliberately excludes all secret material. */
+export interface McpOAuthStartResult {
+  provider: McpOAuthProvider
+  serverName: string
+  expiresAt?: number
+}
+
+/** Store a static MCP token in Keychain-backed safeStorage; never persisted in mcp.json. */
+export interface SaveMcpApiKeyInput {
+  workspaceSlug: string
+  serverName: string
+  headerName: string
+  value: string
+}
+
 // ===== Skill 元数据 =====
 
 /** 从其他工作区导入的 Skill 来源元数据 */
@@ -1747,6 +1773,10 @@ export const AGENT_IPC_CHANNELS = {
   GET_MCP_CONFIG: 'agent:get-mcp-config',
   /** 保存工作区 MCP 配置 */
   SAVE_MCP_CONFIG: 'agent:save-mcp-config',
+  /** 启动远程 MCP 的 OAuth PKCE 授权 */
+  START_MCP_OAUTH: 'agent:start-mcp-oauth',
+  /** 安全保存远程 MCP 的静态 API Key / Token */
+  SAVE_MCP_API_KEY: 'agent:save-mcp-api-key',
   /** 测试 MCP 服务器连接 */
   TEST_MCP_SERVER: 'agent:test-mcp-server',
   /** 启用或关闭 Proma 内置 MCP */

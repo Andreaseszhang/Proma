@@ -52,6 +52,7 @@ import { getFetchFn } from './proxy-fetch'
 import { getEffectiveProxyUrl } from './proxy-settings-service'
 import { appendSDKMessages, updateAgentSessionMeta, getAgentSessionMeta, getAgentSessionMessages, removeSDKErrorMessage, updateSDKUserMessageSkillActivations, rewindPiAgentSession, resolveAgentCwd, getActiveWorktreePath, getAgentCwdMode, getSessionWorkbenchLayout } from './agent-session-manager'
 import { getAgentWorkspace, getLocalProjectRootStatus, getProjectFilesPath, getWorkspaceMcpConfig, getWorkspaceAttachedDirectories, getWorkspaceAttachedFiles, getWorkspaceAgentsMdPath, readWorkspaceAgentsMd, getWorkspaceMemoryGuidance, isWorkspaceProjectKnowledgeMaintenanceApproved } from './agent-workspace-manager'
+import { getMcpOAuthHeaders } from './mcp-oauth-service'
 import { getAgentWorkspacePath, getAgentSessionWorkspacePath, getSdkConfigDir, getWorkspaceSkillsDir } from './config-paths'
 import { getRuntimeStatus } from './runtime-init'
 import { getSettings } from './settings-service'
@@ -265,7 +266,7 @@ export class AgentOrchestrator {
   /**
    * 构建工作区 MCP 服务器配置
    */
-  private buildMcpServers(workspaceSlug: string | undefined): Record<string, Record<string, unknown>> {
+  private async buildMcpServers(workspaceSlug: string | undefined): Promise<Record<string, Record<string, unknown>>> {
     const mcpServers: Record<string, Record<string, unknown>> = {}
     if (!workspaceSlug) return mcpServers
 
@@ -288,10 +289,18 @@ export class AgentOrchestrator {
           startup_timeout_sec: entry.timeout ?? 30,
         }
       } else if ((type === 'http' || type === 'sse') && entry.url) {
+        let oauthHeaders: Record<string, string> | undefined
+        try {
+          oauthHeaders = await getMcpOAuthHeaders(workspaceSlug, name)
+        } catch (error) {
+          console.warn(`[Agent 编排] MCP OAuth 凭据不可用：${name}`, error instanceof Error ? error.message : error)
+          continue
+        }
+        const headers = { ...entry.headers, ...oauthHeaders }
         mcpServers[name] = {
           type,
           url: entry.url,
-          ...(entry.headers && Object.keys(entry.headers).length > 0 && { headers: entry.headers }),
+          ...(Object.keys(headers).length > 0 && { headers }),
           required: false,
         }
       } else {
@@ -1016,7 +1025,7 @@ export class AgentOrchestrator {
       }
 
       // 10. 构建 MCP 服务器配置 + 记忆工具 + 生图工具 + 自定义工具
-      const mcpServers = this.buildMcpServers(workspaceSlug)
+      const mcpServers = await this.buildMcpServers(workspaceSlug)
       let piBuiltinTools: unknown[] = []
       let piMcpTools: unknown[] = []
       const piSdk = await import('@earendil-works/pi-coding-agent')

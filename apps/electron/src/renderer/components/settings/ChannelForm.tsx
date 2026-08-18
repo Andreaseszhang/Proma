@@ -79,8 +79,8 @@ interface ChannelFormProps {
   onCancel: () => void
 }
 
-/** 所有可选供应商 */
-const PROVIDER_OPTIONS: ProviderType[] = ['anthropic', 'anthropic-compatible', 'openai', 'openai-responses', 'openai-codex', 'xai', 'deepseek', 'google', 'kimi-api', 'kimi-coding', 'opencode-go-openai', 'zhipu', 'zhipu-coding', 'zhipu-coding-team', 'ark-coding-plan', 'minimax', 'doubao', 'qwen', 'qwen-anthropic', 'qwen-token-plan', 'xiaomi', 'xiaomi-token-plan', 'custom']
+/** 所有可选供应商（'qwen' 已并入 'qwen-anthropic'，仅为兼容存量渠道保留 ProviderType，不再出现在新建下拉） */
+const PROVIDER_OPTIONS: ProviderType[] = ['anthropic', 'anthropic-compatible', 'openai', 'openai-responses', 'openai-codex', 'xai', 'deepseek', 'google', 'kimi-api', 'kimi-coding', 'opencode-go-openai', 'zhipu', 'zhipu-coding', 'zhipu-coding-team', 'ark-coding-plan', 'minimax', 'doubao', 'qwen-anthropic', 'qwen-token-plan', 'xiaomi', 'xiaomi-token-plan', 'custom']
 
 /** 需要用 messages 端点测试的供应商预设模型 */
 const PROVIDER_TEST_MODEL_PRESETS: Partial<Record<ProviderType, string[]>> = {
@@ -807,6 +807,20 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
   const isDirty = !isEdit && (name.trim() !== '' || effectiveApiKey.trim() !== '' || models.length > 0)
   const hasNoModels = !isEdit && models.length === 0
 
+  /**
+   * 编辑模式下若当前 provider 已从新建下拉移除（如旧版 'qwen'），
+   * 动态追加对应选项，避免 SettingsSelect 因找不到 value 而显示占位符。
+   */
+  const providerSelectOptions = React.useMemo(() => {
+    if (isEdit && !PROVIDER_OPTIONS.includes(provider)) {
+      return [
+        ...PROVIDER_SELECT_OPTIONS,
+        { value: provider, label: PROVIDER_LABELS[provider], icon: getProviderLogo(provider) },
+      ]
+    }
+    return PROVIDER_SELECT_OPTIONS
+  }, [isEdit, provider])
+
   /** 返回按钮：创建模式下有未保存内容时拦截 */
   const handleBack = (): void => {
     if (!isEdit && isDirty) {
@@ -902,7 +916,7 @@ export function ChannelForm({ channel, onSaved, onCancel }: ChannelFormProps): R
             label="供应商类型"
             value={provider}
             onValueChange={handleProviderChange}
-            options={PROVIDER_SELECT_OPTIONS}
+            options={providerSelectOptions}
             placeholder="选择供应商"
           />
           {provider === 'custom' && (

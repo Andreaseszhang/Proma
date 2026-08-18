@@ -84,6 +84,23 @@ describe('Vault file system', () => {
     expect(vault.readFile('idea.md').content).toBe('# External')
   })
 
+  test('Given a Markdown note When it is renamed Then its content stays inside the authorized Vault', () => {
+    const root = makeTempRoot()
+    writeFile(join(root, 'Ideas', 'draft.md'), '# Draft')
+    const vault = createVaultFileSystem(root)
+    const original = vault.readFile('Ideas/draft.md')
+
+    const renamed = vault.renameFile({
+      relativePath: original.relativePath,
+      name: 'Published idea',
+      expectedSha256: original.sha256,
+    })
+
+    expect(renamed.relativePath).toBe('Ideas/Published idea.md')
+    expect(renamed.content).toBe('# Draft')
+    expect(existsSync(join(root, 'Ideas', 'draft.md'))).toBe(false)
+  })
+
   test('Given a session snapshot When it is formatted Then the Vault contains a portable quote and source URI', () => {
     const markdown = formatVaultSourceBlock({
       type: 'agent-history',

@@ -5919,6 +5919,19 @@ export function registerIpcHandlers(): void {
     return getConfiguredVaultFileSystem().writeFile({ relativePath, content, createOnly: true })
   })
 
+  ipcMain.handle(VAULT_IPC_CHANNELS.RENAME_FILE, async (_, input: unknown) => {
+    if (!input || typeof input !== 'object') throw new Error('Vault 重命名参数非法')
+    const value = input as Record<string, unknown>
+    if (typeof value.relativePath !== 'string' || typeof value.name !== 'string') {
+      throw new Error('Vault relativePath 和 name 必填')
+    }
+    return getConfiguredVaultFileSystem().renameFile({
+      relativePath: value.relativePath,
+      name: value.name,
+      expectedSha256: typeof value.expectedSha256 === 'string' ? value.expectedSha256 : undefined,
+    })
+  })
+
   ipcMain.handle(VAULT_IPC_CHANNELS.SEARCH, async (_, query: unknown, limit?: unknown) => {
     if (typeof query !== 'string') throw new Error('Vault 搜索关键词必填')
     return getConfiguredVaultFileSystem().search(query, typeof limit === 'number' ? limit : undefined)

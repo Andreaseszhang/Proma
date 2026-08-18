@@ -1,14 +1,13 @@
 import * as React from 'react'
 import { useAtom } from 'jotai'
-import { BookOpen, ChevronDown, ChevronRight, FilePlus2, FileText, Folder, FolderOpen, Loader2, RefreshCw } from 'lucide-react'
+import { BookOpen, ChevronDown, ChevronRight, Folder, FolderOpen, Loader2, Plus, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import type { VaultCandidate, VaultFileEntry, VaultReadResult, VaultSummary } from '@proma/shared'
 import { Button } from '@/components/ui/button'
-import { Switch } from '@/components/ui/switch'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { MarkdownRichEditor } from '@/components/diff/MarkdownRichEditor'
+import { VaultLiveMarkdownEditor } from './VaultLiveMarkdownEditor'
 import {
   selectedVaultFileAtom,
   vaultReadResultAtom,
@@ -17,8 +16,8 @@ import {
 } from '@/atoms/vault-atoms'
 import { cn } from '@/lib/utils'
 
-function formatModifiedAt(value: number): string {
-  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(value))
+function displayDocumentTitle(filename: string): string {
+  return filename.replace(/\.md$/i, '')
 }
 
 interface VaultFolderNode {
@@ -108,7 +107,16 @@ function VaultFileList({
                 {expanded ? <FolderOpen size={14} className="shrink-0 text-primary/80" /> : <Folder size={14} className="shrink-0 text-primary/80" />}
                 <span className="min-w-0 truncate">{child.name}</span>
               </button>
-              {expanded && renderEntries(child, depth + 1)}
+              {expanded && (
+                <div className="relative">
+                  <span
+                    aria-hidden="true"
+                    className="absolute top-0 bottom-0 w-px bg-border/70"
+                    style={{ left: `${17 + Math.min(depth, 6) * 14}px` }}
+                  />
+                  {renderEntries(child, depth + 1)}
+                </div>
+              )}
             </React.Fragment>
           )
         })}
@@ -127,11 +135,9 @@ function VaultFileList({
                 'flex h-8 w-full min-w-0 items-center gap-2 rounded-md pr-2 text-left text-[13px] transition-colors',
                 selected ? 'bg-accent text-accent-foreground shadow-sm' : 'text-foreground/70 hover:bg-muted/70 hover:text-foreground',
               )}
-              style={{ paddingLeft: `${32 + Math.min(depth, 6) * 14}px` }}
+              style={{ paddingLeft: `${18 + Math.min(depth, 6) * 14}px` }}
             >
-              <FileText size={14} className="shrink-0 text-muted-foreground" />
-              <span className="min-w-0 truncate">{file.name}</span>
-              <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">{formatModifiedAt(file.modifiedAt)}</span>
+              <span className="min-w-0 truncate">{displayDocumentTitle(file.name)}</span>
             </button>
           )
         })}
@@ -144,12 +150,15 @@ function VaultFileList({
 function VaultMarkdownEditor({
   readResult,
   onSave,
+  onRename,
 }: {
   readResult: VaultReadResult
   onSave: (nextContent: string) => Promise<void>
+  onRename: (name: string) => Promise<void>
 }): React.ReactElement {
   const [draft, setDraft] = React.useState(readResult.content)
   const [saving, setSaving] = React.useState(false)
+  const [filename, setFilename] = React.useState(displayDocumentTitle(readResult.relativePath.split('/').pop() ?? readResult.relativePath))
 
   const save = async (): Promise<void> => {
     if (saving || draft === readResult.content) return
@@ -161,25 +170,35 @@ function VaultMarkdownEditor({
     }
   }
 
+  const rename = async (): Promise<void> => {
+    const currentName = displayDocumentTitle(readResult.relativePath.split('/').pop() ?? readResult.relativePath)
+    if (!filename.trim() || filename.trim() === currentName) {
+      setFilename(currentName)
+      return
+    }
+    await onRename(filename.trim())
+  }
+
   return (
-    <div
-      className="min-h-0 flex-1 overflow-hidden titlebar-no-drag"
-      onKeyDownCapture={(event) => {
-        if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
-          event.preventDefault()
-          void save()
-        }
-      }}
-    >
-      <div className="mx-auto h-full w-full max-w-3xl px-5 py-5">
-        <MarkdownRichEditor
-          value={draft}
-          editing
-          showToolbar={false}
-          onChange={setDraft}
-          onSave={() => { void save() }}
-          onCancel={() => undefined}
+    <div className="min-h-0 flex-1 overflow-hidden titlebar-no-drag">
+      <div className="mx-auto flex h-full w-full max-w-3xl flex-col px-5 py-5">
+        <input
+          aria-label="重命名笔记"
+          value={filename}
+          onChange={(event) => setFilename(event.target.value)}
+          onBlur={() => { void rename() }}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') event.currentTarget.blur()
+            if (event.key === 'Escape') {
+              setFilename(displayDocumentTitle(readResult.relativePath.split('/').pop() ?? readResult.relativePath))
+              event.currentTarget.blur()
+            }
+          }}
+          className="mb-8 h-10 w-full shrink-0 bg-transparent px-4 text-3xl font-semibold leading-tight text-foreground outline-none placeholder:text-muted-foreground/50"
         />
+        <div className="min-h-0 flex-1">
+          <VaultLiveMarkdownEditor value={draft} onChange={setDraft} onSave={() => { void save() }} />
+        </div>
       </div>
     </div>
   )
@@ -189,10 +208,12 @@ function VaultMarkdownPane({
   readResult,
   loading,
   onSave,
+  onRename,
 }: {
   readResult: VaultReadResult | null
   loading: boolean
   onSave: (nextContent: string) => Promise<void>
+  onRename: (name: string) => Promise<void>
 }): React.ReactElement {
   if (loading) {
     return (
@@ -204,7 +225,7 @@ function VaultMarkdownPane({
 
   if (!readResult) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+      <div className="flex h-full flex-col items-start justify-center gap-3 px-12 text-left">
         <BookOpen className="size-8 text-muted-foreground/60" />
         <p className="text-sm text-muted-foreground">从左侧选择一篇笔记</p>
       </div>
@@ -212,8 +233,8 @@ function VaultMarkdownPane({
   }
 
   return (
-    <section className="flex min-w-0 flex-1 flex-col bg-content-area">
-      <VaultMarkdownEditor key={`${readResult.relativePath}:${readResult.sha256}`} readResult={readResult} onSave={onSave} />
+    <section className="flex min-w-0 flex-1 flex-col bg-muted/25">
+      <VaultMarkdownEditor key={`${readResult.relativePath}:${readResult.sha256}`} readResult={readResult} onSave={onSave} onRename={onRename} />
     </section>
   )
 }
@@ -242,13 +263,21 @@ export function VaultView(): React.ReactElement {
       if (!nextConfig) {
         setSelectedFile(null)
         setReadResult(null)
+      } else if (selectedFile) {
+        try {
+          setReadResult(await window.electronAPI.readVaultFile(selectedFile))
+        } catch {
+          setSelectedFile(null)
+          setReadResult(null)
+          toast.message('已打开的笔记不存在或无法刷新')
+        }
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '无法读取 Vault')
     } finally {
       setLoading(false)
     }
-  }, [setReadResult, setSelectedFile])
+  }, [selectedFile, setReadResult, setSelectedFile])
 
   React.useEffect(() => {
     void refresh()
@@ -380,6 +409,23 @@ export function VaultView(): React.ReactElement {
     }
   }
 
+  const rename = async (name: string): Promise<void> => {
+    if (!readResult) return
+    try {
+      const renamed = await window.electronAPI.renameVaultFile({
+        relativePath: readResult.relativePath,
+        name,
+        expectedSha256: readResult.sha256,
+      })
+      setSelectedFile(renamed.relativePath)
+      setReadResult(renamed)
+      setRefreshToken((value) => value + 1)
+      toast.success('已重命名笔记')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '无法重命名笔记')
+    }
+  }
+
   if (loading) {
     return <div className="flex h-full items-center justify-center text-muted-foreground"><Loader2 className="size-5 animate-spin" /></div>
   }
@@ -422,8 +468,10 @@ export function VaultView(): React.ReactElement {
 
   return (
     <>
-      <main className="flex h-full min-h-0 bg-content-area">
-      <aside className="flex w-[280px] shrink-0 flex-col bg-muted/25 shadow-[1px_0_0_hsl(var(--border)/0.45)]">
+      <main className="flex h-full min-h-0 flex-col bg-muted/25">
+        <div className="relative z-10 h-[100px] shrink-0 border-b border-border/60 bg-muted/25" />
+        <div className="flex min-h-0 flex-1">
+          <aside className="flex w-[280px] shrink-0 flex-col bg-muted/25 shadow-[1px_0_0_hsl(var(--border)/0.45)]">
         <header className="flex h-14 items-center gap-2 px-3 titlebar-drag-region">
           <BookOpen size={17} className="shrink-0 text-primary" />
           <div className="min-w-0 flex-1">
@@ -433,7 +481,7 @@ export function VaultView(): React.ReactElement {
           <div className="flex items-center gap-0.5 titlebar-no-drag">
             <Tooltip>
               <TooltipTrigger asChild>
-                <button type="button" aria-label="刷新 Vault" onClick={() => setRefreshToken((value) => value + 1)} className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
+                <button type="button" aria-label="刷新 Vault" onClick={() => { void refresh() }} className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
                   <RefreshCw size={14} />
                 </button>
               </TooltipTrigger>
@@ -442,28 +490,17 @@ export function VaultView(): React.ReactElement {
             <Tooltip>
               <TooltipTrigger asChild>
                 <button type="button" aria-label="新建笔记" onClick={() => { void createNote() }} className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
-                  <FilePlus2 size={14} />
+                  <Plus size={16} />
                 </button>
               </TooltipTrigger>
               <TooltipContent>新建笔记</TooltipContent>
             </Tooltip>
           </div>
         </header>
-        <VaultFileList files={files} selectedPath={selectedFile} onSelect={(path) => { void openFile(path) }} />
-        <footer className="flex items-center justify-between gap-3 px-4 py-3 text-[11px] text-muted-foreground shadow-[0_-1px_0_hsl(var(--border)/0.45)] titlebar-no-drag">
-          <span>允许 Agent 写入</span>
-          <Switch
-            checked={config.allowAgentWrites}
-            onCheckedChange={(allowAgentWrites) => {
-              void window.electronAPI.updateVaultConfig({ allowAgentWrites })
-                .then(setConfig)
-                .catch((error) => toast.error(error instanceof Error ? error.message : '无法更新权限'))
-            }}
-            aria-label="允许 Agent 写入 Vault"
-          />
-        </footer>
-      </aside>
-      <VaultMarkdownPane readResult={readResult} loading={fileLoading} onSave={save} />
+          <VaultFileList files={files} selectedPath={selectedFile} onSelect={(path) => { void openFile(path) }} />
+          </aside>
+          <VaultMarkdownPane readResult={readResult} loading={fileLoading} onSave={save} onRename={rename} />
+        </div>
       </main>
       <Dialog
         open={quoteDialogOpen}

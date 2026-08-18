@@ -6,6 +6,7 @@ import {
   readdirSync,
   readFileSync,
   realpathSync,
+  renameSync,
   statSync,
   unlinkSync,
 } from 'node:fs'
@@ -16,6 +17,7 @@ import type {
   VaultConfig,
   VaultFileEntry,
   VaultReadResult,
+  VaultRenameInput,
   VaultSearchResult,
   VaultSourceSnapshot,
   VaultSummary,
@@ -116,6 +118,7 @@ export interface VaultFileSystem {
   listFiles(): VaultFileEntry[]
   readFile(relativePath: string): VaultReadResult
   writeFile(input: VaultWriteInput): VaultWriteResult
+  renameFile(input: VaultRenameInput): VaultReadResult
   search(query: string, limit?: number): VaultSearchResult[]
 }
 
@@ -196,6 +199,29 @@ export function createVaultFileSystem(rootPath: string): VaultFileSystem {
     return { ok: true, relativePath: result.relativePath, sha256: result.sha256, modifiedAt: result.modifiedAt }
   }
 
+  const renameFile = (input: VaultRenameInput): VaultReadResult => {
+    const source = getSafeVaultTarget(root, input.relativePath)
+    const current = readFile(source.relativePath)
+    if (input.expectedSha256 && input.expectedSha256 !== current.sha256) {
+      throw new Error('文件已在外部修改，请刷新后再重命名')
+    }
+
+    const requestedName = input.name.trim()
+    if (!requestedName || requestedName.includes('/') || requestedName.includes('\\') || requestedName.includes('\0')) {
+      throw new Error('文件名不能为空且不能包含路径分隔符')
+    }
+    const filename = requestedName.toLowerCase().endsWith('.md') ? requestedName : `${requestedName}.md`
+    const parentPath = source.relativePath.includes('/') ? source.relativePath.slice(0, source.relativePath.lastIndexOf('/')) : ''
+    const target = getSafeVaultTarget(root, parentPath ? `${parentPath}/${filename}` : filename)
+    if (target.relativePath === source.relativePath) return current
+    if (existsSync(target.absolutePath)) throw new Error('同名 Markdown 文件已存在')
+
+    mkdirSync(dirname(target.absolutePath), { recursive: true })
+    const revalidatedTarget = getSafeVaultTarget(root, target.relativePath)
+    renameSync(source.absolutePath, revalidatedTarget.absolutePath)
+    return readFile(revalidatedTarget.relativePath)
+  }
+
   const search = (query: string, limit = 20): VaultSearchResult[] => {
     const normalizedQuery = query.trim().toLowerCase()
     if (!normalizedQuery) return []
@@ -218,7 +244,7 @@ export function createVaultFileSystem(rootPath: string): VaultFileSystem {
     return results
   }
 
-  return { listFiles, readFile, writeFile, search }
+  return { listFiles, readFile, writeFile, renameFile, search }
 }
 
 function sanitizeQuoteLabel(value: string): string {

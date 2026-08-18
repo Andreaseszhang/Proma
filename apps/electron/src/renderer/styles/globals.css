@@ -1503,7 +1503,6 @@
   content: none;
 }
 
-
 /* ===== FileBrowser 层级引导线：默认隐藏，鼠标悬浮文件树时显示（VS Code 风格） ===== */
 .file-tree-guide {
   opacity: 0;
@@ -2391,7 +2390,6 @@
 .ProseMirror-focused .ProseMirror-gapcursor {
   display: block;
 }
-
 /* 嵌入式 Skills 位于可拖拽的右侧工作区中，按容器实际宽度而非窗口宽度排版。 */
 .skills-embedded-container {
   container-type: inline-size;
@@ -2403,4 +2401,45 @@
   .skills-embedded-card-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+@keyframes todo-complete {
+  0% { opacity: 1; transform: translateY(0); }
+  55% { opacity: 0.72; transform: translateY(2px); }
+  100% { opacity: 0; transform: translateY(5px); }
+}
+
+/* Vault inherits the workspace canvas instead of the hybrid editor package's fixed white/black themes. */
+.vault-hybrid-markdown,
+.vault-hybrid-markdown .cm-editor,
+.vault-hybrid-markdown .cm-scroller,
+.vault-hybrid-markdown .cm-content {
+  background: transparent !important;
+}
+.vault-hybrid-markdown .cm-content {
+  color: hsl(var(--foreground));
+  caret-color: hsl(var(--foreground));
+}
+.vault-hybrid-markdown .cm-cursor {
+  border-left-color: hsl(var(--foreground)) !important;
+}
+/* The active Markdown block remains editable without receiving an alternate background. */
+.vault-hybrid-markdown .cm-selectionBackground,
+.vault-hybrid-markdown.cm-focused .cm-selectionBackground,
+.vault-hybrid-markdown .cm-selectedLine,
+.vault-hybrid-markdown .cm-selectedLine.cm-code-block-line,
+.vault-hybrid-markdown .cm-table-line,
+.vault-hybrid-markdown .cm-math-block-line,
+.vault-hybrid-markdown .cm-mermaid-block-line {
+  background: transparent !important;
+  color: inherit !important;
+  caret-color: hsl(var(--foreground)) !important;
+  font-family: inherit !important;
+  font-size: inherit !important;
+  font-style: inherit !important;
+  font-weight: inherit !important;
+  line-height: inherit !important;
+  letter-spacing: inherit !important;
+  border-radius: 0 !important;
+  filter: none !important;
 }

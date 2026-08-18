@@ -29,6 +29,12 @@ export interface VaultFileEntry {
   modifiedAt: number
 }
 
+export interface VaultRenameInput {
+  relativePath: string
+  name: string
+  expectedSha256?: string
+}
+
 export interface VaultReadResult {
   relativePath: string
   content: string
@@ -74,6 +80,7 @@ export const VAULT_IPC_CHANNELS = {
   READ_FILE: 'vault:read-file',
   WRITE_FILE: 'vault:write-file',
   CREATE_FILE: 'vault:create-file',
+  RENAME_FILE: 'vault:rename-file',
   SEARCH: 'vault:search',
   APPEND_SOURCE: 'vault:append-source',
 } as const

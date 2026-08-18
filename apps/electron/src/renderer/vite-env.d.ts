@@ -17,6 +17,17 @@ declare module '*.mp3' {
   export default src
 }
 
+declare module 'codemirror-markdown-hybrid' {
+  import type { Extension } from '@codemirror/state'
+
+  export function hybridMarkdown(options?: {
+    theme?: 'light' | 'dark'
+    enablePreview?: boolean
+    enableKeymap?: boolean
+    enableCollapse?: boolean
+  }): Extension
+}
+
 /** 更新状态（与 updater-types.ts 保持一致） */
 interface UpdateStatus {
   status: 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'not-available' | 'error'

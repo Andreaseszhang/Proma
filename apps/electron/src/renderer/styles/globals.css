@@ -2443,3 +2443,18 @@
   border-radius: 0 !important;
   filter: none !important;
 }
+
+/* Previewed unordered lists use a standard bullet while the active source stays raw Markdown. */
+.vault-hybrid-markdown .cm-markdown-preview .md-list-marker[data-vault-unordered-list-marker] {
+  display: inline-flex;
+  width: 1.25em;
+  margin-right: 0.55em;
+  color: transparent !important;
+  vertical-align: baseline;
+}
+.vault-hybrid-markdown .cm-markdown-preview .md-list-marker[data-vault-unordered-list-marker]::before {
+  content: '\2022';
+  color: hsl(var(--muted-foreground));
+  font-size: 1.15em;
+  line-height: 1;
+}

@@ -1,7 +1,25 @@
 import * as React from 'react'
 import { EditorState } from '@codemirror/state'
-import { EditorView, keymap } from '@codemirror/view'
+import { EditorView, keymap, ViewPlugin, type ViewUpdate } from '@codemirror/view'
 import { hybridMarkdown } from 'codemirror-markdown-hybrid'
+
+function syncUnorderedListMarkers(view: EditorView): void {
+  for (const marker of view.dom.querySelectorAll<HTMLSpanElement>('.cm-markdown-preview .md-list-marker')) {
+    marker.toggleAttribute('data-vault-unordered-list-marker', /^[-*+]$/.test(marker.textContent?.trim() ?? ''))
+  }
+}
+
+const normalizeUnorderedListMarkers = ViewPlugin.fromClass(class {
+  constructor(view: EditorView) {
+    syncUnorderedListMarkers(view)
+  }
+
+  update(update: ViewUpdate): void {
+    if (update.docChanged || update.selectionSet || update.focusChanged || update.viewportChanged) {
+      syncUnorderedListMarkers(update.view)
+    }
+  }
+})
 
 interface VaultLiveMarkdownEditorProps {
   value: string
@@ -34,6 +52,7 @@ export function VaultLiveMarkdownEditor({
             theme: document.documentElement.classList.contains('dark') ? 'dark' : 'light',
             enableCollapse: false,
           }),
+          normalizeUnorderedListMarkers,
           keymap.of([
             {
               key: 'Mod-s',
@@ -50,6 +69,7 @@ export function VaultLiveMarkdownEditor({
       }),
       parent: host,
     })
+    syncUnorderedListMarkers(view)
     viewRef.current = view
 
     return () => {

@@ -2438,6 +2438,19 @@
 .vault-ink-mde .cm-scroller {
   font-family: inherit !important;
 }
+
+/* Keep Markdown syntax visible only while editing its line, like Obsidian's live preview. */
+.vault-ink-mde .vault-markdown-syntax-hidden,
+.vault-ink-mde .vault-markdown-syntax-hidden * {
+  display: none !important;
+}
+.vault-ink-mde .cm-content,
+.vault-ink-mde .cm-content[contenteditable='true'] {
+  caret-color: hsl(var(--foreground)) !important;
+}
+.vault-ink-mde .cm-cursor {
+  border-left-color: hsl(var(--foreground)) !important;
+}
 .vault-ink-mde .cm-content {
   min-height: 100%;
   padding: 0.75rem 1rem !important;

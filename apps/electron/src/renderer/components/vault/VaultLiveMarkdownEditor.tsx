@@ -1,5 +1,113 @@
 import * as React from 'react'
+import { syntaxTree } from '@codemirror/language'
+import { RangeSetBuilder, StateEffect, StateField, type EditorState } from '@codemirror/state'
+import {
+  Decoration,
+  EditorView,
+  type DecorationSet,
+} from '@codemirror/view'
 import ink, { type Instance } from 'ink-mde'
+
+const markdownSyntaxVisibilityEffect = StateEffect.define<number | null>()
+const markdownSyntaxFocusEffect = StateEffect.define<boolean>()
+const markdownSyntaxMarkerNames = new Set([
+  'CodeMark',
+  'EmphasisMark',
+  'HeaderMark',
+  'LinkMark',
+  'QuoteMark',
+])
+const hiddenMarkdownSyntax = Decoration.replace({ class: 'vault-markdown-syntax-hidden' })
+
+type MarkdownSyntaxVisibility = {
+  focused: boolean
+  hoverLine: number | null
+  decorations: DecorationSet
+}
+
+function activeCursorLines(state: EditorState, focused: boolean): Set<number> {
+  if (!focused) return new Set()
+  return new Set(state.selection.ranges.map((range) => state.doc.lineAt(range.head).number))
+}
+
+function markdownSyntaxDecorations(
+  state: EditorState,
+  focused: boolean,
+  hoverLine: number | null,
+): DecorationSet {
+  const activeLines = activeCursorLines(state, focused)
+  if (hoverLine !== null) activeLines.add(hoverLine)
+
+  const builder = new RangeSetBuilder<Decoration>()
+  syntaxTree(state).iterate({
+    enter: ({ type, from, to }) => {
+      if (!markdownSyntaxMarkerNames.has(type.name)) return
+      if (activeLines.has(state.doc.lineAt(from).number)) return
+      builder.add(from, to, hiddenMarkdownSyntax)
+    },
+  })
+  return builder.finish()
+}
+
+const markdownSyntaxVisibilityField = StateField.define<MarkdownSyntaxVisibility>({
+  create: (state) => ({
+    focused: false,
+    hoverLine: null,
+    decorations: markdownSyntaxDecorations(state, false, null),
+  }),
+  update: (value, transaction) => {
+    let focused = value.focused
+    let hoverLine = value.hoverLine
+    for (const effect of transaction.effects) {
+      if (effect.is(markdownSyntaxFocusEffect)) focused = effect.value
+      if (effect.is(markdownSyntaxVisibilityEffect)) hoverLine = effect.value
+    }
+
+    if (
+      !transaction.docChanged
+      && transaction.selection === undefined
+      && focused === value.focused
+      && hoverLine === value.hoverLine
+    ) {
+      return value
+    }
+
+    return {
+      focused,
+      hoverLine,
+      decorations: markdownSyntaxDecorations(transaction.state, focused, hoverLine),
+    }
+  },
+  provide: (field) => EditorView.decorations.from(field, (value) => value.decorations),
+})
+
+const markdownSyntaxVisibility = [
+  markdownSyntaxVisibilityField,
+  EditorView.domEventHandlers({
+    focus: (_event, view) => {
+      view.dispatch({ effects: markdownSyntaxFocusEffect.of(true) })
+      return false
+    },
+    blur: (_event, view) => {
+      view.dispatch({ effects: markdownSyntaxFocusEffect.of(false) })
+      return false
+    },
+    mousemove: (event, view) => {
+      const position = view.posAtCoords({ x: event.clientX, y: event.clientY })
+      const hoverLine = position === null ? null : view.state.doc.lineAt(position).number
+      if (view.state.field(markdownSyntaxVisibilityField).hoverLine !== hoverLine) {
+        view.dispatch({ effects: markdownSyntaxVisibilityEffect.of(hoverLine) })
+      }
+      return false
+    },
+    mouseleave: (_event, view) => {
+      if (view.state.field(markdownSyntaxVisibilityField).hoverLine !== null) {
+        view.dispatch({ effects: markdownSyntaxVisibilityEffect.of(null) })
+      }
+      return false
+    },
+  }),
+]
 
 interface VaultLiveMarkdownEditorProps {
   value: string
@@ -57,6 +165,10 @@ export function VaultLiveMarkdownEditor({
         spellcheck: false,
         toolbar: false,
       },
+      plugins: markdownSyntaxVisibility.map((extension) => ({
+        type: 'default' as const,
+        value: extension,
+      })),
       search: false,
       toolbar: {
         bold: false,

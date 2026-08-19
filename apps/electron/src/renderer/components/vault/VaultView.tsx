@@ -159,6 +159,15 @@ function VaultMarkdownEditor({
   const [draft, setDraft] = React.useState(readResult.content)
   const [saving, setSaving] = React.useState(false)
   const [filename, setFilename] = React.useState(displayDocumentTitle(readResult.relativePath.split('/').pop() ?? readResult.relativePath))
+  const editorPageRef = React.useRef<HTMLDivElement>(null)
+
+  const handleEditorPageWheel = (event: React.WheelEvent<HTMLDivElement>): void => {
+    if ((event.target as HTMLElement).closest('.vault-ink-mde')) return
+    const scroller = editorPageRef.current?.querySelector<HTMLElement>('.vault-ink-mde .cm-scroller')
+    if (!scroller) return
+    scroller.scrollTop += event.deltaY
+    scroller.scrollLeft += event.deltaX
+  }
 
   const save = async (): Promise<void> => {
     if (saving || draft === readResult.content) return
@@ -180,7 +189,11 @@ function VaultMarkdownEditor({
   }
 
   return (
-    <div className="min-h-0 flex-1 overflow-hidden titlebar-no-drag">
+    <div
+      ref={editorPageRef}
+      onWheel={handleEditorPageWheel}
+      className="min-h-0 flex-1 overflow-hidden titlebar-no-drag"
+    >
       <div className="mx-auto flex h-full w-full max-w-3xl flex-col px-5 py-5">
         <input
           aria-label="重命名笔记"

@@ -20,7 +20,7 @@ interface ProcessBlockGroupProps {
 }
 
 const MAX_PROCESS_GROUP_ICONS = 4
-const PROCESS_GROUP_VIEWPORT_HEIGHT = '500px'
+const PROCESS_GROUP_VIEWPORT_HEIGHT = 320
 const PROCESS_GROUP_LIVE_CHILD_WINDOW = 4
 const PROCESS_GROUP_COLLAPSE_DURATION_MS = 500
 const PROCESS_GROUP_AUTO_COLLAPSE_SOUND_DELAY_MS = 900
@@ -490,7 +490,7 @@ export function ProcessBlockGroup({ blocks, isStreaming, renderChildren, isMessa
           onTouchStart={keepProgressViewport ? handleProgressScrollIntent : undefined}
           onKeyDown={keepProgressViewport ? handleProgressKeyDown : undefined}
           style={{
-            maxHeight: keepProgressViewport ? PROCESS_GROUP_VIEWPORT_HEIGHT : undefined,
+            maxHeight: keepProgressViewport ? `${PROCESS_GROUP_VIEWPORT_HEIGHT}px` : undefined,
             height: measuredHeight !== undefined ? `${measuredHeight}px` : 'auto',
             opacity: isContentExpanded ? 1 : 0,
             transition: measuredHeight !== undefined

@@ -464,9 +464,13 @@ function payloadToLegacyEvents(payload: AgentStreamPayload): AgentEvent[] {
           ...(typeof estimatedTokensAfter === 'number' && estimatedTokensAfter > 0 && { estimatedTokensAfter }),
         }]
       }
-      if (sMsg.subtype === 'compacting') return [{ type: 'compacting' }]
+      if (sMsg.subtype === 'compacting') {
+        return [{ type: 'compacting', afterCompletedTurn: sMsg.afterCompletedTurn === true }]
+      }
       if (sMsg.subtype === 'status') {
-        if (sMsg.status === 'compacting') return [{ type: 'compacting' }]
+        if (sMsg.status === 'compacting') {
+          return [{ type: 'compacting', afterCompletedTurn: sMsg.afterCompletedTurn === true }]
+        }
         if (sMsg.compact_result === 'success' || sMsg.compact_result === 'failed' || sMsg.compact_result === 'noop') {
           return [{
             type: 'compact_complete',

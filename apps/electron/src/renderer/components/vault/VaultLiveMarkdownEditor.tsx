@@ -8,7 +8,6 @@ import {
 } from '@codemirror/view'
 import ink, { type Instance } from 'ink-mde'
 
-const markdownSyntaxVisibilityEffect = StateEffect.define<number | null>()
 const markdownSyntaxFocusEffect = StateEffect.define<boolean>()
 const markdownSyntaxMarkerNames = new Set([
   'CodeMark',
@@ -21,7 +20,6 @@ const hiddenMarkdownSyntax = Decoration.replace({ class: 'vault-markdown-syntax-
 
 type MarkdownSyntaxVisibility = {
   focused: boolean
-  hoverLine: number | null
   decorations: DecorationSet
 }
 
@@ -30,13 +28,8 @@ function activeCursorLines(state: EditorState, focused: boolean): Set<number> {
   return new Set(state.selection.ranges.map((range) => state.doc.lineAt(range.head).number))
 }
 
-function markdownSyntaxDecorations(
-  state: EditorState,
-  focused: boolean,
-  hoverLine: number | null,
-): DecorationSet {
+function markdownSyntaxDecorations(state: EditorState, focused: boolean): DecorationSet {
   const activeLines = activeCursorLines(state, focused)
-  if (hoverLine !== null) activeLines.add(hoverLine)
 
   const builder = new RangeSetBuilder<Decoration>()
   syntaxTree(state).iterate({
@@ -52,30 +45,21 @@ function markdownSyntaxDecorations(
 const markdownSyntaxVisibilityField = StateField.define<MarkdownSyntaxVisibility>({
   create: (state) => ({
     focused: false,
-    hoverLine: null,
-    decorations: markdownSyntaxDecorations(state, false, null),
+    decorations: markdownSyntaxDecorations(state, false),
   }),
   update: (value, transaction) => {
     let focused = value.focused
-    let hoverLine = value.hoverLine
     for (const effect of transaction.effects) {
       if (effect.is(markdownSyntaxFocusEffect)) focused = effect.value
-      if (effect.is(markdownSyntaxVisibilityEffect)) hoverLine = effect.value
     }
 
-    if (
-      !transaction.docChanged
-      && transaction.selection === undefined
-      && focused === value.focused
-      && hoverLine === value.hoverLine
-    ) {
+    if (!transaction.docChanged && transaction.selection === undefined && focused === value.focused) {
       return value
     }
 
     return {
       focused,
-      hoverLine,
-      decorations: markdownSyntaxDecorations(transaction.state, focused, hoverLine),
+      decorations: markdownSyntaxDecorations(transaction.state, focused),
     }
   },
   provide: (field) => EditorView.decorations.from(field, (value) => value.decorations),
@@ -90,20 +74,6 @@ const markdownSyntaxVisibility = [
     },
     blur: (_event, view) => {
       view.dispatch({ effects: markdownSyntaxFocusEffect.of(false) })
-      return false
-    },
-    mousemove: (event, view) => {
-      const position = view.posAtCoords({ x: event.clientX, y: event.clientY })
-      const hoverLine = position === null ? null : view.state.doc.lineAt(position).number
-      if (view.state.field(markdownSyntaxVisibilityField).hoverLine !== hoverLine) {
-        view.dispatch({ effects: markdownSyntaxVisibilityEffect.of(hoverLine) })
-      }
-      return false
-    },
-    mouseleave: (_event, view) => {
-      if (view.state.field(markdownSyntaxVisibilityField).hoverLine !== null) {
-        view.dispatch({ effects: markdownSyntaxVisibilityEffect.of(null) })
-      }
       return false
     },
   }),

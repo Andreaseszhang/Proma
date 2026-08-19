@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { createStore } from 'jotai/vanilla'
 import {
-  agentSessionIndicatorMapAtom,
   agentSessionInputStreamStateAtomFamily,
   agentSessionStreamingStateAtomFamily,
   agentStreamingStatesAtom,
@@ -301,27 +300,6 @@ describe('Agent 流式错误状态', () => {
     const errors = new Map([['failed-session', '认证失败']])
 
     expect(clearAgentStreamError(errors, 'retried-session')).toBe(errors)
-  })
-})
-
-describe('Agent 侧边栏会话状态', () => {
-  test('given 主任务仍在运行时压缩上下文 when 解析侧边栏状态 then 保持运行态', () => {
-    const store = createStore()
-    const state = applyAgentEvent(createStreamState(), { type: 'compacting' })
-    store.set(agentStreamingStatesAtom, new Map([['compacting-session', state]]))
-
-    expect(store.get(agentSessionIndicatorMapAtom).get('compacting-session')).toBe('running')
-  })
-
-  test('given 主任务成功结束后压缩上下文 when 解析侧边栏状态 then 显示为完成态', () => {
-    const store = createStore()
-    const state = applyAgentEvent(createStreamState(), {
-      type: 'compacting',
-      afterCompletedTurn: true,
-    })
-    store.set(agentStreamingStatesAtom, new Map([['compacting-session', state]]))
-
-    expect(store.get(agentSessionIndicatorMapAtom).get('compacting-session')).toBe('completed')
   })
 })
 

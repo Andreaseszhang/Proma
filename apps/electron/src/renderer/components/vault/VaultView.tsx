@@ -1,13 +1,14 @@
 import * as React from 'react'
-import { useAtom } from 'jotai'
-import { BookOpen, ChevronDown, ChevronRight, Folder, FolderOpen, Loader2, Plus, RefreshCw } from 'lucide-react'
+import { useAtom, useAtomValue } from 'jotai'
+import { BookOpen, ChevronDown, ChevronRight, Folder, FolderOpen, Link2, Loader2, Plus, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import type { VaultCandidate, VaultFileEntry, VaultReadResult, VaultSummary } from '@proma/shared'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { VaultLiveMarkdownEditor } from './VaultLiveMarkdownEditor'
+import { VaultLiveMarkdownEditor, type VaultLiveMarkdownEditorHandle } from './VaultLiveMarkdownEditor'
+import { VaultReferencePicker } from './VaultReferencePicker'
 import {
   selectedVaultFileAtom,
   vaultReadResultAtom,
@@ -15,6 +16,14 @@ import {
   pendingVaultQuoteAtom,
 } from '@/atoms/vault-atoms'
 import { cn } from '@/lib/utils'
+import { agentWorkspacesAtom, currentAgentWorkspaceIdAtom } from '@/atoms/agent-atoms'
+import {
+  resolveVaultWikiLink,
+  serializeVaultReference,
+  type VaultReference,
+  type VaultReferenceRange,
+  type VaultReferenceType,
+} from './vault-reference-utils'
 
 function displayDocumentTitle(filename: string): string {
   return filename.replace(/\.md$/i, '')
@@ -149,17 +158,23 @@ function VaultFileList({
 
 function VaultMarkdownEditor({
   readResult,
+  workspaceSlug,
   onSave,
   onRename,
+  onOpenWikiLink,
 }: {
   readResult: VaultReadResult
+  workspaceSlug: string | null
   onSave: (nextContent: string) => Promise<void>
   onRename: (name: string) => Promise<void>
+  onOpenWikiLink: (target: string) => void
 }): React.ReactElement {
   const [draft, setDraft] = React.useState(readResult.content)
   const [saving, setSaving] = React.useState(false)
   const [filename, setFilename] = React.useState(displayDocumentTitle(readResult.relativePath.split('/').pop() ?? readResult.relativePath))
+  const [referencePicker, setReferencePicker] = React.useState<{ reference?: VaultReference; range?: VaultReferenceRange; type?: VaultReferenceType } | null>(null)
   const editorPageRef = React.useRef<HTMLDivElement>(null)
+  const editorRef = React.useRef<VaultLiveMarkdownEditorHandle>(null)
 
   const handleEditorPageWheel = (event: React.WheelEvent<HTMLDivElement>): void => {
     if ((event.target as HTMLElement).closest('.vault-ink-mde')) return
@@ -188,6 +203,17 @@ function VaultMarkdownEditor({
     await onRename(filename.trim())
   }
 
+  const selectReference = (reference: VaultReference): void => {
+    const edit = referencePicker
+    const marker = serializeVaultReference(reference)
+    if (edit?.range) {
+      setDraft((current) => current.slice(0, edit.range!.from) + marker + current.slice(edit.range!.to))
+    } else {
+      editorRef.current?.insertReference(reference)
+    }
+    setReferencePicker(null)
+  }
+
   return (
     <div
       ref={editorPageRef}
@@ -195,24 +221,57 @@ function VaultMarkdownEditor({
       className="min-h-0 flex-1 overflow-hidden titlebar-no-drag"
     >
       <div className="mx-auto flex h-full w-full max-w-3xl flex-col px-5 py-5">
-        <input
-          aria-label="重命名笔记"
-          value={filename}
-          onChange={(event) => setFilename(event.target.value)}
-          onBlur={() => { void rename() }}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') event.currentTarget.blur()
-            if (event.key === 'Escape') {
-              setFilename(displayDocumentTitle(readResult.relativePath.split('/').pop() ?? readResult.relativePath))
-              event.currentTarget.blur()
-            }
-          }}
-          className="mb-8 h-10 w-full shrink-0 bg-transparent px-4 text-3xl font-semibold leading-tight text-foreground outline-none placeholder:text-muted-foreground/50"
-        />
+        <div className="mb-8 flex min-w-0 items-center gap-2">
+          <input
+            aria-label="重命名笔记"
+            value={filename}
+            onChange={(event) => setFilename(event.target.value)}
+            onBlur={() => { void rename() }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') event.currentTarget.blur()
+              if (event.key === 'Escape') {
+                setFilename(displayDocumentTitle(readResult.relativePath.split('/').pop() ?? readResult.relativePath))
+                event.currentTarget.blur()
+              }
+            }}
+            className="h-10 min-w-0 flex-1 bg-transparent px-4 text-3xl font-semibold leading-tight text-foreground outline-none placeholder:text-muted-foreground/50"
+          />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label="插入 Proma 引用"
+                onClick={() => setReferencePicker({})}
+                className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <Link2 size={16} />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>插入 Proma 引用</TooltipContent>
+          </Tooltip>
+        </div>
         <div className="min-h-0 flex-1">
-          <VaultLiveMarkdownEditor value={draft} onChange={setDraft} onSave={() => { void save() }} />
+          <VaultLiveMarkdownEditor
+            ref={editorRef}
+            value={draft}
+            onChange={setDraft}
+            onSave={() => { void save() }}
+            onOpenWikiLink={onOpenWikiLink}
+            onRequestReference={(type) => setReferencePicker({ type })}
+            onEditReference={(reference) => setReferencePicker({ reference, range: reference })}
+          />
         </div>
       </div>
+      <VaultReferencePicker
+        open={referencePicker !== null}
+        workspaceSlug={workspaceSlug}
+        initialType={referencePicker?.type}
+        initialReference={referencePicker?.reference}
+        onOpenChange={(open) => {
+          if (!open) setReferencePicker(null)
+        }}
+        onSelect={selectReference}
+      />
     </div>
   )
 }
@@ -220,13 +279,17 @@ function VaultMarkdownEditor({
 function VaultMarkdownPane({
   readResult,
   loading,
+  workspaceSlug,
   onSave,
   onRename,
+  onOpenWikiLink,
 }: {
   readResult: VaultReadResult | null
   loading: boolean
+  workspaceSlug: string | null
   onSave: (nextContent: string) => Promise<void>
   onRename: (name: string) => Promise<void>
+  onOpenWikiLink: (target: string) => void
 }): React.ReactElement {
   if (loading) {
     return (
@@ -247,12 +310,25 @@ function VaultMarkdownPane({
 
   return (
     <section className="flex min-w-0 flex-1 flex-col bg-muted/25">
-      <VaultMarkdownEditor key={`${readResult.relativePath}:${readResult.sha256}`} readResult={readResult} onSave={onSave} onRename={onRename} />
+      <VaultMarkdownEditor
+        key={`${readResult.relativePath}:${readResult.sha256}`}
+        readResult={readResult}
+        workspaceSlug={workspaceSlug}
+        onSave={onSave}
+        onRename={onRename}
+        onOpenWikiLink={onOpenWikiLink}
+      />
     </section>
   )
 }
 
 export function VaultView(): React.ReactElement {
+  const workspaces = useAtomValue(agentWorkspacesAtom)
+  const currentWorkspaceId = useAtomValue(currentAgentWorkspaceIdAtom)
+  const workspaceSlug = React.useMemo(
+    () => workspaces.find((workspace) => workspace.id === currentWorkspaceId)?.slug ?? null,
+    [currentWorkspaceId, workspaces],
+  )
   const [config, setConfig] = React.useState<VaultSummary | null>(null)
   const [candidates, setCandidates] = React.useState<VaultCandidate[]>([])
   const [files, setFiles] = React.useState<VaultFileEntry[]>([])
@@ -335,6 +411,15 @@ export function VaultView(): React.ReactElement {
       if (requestId === readRequestRef.current) setFileLoading(false)
     }
   }, [setReadResult, setSelectedFile])
+
+  const openWikiLink = React.useCallback((target: string): void => {
+    const relativePath = resolveVaultWikiLink(target, files)
+    if (!relativePath) {
+      toast.message(`未找到唯一的 Vault 笔记：${target}`)
+      return
+    }
+    void openFile(relativePath)
+  }, [files, openFile])
 
   const connectVault = async (): Promise<void> => {
     const selected = await window.electronAPI.selectVault({ inboxPath: 'Proma Inbox', allowAgentWrites: false })
@@ -527,7 +612,14 @@ export function VaultView(): React.ReactElement {
         </header>
           <VaultFileList files={files} selectedPath={selectedFile} onSelect={(path) => { void openFile(path) }} />
           </aside>
-          <VaultMarkdownPane readResult={readResult} loading={fileLoading} onSave={save} onRename={rename} />
+          <VaultMarkdownPane
+            readResult={readResult}
+            loading={fileLoading}
+            workspaceSlug={workspaceSlug}
+            onSave={save}
+            onRename={rename}
+            onOpenWikiLink={openWikiLink}
+          />
         </div>
       </main>
       <Dialog

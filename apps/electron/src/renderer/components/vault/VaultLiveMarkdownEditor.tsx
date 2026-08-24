@@ -4,9 +4,18 @@ import { RangeSetBuilder, StateEffect, StateField, type EditorState } from '@cod
 import {
   Decoration,
   EditorView,
+  WidgetType,
   type DecorationSet,
 } from '@codemirror/view'
 import ink, { type Instance } from 'ink-mde'
+import {
+  findVaultWikiLinkAt,
+  parseVaultReferences,
+  serializeVaultReference,
+  type VaultReference,
+  type VaultReferenceRange,
+  type VaultReferenceType,
+} from './vault-reference-utils'
 
 const markdownSyntaxFocusEffect = StateEffect.define<boolean>()
 const markdownSyntaxMarkerNames = new Set([
@@ -79,25 +88,121 @@ const markdownSyntaxVisibility = [
   }),
 ]
 
+class VaultReferenceWidget extends WidgetType {
+  constructor(
+    private readonly reference: VaultReferenceRange,
+    private readonly onEdit: (reference: VaultReferenceRange) => void,
+  ) {
+    super()
+  }
+
+  override eq(other: VaultReferenceWidget): boolean {
+    return this.reference.type === other.reference.type
+      && this.reference.id === other.reference.id
+      && this.reference.label === other.reference.label
+  }
+
+  override toDOM(): HTMLElement {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'vault-reference-chip'
+    button.textContent = `${this.reference.type === 'calendar_event' ? '日程' : this.reference.type === 'todo' ? '待办' : this.reference.type === 'session' ? '会话' : this.reference.type === 'skill' ? 'Skill' : 'MCP'}: ${this.reference.label}`
+    button.title = '点击重新选择引用'
+    button.addEventListener('click', () => this.onEdit(this.reference))
+    return button
+  }
+
+  override ignoreEvent(): boolean {
+    return false
+  }
+}
+
+function createVaultReferenceExtension({
+  onOpenWikiLink,
+  onEditReference,
+}: {
+  onOpenWikiLink: (target: string) => void
+  onEditReference: (reference: VaultReferenceRange) => void
+}) {
+  const referenceField = StateField.define<DecorationSet>({
+    create: (state) => buildReferenceDecorations(state),
+    update: (value, transaction) => {
+      if (!transaction.docChanged && transaction.selection === undefined) return value
+      return buildReferenceDecorations(transaction.state)
+    },
+    provide: (field) => EditorView.decorations.from(field),
+  })
+
+  function buildReferenceDecorations(state: EditorState): DecorationSet {
+    const activeLines = new Set(state.selection.ranges.map((range) => state.doc.lineAt(range.head).number))
+    const builder = new RangeSetBuilder<Decoration>()
+    for (const reference of parseVaultReferences(state.doc.toString())) {
+      // 光标进入同一行时回退到原 Markdown + comment，保持可见且可直接编辑。
+      if (activeLines.has(state.doc.lineAt(reference.from).number)) continue
+      builder.add(reference.from, reference.to, Decoration.replace({ widget: new VaultReferenceWidget(reference, onEditReference) }))
+    }
+    return builder.finish()
+  }
+
+  return [
+    referenceField,
+    EditorView.domEventHandlers({
+      mousedown: (event, view) => {
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey) return false
+        const position = view.posAtCoords({ x: event.clientX, y: event.clientY })
+        if (position === null) return false
+        const wikiLink = findVaultWikiLinkAt(view.state.doc.toString(), position)
+        if (!wikiLink) return false
+        event.preventDefault()
+        onOpenWikiLink(wikiLink.target)
+        return true
+      },
+    }),
+  ]
+}
+
+export interface VaultLiveMarkdownEditorHandle {
+  insertReference: (reference: VaultReference) => void
+}
+
 interface VaultLiveMarkdownEditorProps {
   value: string
   onChange: (value: string) => void
   onSave: () => void
+  onOpenWikiLink: (target: string) => void
+  onEditReference: (reference: VaultReferenceRange) => void
+  onRequestReference: (type?: VaultReferenceType) => void
 }
 
-export function VaultLiveMarkdownEditor({
+export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorHandle, VaultLiveMarkdownEditorProps>(function VaultLiveMarkdownEditor({
   value,
   onChange,
   onSave,
-}: VaultLiveMarkdownEditorProps): React.ReactElement {
+  onOpenWikiLink,
+  onEditReference,
+  onRequestReference,
+}, ref): React.ReactElement {
   const hostRef = React.useRef<HTMLDivElement>(null)
   const instanceRef = React.useRef<Instance | null>(null)
   const valueRef = React.useRef(value)
   const onChangeRef = React.useRef(onChange)
   const onSaveRef = React.useRef(onSave)
+  const onOpenWikiLinkRef = React.useRef(onOpenWikiLink)
+  const onEditReferenceRef = React.useRef(onEditReference)
+  const onRequestReferenceRef = React.useRef(onRequestReference)
   valueRef.current = value
   onChangeRef.current = onChange
   onSaveRef.current = onSave
+  onOpenWikiLinkRef.current = onOpenWikiLink
+  onEditReferenceRef.current = onEditReference
+  onRequestReferenceRef.current = onRequestReference
+
+  React.useImperativeHandle(ref, () => ({
+    insertReference: (reference) => {
+      instanceRef.current?.insert(serializeVaultReference(reference))
+      instanceRef.current?.focus()
+    },
+  }), [])
 
   React.useEffect(() => {
     const host = hostRef.current
@@ -135,7 +240,13 @@ export function VaultLiveMarkdownEditor({
         spellcheck: false,
         toolbar: false,
       },
-      plugins: markdownSyntaxVisibility.map((extension) => ({
+      plugins: [
+        ...markdownSyntaxVisibility,
+        ...createVaultReferenceExtension({
+          onOpenWikiLink: (target) => onOpenWikiLinkRef.current(target),
+          onEditReference: (reference) => onEditReferenceRef.current(reference),
+        }),
+      ].map((extension) => ({
         type: 'default' as const,
         value: extension,
       })),
@@ -170,6 +281,11 @@ export function VaultLiveMarkdownEditor({
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
         event.preventDefault()
         onSaveRef.current()
+        return
+      }
+      if (!event.metaKey && !event.ctrlKey && !event.altKey && event.key === '@') {
+        event.preventDefault()
+        onRequestReferenceRef.current()
       }
     }
     host.addEventListener('keydown', onKeyDown)
@@ -193,4 +309,4 @@ export function VaultLiveMarkdownEditor({
   }, [value])
 
   return <div ref={hostRef} className="vault-ink-mde h-full min-h-0 [&_.ink-mde]:h-full [&_.ink-mde-editor]:min-h-0 [&_.ink-mde-editor]:overflow-auto" />
-}
+})

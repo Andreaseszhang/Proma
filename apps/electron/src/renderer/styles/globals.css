@@ -2463,3 +2463,28 @@
 .vault-ink-mde .cm-cursor {
   border-left-color: hsl(var(--foreground)) !important;
 }
+.vault-ink-mde .vault-reference-chip {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  overflow: hidden;
+  border: 0;
+  border-radius: 0.25rem;
+  background: hsl(var(--primary) / 0.12);
+  color: hsl(var(--primary));
+  padding: 0.1rem 0.35rem;
+  font: inherit;
+  font-size: 0.875em;
+  font-weight: 500;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.vault-ink-mde .vault-reference-chip:hover {
+  background: hsl(var(--primary) / 0.2);
+}
+.vault-ink-mde .vault-reference-chip:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
+}

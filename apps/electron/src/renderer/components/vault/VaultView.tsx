@@ -314,7 +314,7 @@ function VaultMarkdownPane({
 
   if (!readResult) {
     return (
-      <div className="flex h-full flex-col items-start justify-center gap-3 px-12 text-left">
+      <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
         <BookOpen className="size-8 text-muted-foreground/60" />
         <p className="text-sm text-muted-foreground">从左侧选择一篇笔记</p>
       </div>

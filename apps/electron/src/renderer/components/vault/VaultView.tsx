@@ -222,7 +222,7 @@ function VaultMarkdownEditor({
       onWheel={handleEditorPageWheel}
       className="min-h-0 flex-1 overflow-hidden titlebar-no-drag"
     >
-      <div className="mx-auto flex h-full w-full max-w-3xl flex-col px-5 py-5">
+      <div className="mx-auto flex h-full w-full max-w-5xl flex-col px-5 py-5">
         <div className="mb-8 flex min-w-0 items-center gap-2">
           <input
             aria-label="重命名笔记"

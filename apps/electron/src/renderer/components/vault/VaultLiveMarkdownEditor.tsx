@@ -19,6 +19,7 @@ import {
   serializeVaultReference,
   type VaultReference,
   type VaultReferenceRange,
+  type VaultReferenceTrigger,
   type VaultReferenceType,
 } from './vault-reference-utils'
 
@@ -110,8 +111,25 @@ class VaultReferenceWidget extends WidgetType {
   override toDOM(): HTMLElement {
     const button = document.createElement('button')
     button.type = 'button'
-    button.className = 'vault-reference-chip'
-    button.textContent = `${this.reference.type === 'calendar_event' ? '日程' : this.reference.type === 'todo' ? '待办' : this.reference.type === 'session' ? '会话' : this.reference.type === 'skill' ? 'Skill' : 'MCP'}: ${this.reference.label}`
+    const chipClass = this.reference.type === 'skill'
+      ? 'skill-mention-chip'
+      : this.reference.type === 'mcp'
+        ? 'mcp-mention-chip'
+        : this.reference.type === 'session'
+          ? 'session-mention-chip'
+          : this.reference.type === 'todo'
+            ? 'todo-mention-chip'
+            : 'calendar-event-mention-chip'
+    const trigger = this.reference.type === 'skill'
+      ? '/'
+      : this.reference.type === 'mcp'
+        ? '#'
+        : this.reference.type === 'session'
+          ? '&'
+          : '~'
+    button.className = `vault-reference-chip ${chipClass}`
+    button.dataset.referenceTrigger = trigger
+    button.textContent = `${trigger}${this.reference.label}`
     button.title = '点击重新选择引用'
     button.addEventListener('click', () => this.onEdit(this.reference))
     return button
@@ -463,7 +481,7 @@ interface VaultLiveMarkdownEditorProps {
   onSave: () => void
   onOpenWikiLink: (target: string) => void
   onEditReference: (reference: VaultReferenceRange) => void
-  onRequestReference: (type?: VaultReferenceType) => void
+  onRequestReference: (trigger?: VaultReferenceTrigger) => void
 }
 
 export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorHandle, VaultLiveMarkdownEditorProps>(function VaultLiveMarkdownEditor({
@@ -579,9 +597,9 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
         onSaveRef.current()
         return
       }
-      if (!event.metaKey && !event.ctrlKey && !event.altKey && event.key === '@') {
+      if (!event.metaKey && !event.ctrlKey && !event.altKey && ['/','@','#','&','~','～'].includes(event.key)) {
         event.preventDefault()
-        onRequestReferenceRef.current()
+        onRequestReferenceRef.current(event.key as VaultReferenceTrigger)
       }
     }
     host.addEventListener('keydown', onKeyDown)

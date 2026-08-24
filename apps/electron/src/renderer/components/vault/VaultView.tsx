@@ -20,6 +20,7 @@ import { agentWorkspacesAtom, currentAgentWorkspaceIdAtom } from '@/atoms/agent-
 import {
   resolveVaultWikiLink,
   serializeVaultReference,
+  vaultReferenceTypeForTrigger,
   type VaultReference,
   type VaultReferenceRange,
   type VaultReferenceType,
@@ -260,7 +261,7 @@ function VaultMarkdownEditor({
             onChange={setDraft}
             onSave={() => { void save() }}
             onOpenWikiLink={onOpenWikiLink}
-            onRequestReference={(type) => setReferencePicker({ type })}
+            onRequestReference={(trigger) => setReferencePicker({ type: vaultReferenceTypeForTrigger(trigger) })}
             onEditReference={(reference) => setReferencePicker({ reference, range: reference })}
           />
         </div>

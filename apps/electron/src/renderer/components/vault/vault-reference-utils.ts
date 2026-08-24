@@ -1,6 +1,7 @@
 import type { VaultFileEntry } from '@proma/shared'
 
 export type VaultReferenceType = 'skill' | 'mcp' | 'session' | 'todo' | 'calendar_event'
+export type VaultReferenceTrigger = '/' | '#' | '&' | '~' | '～' | '@'
 
 export interface VaultReference {
   type: VaultReferenceType
@@ -16,12 +17,19 @@ export interface VaultReferenceRange extends VaultReference {
 const REFERENCE_PREFIX = '<!--proma:reference:'
 const REFERENCE_SUFFIX = '-->'
 
-const referenceLabels: Record<VaultReferenceType, string> = {
-  skill: 'Skill',
-  mcp: 'MCP',
-  session: '会话',
-  todo: '待办',
-  calendar_event: '日程',
+export function vaultReferenceTypeForTrigger(trigger?: VaultReferenceTrigger): VaultReferenceType | undefined {
+  if (trigger === '/') return 'skill'
+  if (trigger === '#') return 'mcp'
+  if (trigger === '&') return 'session'
+  if (trigger === '~' || trigger === '～') return 'todo'
+  return undefined
+}
+
+function vaultReferenceTriggerForType(type: VaultReferenceType): '/' | '#' | '&' | '~' {
+  if (type === 'skill') return '/'
+  if (type === 'mcp') return '#'
+  if (type === 'session') return '&'
+  return '~'
 }
 
 function safeDecode(value: string): string | null {
@@ -40,16 +48,24 @@ function normalizedReferenceLabel(label: string): string {
   return label.replace(/[\r\n<>]/g, ' ').trim() || '未命名引用'
 }
 
-/** Obsidian 可直接阅读正文，Proma 将可编辑身份存到紧随其后的 HTML comment。 */
+/** Obsidian 外部查看时保留 Proma 的 canonical marker，Proma 内部用 metadata 恢复 chip。 */
 export function serializeVaultReference(reference: VaultReference): string {
   const label = normalizedReferenceLabel(reference.label)
-  const metadata = encodeURIComponent(JSON.stringify({ v: 1, type: reference.type, id: reference.id, label }))
-  return `${referenceLabels[reference.type]}：${label}${REFERENCE_PREFIX}${metadata}${REFERENCE_SUFFIX}`
+  const trigger = vaultReferenceTriggerForType(reference.type)
+  const id = encodeURIComponent(reference.id)
+  const encodedLabel = encodeURIComponent(label)
+  const marker = reference.type === 'skill'
+    ? `/skill:${id}`
+    : reference.type === 'mcp'
+      ? `#mcp:${id}`
+      : `&${reference.type}:${id}::${encodedLabel}`
+  const metadata = encodeURIComponent(JSON.stringify({ v: 1, type: reference.type, id: reference.id, label, trigger }))
+  return `${marker}${REFERENCE_PREFIX}${metadata}${REFERENCE_SUFFIX}`
 }
 
 export function parseVaultReferences(content: string): VaultReferenceRange[] {
   const references: VaultReferenceRange[] = []
-  const pattern = /(?:Skill|MCP|会话|待办|日程)：[^\n<]*<!--proma:reference:([^>]+)-->/g
+  const pattern = /(?:(?:\/skill:[^\s<]+|#mcp:[^\s<]+|[&~](?:session|todo|calendar_event):[^\s<]+(?:::[^\s<]+)?)|(?:Skill|MCP|会话|待办|日程)：[^\n<]*)<!--proma:reference:([^>]+)-->/g
   let match: RegExpExecArray | null
 
   while ((match = pattern.exec(content)) !== null) {

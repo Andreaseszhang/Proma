@@ -1,4 +1,5 @@
 import * as React from 'react'
+import { createPortal } from 'react-dom'
 import { createRoot, type Root } from 'react-dom/client'
 import { syntaxTree } from '@codemirror/language'
 import { RangeSetBuilder, StateEffect, StateField, type EditorState } from '@codemirror/state'
@@ -196,7 +197,11 @@ function parseVaultListValue(value: string): string[] | null {
 }
 
 class VaultPropertiesWidget extends WidgetType {
-  constructor(private readonly entries: VaultPropertyEntry[], private readonly from: number) {
+  constructor(
+    private readonly entries: VaultPropertyEntry[],
+    private readonly from: number,
+    private readonly onChange: (entries: VaultPropertyEntry[]) => void,
+  ) {
     super()
   }
 
@@ -218,9 +223,8 @@ class VaultPropertiesWidget extends WidgetType {
 
     const list = document.createElement('div')
     list.className = 'vault-properties-list'
-    for (const entry of this.entries) {
+    this.entries.forEach((entry, index) => {
       const dateValue = isVaultDateValue(entry.value)
-      const listValue = parseVaultListValue(entry.value)
       const row = document.createElement('div')
       row.className = 'vault-property-row'
 
@@ -228,33 +232,54 @@ class VaultPropertiesWidget extends WidgetType {
       icon.className = `vault-property-icon ${dateValue ? 'vault-property-icon-date' : 'vault-property-icon-text'}`
       icon.setAttribute('aria-hidden', 'true')
 
-      const key = document.createElement('span')
-      key.className = 'vault-property-key'
-      key.textContent = entry.key
+      const key = document.createElement('input')
+      key.className = 'vault-property-key vault-property-input'
+      key.value = entry.key
+      key.setAttribute('aria-label', `Property ${entry.key} 名称`)
+      key.spellcheck = false
 
-      const value = document.createElement('span')
-      value.className = `vault-property-value${dateValue ? ' vault-property-value-date' : ''}`
-      if (listValue) {
-        value.classList.add('vault-property-value-list')
-        for (const item of listValue) {
-          const chip = document.createElement('span')
-          chip.className = 'vault-property-value-chip'
-          chip.textContent = item
-          value.appendChild(chip)
-        }
-      } else {
-        value.textContent = entry.value || '未设置'
+      const value = document.createElement('input')
+      value.className = `vault-property-value vault-property-input${dateValue ? ' vault-property-value-date' : ''}`
+      value.value = entry.value
+      value.setAttribute('aria-label', `${entry.key} 属性值`)
+      value.spellcheck = false
+
+      const commit = (): void => {
+        const next = this.entries.map((current, currentIndex) => currentIndex === index
+          ? { key: key.value.trim(), value: value.value }
+          : current)
+        if (!key.value.trim()) return
+        this.onChange(next)
       }
+      key.addEventListener('blur', commit)
+      value.addEventListener('blur', commit)
+      key.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') { event.preventDefault(); key.blur() }
+      })
+      value.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') { event.preventDefault(); value.blur() }
+      })
 
-      row.append(icon, key, value)
+      const remove = document.createElement('button')
+      remove.type = 'button'
+      remove.className = 'vault-property-remove'
+      remove.textContent = '×'
+      remove.setAttribute('aria-label', `删除属性 ${entry.key}`)
+      remove.addEventListener('mousedown', (event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        this.onChange(this.entries.filter((_, currentIndex) => currentIndex !== index))
+      })
+
+      row.append(icon, key, value, remove)
       list.appendChild(row)
-    }
+    })
     wrapper.appendChild(list)
     return wrapper
   }
 
   override ignoreEvent(): boolean {
-    return false
+    return true
   }
 }
 
@@ -394,7 +419,7 @@ interface VaultBlock {
   decoration: Decoration
 }
 
-function buildVaultBlocks(state: EditorState): VaultBlock[] {
+function buildVaultBlocks(state: EditorState, onChangeProperties: (entries: VaultPropertyEntry[]) => void): VaultBlock[] {
   const lineTexts = Array.from({ length: state.doc.lines }, (_, index) => state.doc.line(index + 1).text)
   return detectVaultBlockKinds(state.doc.toString()).flatMap((match): VaultBlock[] => {
     const from = state.doc.line(match.startLine).from
@@ -406,7 +431,7 @@ function buildVaultBlocks(state: EditorState): VaultBlock[] {
         kind: match.kind,
         from,
         to,
-        decoration: Decoration.replace({ widget: new VaultPropertiesWidget(entries, from), block: true }),
+        decoration: Decoration.replace({ widget: new VaultPropertiesWidget(entries, from, onChangeProperties), block: true }),
       }]
     }
 
@@ -437,11 +462,13 @@ function buildVaultBlocks(state: EditorState): VaultBlock[] {
 function createVaultReferenceExtension({
   onOpenWikiLink,
   onEditReference,
+  onChangeProperties,
   onActivateReference,
   filesRef,
 }: {
   onOpenWikiLink: (target: string) => void
   onEditReference: (reference: VaultReferenceRange) => void
+  onChangeProperties: (entries: VaultPropertyEntry[]) => void
   onActivateReference: (reference: VaultReferenceRange) => void
   filesRef: { current: VaultFileEntry[] }
 }) {
@@ -457,7 +484,7 @@ function createVaultReferenceExtension({
   function buildReferenceDecorations(state: EditorState): DecorationSet {
     const activeLines = new Set(state.selection.ranges.map((range) => state.doc.lineAt(range.head).number))
     const doc = state.doc.toString()
-    const allBlocks = buildVaultBlocks(state)
+    const allBlocks = buildVaultBlocks(state, onChangeProperties)
     const hasActiveCursor = (block: VaultBlock): boolean => {
       const startLine = state.doc.lineAt(block.from).number
       const endLine = state.doc.lineAt(block.to).number
@@ -505,6 +532,7 @@ function createVaultReferenceExtension({
         const target = event.target as HTMLElement | null
         const block = target?.closest<HTMLElement>('[data-vault-block-from]')
         if (block) {
+          if (target?.closest<HTMLElement>('.vault-property-input, .vault-property-remove')) return false
           if (block.dataset.vaultBlockKind === 'frontmatter') {
             event.preventDefault()
             return true
@@ -545,6 +573,7 @@ interface VaultLiveMarkdownEditorProps {
   onSave: () => void
   onOpenWikiLink: (target: string) => void
   onEditReference: (reference: VaultReferenceRange) => void
+  onChangeProperties: (entries: Array<{ key: string; value: string }>) => void
   onActivateReference: (reference: VaultReferenceRange) => void
   workspaceSlug: string | null
 }
@@ -556,6 +585,7 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
   onSave,
   onOpenWikiLink,
   onEditReference,
+  onChangeProperties,
   onActivateReference,
   workspaceSlug,
 }, ref): React.ReactElement {
@@ -566,6 +596,7 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
   const onSaveRef = React.useRef(onSave)
   const onOpenWikiLinkRef = React.useRef(onOpenWikiLink)
   const onEditReferenceRef = React.useRef(onEditReference)
+  const onChangePropertiesRef = React.useRef(onChangeProperties)
   const onActivateReferenceRef = React.useRef(onActivateReference)
   const workspaceSlugRef = React.useRef(workspaceSlug)
   const [suggestion, setSuggestion] = React.useState<{ trigger: VaultReferenceTrigger; type: VaultReferenceType | 'all'; query: string; from: number; left: number; top: number } | null>(null)
@@ -583,6 +614,7 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
   onSaveRef.current = onSave
   onOpenWikiLinkRef.current = onOpenWikiLink
   onEditReferenceRef.current = onEditReference
+  onChangePropertiesRef.current = onChangeProperties
   onActivateReferenceRef.current = onActivateReference
   workspaceSlugRef.current = workspaceSlug
   filesRef.current = files
@@ -599,6 +631,24 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
       .catch(() => { if (!cancelled) setSuggestionItems([]) })
     return () => { cancelled = true }
   }, [suggestion])
+
+  React.useEffect(() => {
+    if (!suggestion) return
+    const updateAnchor = (): void => {
+      const cursor = hostRef.current?.querySelector<HTMLElement>('.cm-cursor')?.getBoundingClientRect()
+      if (!cursor) return
+      const left = Math.min(Math.max(8, cursor.left), Math.max(8, window.innerWidth - 316))
+      const top = Math.min(Math.max(8, cursor.bottom + 6), Math.max(8, window.innerHeight - 300))
+      setSuggestion((current) => current ? { ...current, left, top } : current)
+    }
+    const scroller = hostRef.current?.querySelector<HTMLElement>('.cm-scroller')
+    scroller?.addEventListener('scroll', updateAnchor, { passive: true })
+    window.addEventListener('resize', updateAnchor)
+    return () => {
+      scroller?.removeEventListener('scroll', updateAnchor)
+      window.removeEventListener('resize', updateAnchor)
+    }
+  }, [suggestion?.from])
 
   const selectSuggestion = React.useCallback((choice: VaultReferenceChoice): void => {
     const current = suggestionRef.current
@@ -659,6 +709,7 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
           onActivateReference: (reference) => onActivateReferenceRef.current(reference),
           onOpenWikiLink: (target) => onOpenWikiLinkRef.current(target),
           onEditReference: (reference) => onEditReferenceRef.current(reference),
+          onChangeProperties: (entries) => onChangePropertiesRef.current(entries),
           filesRef,
         }),
       ].map((extension) => ({
@@ -740,18 +791,12 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
         const instance = instanceRef.current
         const from = instance?.selections()[0]?.end ?? 0
         const cursor = host.querySelector<HTMLElement>('.cm-cursor')?.getBoundingClientRect()
-        const hostRect = host.getBoundingClientRect()
         const trigger = event.key as VaultReferenceTrigger
         const type = trigger === '*' ? 'all' : vaultReferenceTypeForTrigger(trigger)
         if (!type) return
-        setSuggestion({
-          trigger,
-          type,
-          query: '',
-          from,
-          left: Math.max(8, (cursor?.left ?? hostRect.left) - hostRect.left),
-          top: Math.max(8, (cursor?.bottom ?? hostRect.top + 24) - hostRect.top + 4),
-        })
+        const left = Math.min(Math.max(8, cursor?.left ?? 8), Math.max(8, window.innerWidth - 316))
+        const top = Math.min(Math.max(8, (cursor?.bottom ?? 32) + 6), Math.max(8, window.innerHeight - 300))
+        setSuggestion({ trigger, type, query: '', from, left, top })
       }
     }
     host.addEventListener('keydown', onKeyDown)
@@ -777,9 +822,9 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
 
   return (
     <div ref={hostRef} className="vault-ink-mde relative h-full min-h-0 [&_.ink-mde]:h-full [&_.ink-mde-editor]:min-h-0 [&_.ink-mde-editor]:overflow-auto">
-      {suggestion && (
+      {suggestion && createPortal(
         <div
-          className="absolute z-50 w-[300px] overflow-hidden rounded-lg bg-popover shadow-lg ring-1 ring-border/60"
+          className="fixed z-[100] w-[300px] overflow-hidden rounded-lg bg-popover shadow-lg ring-1 ring-border/60"
           style={{ left: suggestion.left, top: suggestion.top }}
           role="listbox"
           aria-label={`${suggestion.trigger} 引用建议`}
@@ -809,7 +854,8 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
               </button>
             ))}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )

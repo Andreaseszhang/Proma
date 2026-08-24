@@ -32,6 +32,16 @@ function displayDocumentTitle(filename: string): string {
   return filename.replace(/\.md$/i, '')
 }
 
+function replaceVaultFrontmatterProperties(markdown: string, entries: Array<{ key: string; value: string }>): string {
+  const newline = markdown.includes('\r\n') ? '\r\n' : '\n'
+  const lines = markdown.replace(/\r\n?/g, '\n').split('\n')
+  if (lines[0]?.replace(/^\uFEFF/, '') !== '---') return markdown
+  const closingIndex = lines.findIndex((line, index) => index > 0 && line.trim() === '---')
+  if (closingIndex < 0) return markdown
+  const propertyLines = entries.map(({ key, value }) => `${key}: ${value}`)
+  return [...lines.slice(0, 1), ...propertyLines, ...lines.slice(closingIndex)].join(newline)
+}
+
 interface VaultFolderNode {
   name: string
   relativePath: string
@@ -182,6 +192,9 @@ function VaultMarkdownEditor({
   const [referencePicker, setReferencePicker] = React.useState<{ reference?: VaultReference; range?: VaultReferenceRange; type?: VaultReferenceType } | null>(null)
   const editorPageRef = React.useRef<HTMLDivElement>(null)
   const editorRef = React.useRef<VaultLiveMarkdownEditorHandle>(null)
+  const updateProperties = React.useCallback((entries: Array<{ key: string; value: string }>): void => {
+    setDraft((current) => replaceVaultFrontmatterProperties(current, entries))
+  }, [])
 
   const handleEditorPageWheel = (event: React.WheelEvent<HTMLDivElement>): void => {
     if ((event.target as HTMLElement).closest('.vault-ink-mde')) return
@@ -267,6 +280,7 @@ function VaultMarkdownEditor({
             onSave={() => { void save() }}
             onOpenWikiLink={onOpenWikiLink}
             onActivateReference={onActivateReference}
+            onChangeProperties={updateProperties}
             onEditReference={(reference) => setReferencePicker({ reference, range: reference })}
           />
         </div>

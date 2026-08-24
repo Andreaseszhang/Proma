@@ -158,12 +158,14 @@ function VaultFileList({
 
 function VaultMarkdownEditor({
   readResult,
+  files,
   workspaceSlug,
   onSave,
   onRename,
   onOpenWikiLink,
 }: {
   readResult: VaultReadResult
+  files: VaultFileEntry[]
   workspaceSlug: string | null
   onSave: (nextContent: string) => Promise<void>
   onRename: (name: string) => Promise<void>
@@ -254,6 +256,7 @@ function VaultMarkdownEditor({
           <VaultLiveMarkdownEditor
             ref={editorRef}
             value={draft}
+            files={files}
             onChange={setDraft}
             onSave={() => { void save() }}
             onOpenWikiLink={onOpenWikiLink}
@@ -278,6 +281,7 @@ function VaultMarkdownEditor({
 
 function VaultMarkdownPane({
   readResult,
+  files,
   loading,
   workspaceSlug,
   onSave,
@@ -285,6 +289,7 @@ function VaultMarkdownPane({
   onOpenWikiLink,
 }: {
   readResult: VaultReadResult | null
+  files: VaultFileEntry[]
   loading: boolean
   workspaceSlug: string | null
   onSave: (nextContent: string) => Promise<void>
@@ -313,6 +318,7 @@ function VaultMarkdownPane({
       <VaultMarkdownEditor
         key={`${readResult.relativePath}:${readResult.sha256}`}
         readResult={readResult}
+        files={files}
         workspaceSlug={workspaceSlug}
         onSave={onSave}
         onRename={onRename}
@@ -614,6 +620,7 @@ export function VaultView(): React.ReactElement {
           </aside>
           <VaultMarkdownPane
             readResult={readResult}
+            files={files}
             loading={fileLoading}
             workspaceSlug={workspaceSlug}
             onSave={save}

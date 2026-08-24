@@ -2488,3 +2488,90 @@
   outline: 2px solid hsl(var(--ring));
   outline-offset: 2px;
 }
+.vault-ink-mde .vault-wiki-bracket-hidden {
+  display: none !important;
+}
+.vault-ink-mde .vault-wiki-link {
+  color: hsl(var(--primary));
+  cursor: pointer;
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-color: hsl(var(--primary) / 0.7);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+}
+.vault-ink-mde .vault-wiki-link:hover {
+  color: hsl(var(--foreground));
+  text-decoration-color: hsl(var(--foreground));
+}
+.vault-ink-mde .vault-wiki-link-unresolved {
+  color: hsl(var(--muted-foreground));
+  cursor: default;
+  font-weight: 600;
+  text-decoration-style: dashed;
+  text-decoration-color: hsl(var(--muted-foreground) / 0.65);
+}
+.vault-ink-mde .vault-markdown-table,
+.vault-ink-mde .vault-properties,
+.vault-ink-mde .vault-mermaid-block {
+  display: block;
+  margin: 0.9rem 0;
+  max-width: 100%;
+}
+.vault-ink-mde .vault-markdown-table {
+  overflow-x: auto;
+}
+.vault-ink-mde .vault-markdown-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.94em;
+}
+.vault-ink-mde .vault-markdown-table th,
+.vault-ink-mde .vault-markdown-table td {
+  border-bottom: 1px solid hsl(var(--border) / 0.55);
+  padding: 0.5rem 0.7rem;
+  text-align: left;
+  vertical-align: top;
+}
+.vault-ink-mde .vault-markdown-table th {
+  background: hsl(var(--muted) / 0.45);
+  color: hsl(var(--foreground));
+  font-weight: 700;
+}
+.vault-ink-mde .vault-markdown-table td {
+  color: hsl(var(--foreground) / 0.88);
+}
+.vault-ink-mde .vault-properties {
+  border-radius: 0.5rem;
+  background: hsl(var(--muted) / 0.32);
+  box-shadow: 0 1px 2px hsl(var(--foreground) / 0.04);
+  padding: 0.7rem 0.9rem;
+}
+.vault-ink-mde .vault-properties-heading {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.45rem;
+  text-transform: uppercase;
+}
+.vault-ink-mde .vault-properties dl {
+  display: grid;
+  grid-template-columns: minmax(7rem, 0.35fr) minmax(0, 1fr);
+  margin: 0;
+  row-gap: 0.35rem;
+}
+.vault-ink-mde .vault-properties dt {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.82em;
+  font-weight: 600;
+}
+.vault-ink-mde .vault-properties dd {
+  color: hsl(var(--foreground));
+  font-size: 0.88em;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.vault-ink-mde .vault-mermaid-block .mermaid-block-wrapper {
+  margin: 0;
+}

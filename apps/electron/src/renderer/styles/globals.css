@@ -2,6 +2,46 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer components {
+  .markdown-live-editor .ink-mde,
+  .markdown-live-editor .ink-mde-editor,
+  .markdown-live-editor .cm-editor {
+    min-height: 100%;
+    height: 100%;
+  }
+
+  .markdown-live-editor .cm-scroller {
+    overflow: auto;
+    font: inherit;
+  }
+
+  .markdown-live-editor .cm-content {
+    min-height: 100%;
+    padding: 0.75rem 1rem;
+    color: hsl(var(--foreground));
+    caret-color: hsl(var(--primary));
+  }
+
+  .markdown-live-editor .cm-gutters {
+    color: hsl(var(--muted-foreground));
+    background: hsl(var(--background));
+    border-color: hsl(var(--border));
+  }
+
+  .markdown-live-editor .cm-activeLine,
+  .markdown-live-editor .cm-activeLineGutter {
+    background: hsl(var(--accent) / 0.45);
+  }
+
+  .markdown-live-editor .cm-selectionBackground {
+    background: hsl(var(--primary) / 0.20) !important;
+  }
+
+  .markdown-live-editor__syntax-hidden {
+    display: none;
+  }
+}
+
 /* ===== 全局字体与渲染优化 =====
  * 优先 Inter Variable（自托管，见 main.tsx 引入） → SF Pro Text（macOS 系统） → system-ui；
  * 数字使用 tabular-nums，配合 cv11/ss01/ss03 让字形接近 Vercel / Linear 的现代感。

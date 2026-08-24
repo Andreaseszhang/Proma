@@ -44,6 +44,7 @@ import { WorkspaceMemoryChangeDock } from '@/components/agent-skills/WorkspaceMe
 import { agentSideChatMapAtom } from '@/atoms/chat-atoms'
 import { interfaceVariantAtom } from '@/atoms/theme'
 import { previewFileMapAtom } from '@/atoms/preview-atoms'
+import { browserPanelMinimizedMapAtom, browserPanelOpenMapAtom } from '@/atoms/browser-atoms'
 import { useOpenPreview } from '@/components/diff/preview-opener'
 import { detectIsWindows } from '@/lib/platform'
 import type { FileEntry, AgentPendingFile } from '@proma/shared'
@@ -82,31 +83,49 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
   const selectedFilePath = previewFileMap.get(sessionId)?.filePath
 
   const openPreview = useOpenPreview()
+  const browserOpenMap = useAtomValue(browserPanelOpenMapAtom)
+  const setBrowserMinimizedMap = useSetAtom(browserPanelMinimizedMapAtom)
+  const setBrowserOpenMap = useSetAtom(browserPanelOpenMapAtom)
+
+  const minimizeBrowserForPreview = React.useCallback(async (): Promise<void> => {
+    if (!browserOpenMap.get(sessionId)) return
+    const minimizeBrowser = (window.electronAPI as Partial<typeof window.electronAPI>).minimizeAgentBrowser
+    try {
+      if (typeof minimizeBrowser === 'function') await minimizeBrowser(sessionId)
+    } catch (error) {
+      console.error('[受管浏览器] 为打开文件预览而最小化失败:', error)
+    } finally {
+      setBrowserMinimizedMap((previous) => { const next = new Map(previous); next.set(sessionId, true); return next })
+      setBrowserOpenMap((previous) => { const next = new Map(previous); next.set(sessionId, false); return next })
+    }
+  }, [browserOpenMap, sessionId, setBrowserMinimizedMap, setBrowserOpenMap])
 
   // 用 ref 存 basePaths 相关值，避免声明顺序问题
   const basePathsRef = React.useRef<string[]>([])
 
-  const handleFilePreview = React.useCallback((filePath: string) => {
+  const handleFilePreview = React.useCallback(async (filePath: string) => {
+    await minimizeBrowserForPreview()
     const bp = basePathsRef.current
     openPreview(sessionId, {
       filePath,
       previewOnly: true,
       basePaths: bp.length > 0 ? bp : undefined,
     })
-  }, [sessionId, openPreview])
+  }, [minimizeBrowserForPreview, sessionId, openPreview])
 
   // Worktree 选择状态（仅用于 diff 文件点击时传递 baseRef，选取逻辑已下沉至 DiffChangesList）
   const selectedWorktreeMap = useAtomValue(agentSelectedWorktreeAtom)
   const selectedWorktreePath = selectedWorktreeMap.get(sessionId) ?? null
 
-  const handleDiffFileClick = React.useCallback((filePath: string, _isUntracked: boolean, gitRoot?: string) => {
+  const handleDiffFileClick = React.useCallback(async (filePath: string, _isUntracked: boolean, gitRoot?: string) => {
+    await minimizeBrowserForPreview()
     openPreview(sessionId, {
       filePath,
       dirPath: sessionPath || undefined,
       gitRoot,
       baseRef: selectedWorktreePath ? 'origin/main' : undefined,
     })
-  }, [openPreview, sessionId, sessionPath, selectedWorktreePath])
+  }, [minimizeBrowserForPreview, openPreview, sessionId, sessionPath, selectedWorktreePath])
 
   // 动画标志：isOpen 变化时启用过渡动画，切换会话时即时显示
   const prevIsOpenRef = React.useRef(isOpen)

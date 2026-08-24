@@ -42,7 +42,7 @@ import { registerShortcut } from '@/lib/shortcut-registry'
 import { cn } from '@/lib/utils'
 import { shortcutGuideOpenAtom } from '@/atoms/shortcut-guide'
 import { faqDialogOpenAtom } from '@/atoms/faq-dialog'
-import { browserFilePanelManualRestoreSessionIdsAtom, browserPanelMinimizedMapAtom, browserPanelOpenMapAtom, browserStateMapAtom } from '@/atoms/browser-atoms'
+import { browserPanelMinimizedMapAtom, browserPanelOpenMapAtom, browserStateMapAtom } from '@/atoms/browser-atoms'
 // 浏览器入口对所有 Agent 会话开放；来源限制由主进程浏览器策略处理。
 
 export function TabBar(): React.ReactElement {
@@ -251,7 +251,6 @@ function TabBarInner({
   const setBrowserMinimizedMap = useSetAtom(browserPanelMinimizedMapAtom)
   const browserStateMap = useAtomValue(browserStateMapAtom)
   const setBrowserStateMap = useSetAtom(browserStateMapAtom)
-  const [browserFilePanelManualRestoreSessionIds, setBrowserFilePanelManualRestoreSessionIds] = useAtom(browserFilePanelManualRestoreSessionIdsAtom)
   const activeBrowserIsOpen = activeAgentSession ? browserOpenMap.get(activeAgentSession.id) === true : false
   const hasMinimizedBrowser = Boolean(activeAgentSession && browserStateMap.has(activeAgentSession.id) && browserMinimizedMap.get(activeAgentSession.id) === true)
   const priorBrowserStateRef = React.useRef<{ sessionId: string | null; open: boolean }>({ sessionId: null, open: false })
@@ -259,13 +258,8 @@ function TabBarInner({
 
   const togglePanel = React.useCallback(() => {
     if (!isAgentContextTab(activeTab)) return
-    if (!isPanelOpen && activeAgentSession && browserOpenMap.get(activeAgentSession.id)) {
-      setBrowserFilePanelManualRestoreSessionIds((previous) => (
-        previous.includes(activeAgentSession.id) ? previous : [...previous, activeAgentSession.id]
-      ))
-    }
     setSidePanelOpen(!isPanelOpen)
-  }, [activeAgentSession, activeTab, browserOpenMap, isPanelOpen, setBrowserFilePanelManualRestoreSessionIds, setSidePanelOpen])
+  }, [activeTab, isPanelOpen, setSidePanelOpen])
 
   const openBrowser = React.useCallback(async () => {
     if (!activeAgentSession) return
@@ -285,14 +279,13 @@ function TabBarInner({
       previous.sessionId === sessionId &&
       !previous.open &&
       activeBrowserIsOpen &&
-      isPanelOpen &&
-      !browserFilePanelManualRestoreSessionIds.includes(sessionId),
+      isPanelOpen,
     )
     priorBrowserStateRef.current = { sessionId, open: activeBrowserIsOpen }
 
     if (!shouldAutoCollapse) return
     setSidePanelOpen(false)
-  }, [activeAgentSession?.id, activeBrowserIsOpen, browserFilePanelManualRestoreSessionIds, isPanelOpen, setSidePanelOpen])
+  }, [activeAgentSession?.id, activeBrowserIsOpen, isPanelOpen, setSidePanelOpen])
 
   const openShortcutGuide = React.useCallback(() => {
     setShortcutGuideOpen(true)

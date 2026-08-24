@@ -208,6 +208,7 @@ class VaultPropertiesWidget extends WidgetType {
     const wrapper = document.createElement('section')
     wrapper.className = 'vault-properties'
     wrapper.dataset.vaultBlockFrom = String(this.from)
+    wrapper.dataset.vaultBlockKind = 'frontmatter'
     wrapper.setAttribute('aria-label', 'Properties')
 
     const heading = document.createElement('h2')
@@ -387,6 +388,7 @@ export function detectVaultBlockKinds(markdown: string): VaultBlockMatch[] {
 }
 
 interface VaultBlock {
+  kind: VaultBlockKind
   from: number
   to: number
   decoration: Decoration
@@ -394,13 +396,14 @@ interface VaultBlock {
 
 function buildVaultBlocks(state: EditorState): VaultBlock[] {
   const lineTexts = Array.from({ length: state.doc.lines }, (_, index) => state.doc.line(index + 1).text)
-  return detectVaultBlockKinds(state.doc.toString()).flatMap((match) => {
+  return detectVaultBlockKinds(state.doc.toString()).flatMap((match): VaultBlock[] => {
     const from = state.doc.line(match.startLine).from
     const to = state.doc.line(match.endLine).to
 
     if (match.kind === 'frontmatter') {
       const entries = parseYamlProperties(lineTexts.slice(1, match.endLine - 1))
       return [{
+        kind: match.kind,
         from,
         to,
         decoration: Decoration.replace({ widget: new VaultPropertiesWidget(entries, from), block: true }),
@@ -414,6 +417,7 @@ function buildVaultBlocks(state: EditorState): VaultBlock[] {
       const width = Math.max(header.length, ...body.map((row) => row.length))
       const rows = [header, ...body].map((row) => Array.from({ length: width }, (_, index) => row[index] ?? ''))
       return [{
+        kind: match.kind,
         from,
         to,
         decoration: Decoration.replace({ widget: new VaultTableWidget(rows, from), block: true }),
@@ -422,6 +426,7 @@ function buildVaultBlocks(state: EditorState): VaultBlock[] {
 
     const code = lineTexts.slice(match.startLine, match.endLine - 1).join('\n')
     return [{
+      kind: match.kind,
       from,
       to,
       decoration: Decoration.replace({ widget: new VaultMermaidWidget(code, from), block: true }),
@@ -458,7 +463,7 @@ function createVaultReferenceExtension({
       const endLine = state.doc.lineAt(block.to).number
       return Array.from(activeLines).some((line) => line >= startLine && line <= endLine)
     }
-    const blockRanges = allBlocks.filter((block) => !hasActiveCursor(block))
+    const blockRanges = allBlocks.filter((block) => block.kind === 'frontmatter' || !hasActiveCursor(block))
     const decorations: Array<{ from: number; to: number; decoration: Decoration }> = blockRanges.map((block) => ({
       from: block.from,
       to: block.to,
@@ -500,6 +505,10 @@ function createVaultReferenceExtension({
         const target = event.target as HTMLElement | null
         const block = target?.closest<HTMLElement>('[data-vault-block-from]')
         if (block) {
+          if (block.dataset.vaultBlockKind === 'frontmatter') {
+            event.preventDefault()
+            return true
+          }
           const from = Number(block.dataset.vaultBlockFrom)
           if (Number.isSafeInteger(from)) {
             event.preventDefault()

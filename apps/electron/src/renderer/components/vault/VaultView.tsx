@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { useAtom, useAtomValue } from 'jotai'
+import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import { BookOpen, ChevronDown, ChevronRight, Folder, FolderOpen, Link2, Loader2, Plus, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import type { VaultCandidate, VaultFileEntry, VaultReadResult, VaultSummary } from '@proma/shared'
@@ -16,11 +16,13 @@ import {
   pendingVaultQuoteAtom,
 } from '@/atoms/vault-atoms'
 import { cn } from '@/lib/utils'
-import { agentWorkspacesAtom, currentAgentWorkspaceIdAtom } from '@/atoms/agent-atoms'
+import { agentWorkspacesAtom, agentSessionsAtom, currentAgentWorkspaceIdAtom } from '@/atoms/agent-atoms'
+import { activeViewAtom, agentSkillsTabAtom, pendingAgentSkillSlugAtom } from '@/atoms/active-view'
+import { planningSelectedCalendarEventIdAtom, planningSelectedTodoIdAtom, planningTabAtom } from '@/atoms/planning-atoms'
+import { useOpenSession } from '@/hooks/useOpenSession'
 import {
   resolveVaultWikiLink,
   serializeVaultReference,
-  vaultReferenceTypeForTrigger,
   type VaultReference,
   type VaultReferenceRange,
   type VaultReferenceType,
@@ -164,6 +166,7 @@ function VaultMarkdownEditor({
   onSave,
   onRename,
   onOpenWikiLink,
+  onActivateReference,
 }: {
   readResult: VaultReadResult
   files: VaultFileEntry[]
@@ -171,6 +174,7 @@ function VaultMarkdownEditor({
   onSave: (nextContent: string) => Promise<void>
   onRename: (name: string) => Promise<void>
   onOpenWikiLink: (target: string) => void
+  onActivateReference: (reference: VaultReferenceRange) => void
 }): React.ReactElement {
   const [draft, setDraft] = React.useState(readResult.content)
   const [saving, setSaving] = React.useState(false)
@@ -258,10 +262,11 @@ function VaultMarkdownEditor({
             ref={editorRef}
             value={draft}
             files={files}
+            workspaceSlug={workspaceSlug}
             onChange={setDraft}
             onSave={() => { void save() }}
             onOpenWikiLink={onOpenWikiLink}
-            onRequestReference={(trigger) => setReferencePicker({ type: vaultReferenceTypeForTrigger(trigger) })}
+            onActivateReference={onActivateReference}
             onEditReference={(reference) => setReferencePicker({ reference, range: reference })}
           />
         </div>
@@ -288,6 +293,7 @@ function VaultMarkdownPane({
   onSave,
   onRename,
   onOpenWikiLink,
+  onActivateReference,
 }: {
   readResult: VaultReadResult | null
   files: VaultFileEntry[]
@@ -296,6 +302,7 @@ function VaultMarkdownPane({
   onSave: (nextContent: string) => Promise<void>
   onRename: (name: string) => Promise<void>
   onOpenWikiLink: (target: string) => void
+  onActivateReference: (reference: VaultReferenceRange) => void
 }): React.ReactElement {
   if (loading) {
     return (
@@ -324,6 +331,7 @@ function VaultMarkdownPane({
         onSave={onSave}
         onRename={onRename}
         onOpenWikiLink={onOpenWikiLink}
+        onActivateReference={onActivateReference}
       />
     </section>
   )
@@ -331,7 +339,15 @@ function VaultMarkdownPane({
 
 export function VaultView(): React.ReactElement {
   const workspaces = useAtomValue(agentWorkspacesAtom)
+  const sessions = useAtomValue(agentSessionsAtom)
   const currentWorkspaceId = useAtomValue(currentAgentWorkspaceIdAtom)
+  const setActiveView = useSetAtom(activeViewAtom)
+  const setSkillsTab = useSetAtom(agentSkillsTabAtom)
+  const setPendingSkillSlug = useSetAtom(pendingAgentSkillSlugAtom)
+  const setPlanningTab = useSetAtom(planningTabAtom)
+  const setSelectedTodoId = useSetAtom(planningSelectedTodoIdAtom)
+  const setSelectedCalendarEventId = useSetAtom(planningSelectedCalendarEventIdAtom)
+  const openSession = useOpenSession()
   const workspaceSlug = React.useMemo(
     () => workspaces.find((workspace) => workspace.id === currentWorkspaceId)?.slug ?? null,
     [currentWorkspaceId, workspaces],
@@ -418,6 +434,28 @@ export function VaultView(): React.ReactElement {
       if (requestId === readRequestRef.current) setFileLoading(false)
     }
   }, [setReadResult, setSelectedFile])
+
+  const activateReference = React.useCallback((reference: VaultReferenceRange): void => {
+    if (reference.type === 'session') {
+      const session = sessions.find((item) => item.id === reference.id)
+      openSession('agent', reference.id, session?.title ?? reference.label)
+      return
+    }
+    if (reference.type === 'skill') {
+      setSkillsTab('skills')
+      setPendingSkillSlug(reference.id)
+      setActiveView('agent-skills')
+      return
+    }
+    if (reference.type === 'todo' || reference.type === 'calendar_event') {
+      setPlanningTab(reference.type === 'todo' ? 'todos' : 'calendar')
+      if (reference.type === 'todo') setSelectedTodoId(reference.id)
+      else setSelectedCalendarEventId(reference.id)
+      setActiveView('planning')
+      return
+    }
+    toast.message('MCP 引用暂不支持直接打开，请使用编辑引用操作')
+  }, [openSession, sessions, setActiveView, setPendingSkillSlug, setPlanningTab, setSelectedCalendarEventId, setSelectedTodoId, setSkillsTab])
 
   const openWikiLink = React.useCallback((target: string): void => {
     const relativePath = resolveVaultWikiLink(target, files)
@@ -627,6 +665,7 @@ export function VaultView(): React.ReactElement {
             onSave={save}
             onRename={rename}
             onOpenWikiLink={openWikiLink}
+            onActivateReference={activateReference}
           />
         </div>
       </main>

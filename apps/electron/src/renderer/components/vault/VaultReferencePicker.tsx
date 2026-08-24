@@ -21,24 +21,18 @@ interface VaultReferencePickerProps {
   onSelect: (reference: VaultReference) => void
 }
 
-interface VaultReferenceChoice {
+export interface VaultReferenceChoice {
   reference: VaultReference
   description: string
 }
 
-const types: Array<{ type: VaultReferenceType; label: string; icon: typeof Sparkles }> = [
-  { type: 'session', label: '会话', icon: MessageSquareText },
-  { type: 'skill', label: 'Skill', icon: Sparkles },
-  { type: 'mcp', label: 'MCP', icon: Server },
-  { type: 'todo', label: '待办', icon: ListTodo },
-  { type: 'calendar_event', label: '日程', icon: CalendarDays },
-]
+export async function loadVaultReferenceChoices(type: VaultReferenceType | 'all', query: string, workspaceSlug: string | null): Promise<VaultReferenceChoice[]> {
+  if (type === 'all') {
+    const types: VaultReferenceType[] = ['session', 'skill', 'mcp', 'todo', 'calendar_event']
+    const choices = await Promise.all(types.map((nextType) => loadVaultReferenceChoices(nextType, query, workspaceSlug)))
+    return choices.flat()
+  }
 
-function matchesQuery(value: string, query: string): boolean {
-  return !query || value.toLocaleLowerCase().includes(query.toLocaleLowerCase())
-}
-
-async function loadChoices(type: VaultReferenceType, query: string, workspaceSlug: string | null): Promise<VaultReferenceChoice[]> {
   if (type === 'session') {
     const results: AgentSessionReferenceSearchResult[] = await window.electronAPI.searchAgentSessionReferences({ query, limit: query ? 20 : 100 })
     return results.map((session) => ({
@@ -78,6 +72,25 @@ async function loadChoices(type: VaultReferenceType, query: string, workspaceSlu
       description: item.description,
     }))
 }
+
+
+const types: Array<{ type: VaultReferenceType; label: string; icon: typeof Sparkles }> = [
+  { type: 'session', label: '会话', icon: MessageSquareText },
+  { type: 'skill', label: 'Skill', icon: Sparkles },
+  { type: 'mcp', label: 'MCP', icon: Server },
+  { type: 'todo', label: '待办', icon: ListTodo },
+  { type: 'calendar_event', label: '日程', icon: CalendarDays },
+]
+
+export function matchesQuery(value: string, query: string): boolean {
+  return !query || value.toLocaleLowerCase().includes(query.toLocaleLowerCase())
+}
+
+
+async function loadChoices(type: VaultReferenceType, query: string, workspaceSlug: string | null): Promise<VaultReferenceChoice[]> {
+  return loadVaultReferenceChoices(type, query, workspaceSlug)
+}
+
 
 export function VaultReferencePicker({
   open,

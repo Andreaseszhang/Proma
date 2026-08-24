@@ -12,11 +12,13 @@ import type { VaultFileEntry } from '@proma/shared'
 import ink, { type Instance } from 'ink-mde'
 import { MermaidBlock } from '@proma/ui'
 import { shouldRenderMermaidCodeBlock } from '../../lib/mermaid-detection'
+import { loadVaultReferenceChoices, type VaultReferenceChoice } from './VaultReferencePicker'
 import {
   findVaultWikiLinkAt,
   parseVaultReferences,
   resolveVaultWikiLink,
   serializeVaultReference,
+  vaultReferenceTypeForTrigger,
   type VaultReference,
   type VaultReferenceRange,
   type VaultReferenceTrigger,
@@ -98,6 +100,7 @@ class VaultReferenceWidget extends WidgetType {
   constructor(
     private readonly reference: VaultReferenceRange,
     private readonly onEdit: (reference: VaultReferenceRange) => void,
+    private readonly onActivate: (reference: VaultReferenceRange) => void,
   ) {
     super()
   }
@@ -130,8 +133,11 @@ class VaultReferenceWidget extends WidgetType {
     button.className = `vault-reference-chip ${chipClass}`
     button.dataset.referenceTrigger = trigger
     button.textContent = `${trigger}${this.reference.label}`
-    button.title = '点击重新选择引用'
-    button.addEventListener('click', () => this.onEdit(this.reference))
+    button.title = '点击打开引用；编辑引用请使用工具按钮'
+    button.addEventListener('click', () => {
+      if (this.reference.type === 'mcp') this.onEdit(this.reference)
+      else this.onActivate(this.reference)
+    })
     return button
   }
 
@@ -382,10 +388,12 @@ function buildVaultBlocks(state: EditorState): VaultBlock[] {
 function createVaultReferenceExtension({
   onOpenWikiLink,
   onEditReference,
+  onActivateReference,
   filesRef,
 }: {
   onOpenWikiLink: (target: string) => void
   onEditReference: (reference: VaultReferenceRange) => void
+  onActivateReference: (reference: VaultReferenceRange) => void
   filesRef: { current: VaultFileEntry[] }
 }) {
   const referenceField = StateField.define<DecorationSet>({
@@ -419,7 +427,7 @@ function createVaultReferenceExtension({
       decorations.push({
         from: reference.from,
         to: reference.to,
-        decoration: Decoration.replace({ widget: new VaultReferenceWidget(reference, onEditReference) }),
+        decoration: Decoration.replace({ widget: new VaultReferenceWidget(reference, onEditReference, onActivateReference) }),
       })
     }
 
@@ -459,6 +467,9 @@ function createVaultReferenceExtension({
         if (event.button !== 0 || event.metaKey || event.ctrlKey || event.altKey) return false
         const position = view.posAtCoords({ x: event.clientX, y: event.clientY })
         if (position === null) return false
+        const pointTarget = document.elementFromPoint(event.clientX, event.clientY)
+        const wikiElement = pointTarget?.closest<HTMLElement>('.vault-wiki-link')
+        if (!wikiElement || !view.dom.contains(wikiElement)) return false
         const wikiLink = findVaultWikiLinkAt(view.state.doc.toString(), position)
         if (!wikiLink || !resolveVaultWikiLink(wikiLink.target, filesRef.current)) return false
         event.preventDefault()
@@ -481,7 +492,8 @@ interface VaultLiveMarkdownEditorProps {
   onSave: () => void
   onOpenWikiLink: (target: string) => void
   onEditReference: (reference: VaultReferenceRange) => void
-  onRequestReference: (trigger?: VaultReferenceTrigger) => void
+  onActivateReference: (reference: VaultReferenceRange) => void
+  workspaceSlug: string | null
 }
 
 export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorHandle, VaultLiveMarkdownEditorProps>(function VaultLiveMarkdownEditor({
@@ -491,7 +503,8 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
   onSave,
   onOpenWikiLink,
   onEditReference,
-  onRequestReference,
+  onActivateReference,
+  workspaceSlug,
 }, ref): React.ReactElement {
   const hostRef = React.useRef<HTMLDivElement>(null)
   const instanceRef = React.useRef<Instance | null>(null)
@@ -500,15 +513,49 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
   const onSaveRef = React.useRef(onSave)
   const onOpenWikiLinkRef = React.useRef(onOpenWikiLink)
   const onEditReferenceRef = React.useRef(onEditReference)
-  const onRequestReferenceRef = React.useRef(onRequestReference)
+  const onActivateReferenceRef = React.useRef(onActivateReference)
+  const workspaceSlugRef = React.useRef(workspaceSlug)
+  const [suggestion, setSuggestion] = React.useState<{ trigger: VaultReferenceTrigger; type: VaultReferenceType | 'all'; query: string; from: number; left: number; top: number } | null>(null)
+  const [suggestionItems, setSuggestionItems] = React.useState<VaultReferenceChoice[]>([])
+  const [suggestionIndex, setSuggestionIndex] = React.useState(0)
+  const suggestionRef = React.useRef(suggestion)
+  const suggestionItemsRef = React.useRef(suggestionItems)
+  const suggestionIndexRef = React.useRef(suggestionIndex)
+  suggestionRef.current = suggestion
+  suggestionItemsRef.current = suggestionItems
+  suggestionIndexRef.current = suggestionIndex
   const filesRef = React.useRef(files)
   valueRef.current = value
   onChangeRef.current = onChange
   onSaveRef.current = onSave
   onOpenWikiLinkRef.current = onOpenWikiLink
   onEditReferenceRef.current = onEditReference
-  onRequestReferenceRef.current = onRequestReference
+  onActivateReferenceRef.current = onActivateReference
+  workspaceSlugRef.current = workspaceSlug
   filesRef.current = files
+
+  React.useEffect(() => {
+    if (!suggestion) {
+      setSuggestionItems([])
+      return
+    }
+    let cancelled = false
+    setSuggestionIndex(0)
+    void loadVaultReferenceChoices(suggestion.type, suggestion.query, workspaceSlugRef.current)
+      .then((items) => { if (!cancelled) setSuggestionItems(items) })
+      .catch(() => { if (!cancelled) setSuggestionItems([]) })
+    return () => { cancelled = true }
+  }, [suggestion])
+
+  const selectSuggestion = React.useCallback((choice: VaultReferenceChoice): void => {
+    const current = suggestionRef.current
+    const instance = instanceRef.current
+    if (!current || !instance) return
+    instance.insert(serializeVaultReference(choice.reference), { start: current.from, end: current.from })
+    setSuggestion(null)
+    instance.focus()
+  }, [])
+
 
   React.useImperativeHandle(ref, () => ({
     insertReference: (reference) => {
@@ -556,6 +603,7 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
       plugins: [
         ...markdownSyntaxVisibility,
         ...createVaultReferenceExtension({
+          onActivateReference: (reference) => onActivateReferenceRef.current(reference),
           onOpenWikiLink: (target) => onOpenWikiLinkRef.current(target),
           onEditReference: (reference) => onEditReferenceRef.current(reference),
           filesRef,
@@ -597,9 +645,60 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
         onSaveRef.current()
         return
       }
-      if (!event.metaKey && !event.ctrlKey && !event.altKey && ['/','@','#','&','~','～'].includes(event.key)) {
+      const currentSuggestion = suggestionRef.current
+      if (currentSuggestion) {
+        if (event.key === 'Escape') {
+          event.preventDefault()
+          setSuggestion(null)
+          return
+        }
+        if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+          event.preventDefault()
+          setSuggestionIndex((current) => {
+            if (suggestionItemsRef.current.length === 0) return 0
+            return event.key === 'ArrowUp'
+              ? (current <= 0 ? suggestionItemsRef.current.length - 1 : current - 1)
+              : (current >= suggestionItemsRef.current.length - 1 ? 0 : current + 1)
+          })
+          return
+        }
+        if (event.key === 'Enter') {
+          event.preventDefault()
+          const choice = suggestionItemsRef.current[suggestionIndexRef.current]
+          if (choice) selectSuggestion(choice)
+          return
+        }
+        if (event.key === 'Backspace') {
+          event.preventDefault()
+          setSuggestion((current) => {
+            if (!current || current.query.length === 0) return null
+            return { ...current, query: current.query.slice(0, -1) }
+          })
+          return
+        }
+        if (!event.metaKey && !event.ctrlKey && !event.altKey && event.key.length === 1) {
+          event.preventDefault()
+          setSuggestion((current) => current ? { ...current, query: current.query + event.key } : current)
+        }
+        return
+      }
+      if (!event.metaKey && !event.ctrlKey && !event.altKey && ['/', '#', '&', '~', '～', '*'].includes(event.key)) {
         event.preventDefault()
-        onRequestReferenceRef.current(event.key as VaultReferenceTrigger)
+        const instance = instanceRef.current
+        const from = instance?.selections()[0]?.end ?? 0
+        const cursor = host.querySelector<HTMLElement>('.cm-cursor')?.getBoundingClientRect()
+        const hostRect = host.getBoundingClientRect()
+        const trigger = event.key as VaultReferenceTrigger
+        const type = trigger === '*' ? 'all' : vaultReferenceTypeForTrigger(trigger)
+        if (!type) return
+        setSuggestion({
+          trigger,
+          type,
+          query: '',
+          from,
+          left: Math.max(8, (cursor?.left ?? hostRect.left) - hostRect.left),
+          top: Math.max(8, (cursor?.bottom ?? hostRect.top + 24) - hostRect.top + 4),
+        })
       }
     }
     host.addEventListener('keydown', onKeyDown)
@@ -608,6 +707,7 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
       disposed = true
       ready = false
       host.removeEventListener('keydown', onKeyDown)
+      setSuggestion(null)
       if (localInstance) localInstance.destroy()
       if (instanceRef.current === localInstance) instanceRef.current = null
       mount.remove()
@@ -622,5 +722,42 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
     instance.update(value)
   }, [value])
 
-  return <div ref={hostRef} className="vault-ink-mde h-full min-h-0 [&_.ink-mde]:h-full [&_.ink-mde-editor]:min-h-0 [&_.ink-mde-editor]:overflow-auto" />
+  return (
+    <div ref={hostRef} className="vault-ink-mde relative h-full min-h-0 [&_.ink-mde]:h-full [&_.ink-mde-editor]:min-h-0 [&_.ink-mde-editor]:overflow-auto">
+      {suggestion && (
+        <div
+          className="absolute z-50 w-[300px] overflow-hidden rounded-lg bg-popover shadow-lg ring-1 ring-border/60"
+          style={{ left: suggestion.left, top: suggestion.top }}
+          role="listbox"
+          aria-label={`${suggestion.trigger} 引用建议`}
+        >
+          <div className="flex items-center justify-between border-b border-border/50 bg-primary/10 px-2.5 py-1.5 text-[11px] font-medium text-primary">
+            <span>{suggestion.trigger} {suggestion.type === 'all' ? 'Proma 引用' : suggestion.type}</span>
+            <span className="font-normal text-muted-foreground">Esc 关闭 · Enter 选中</span>
+          </div>
+          <div className="max-h-[240px] overflow-y-auto">
+            {suggestionItems.length === 0 ? (
+              <div className="p-2 text-[11px] text-muted-foreground">没有匹配的引用</div>
+            ) : suggestionItems.map((choice, index) => (
+              <button
+                key={`${choice.reference.type}:${choice.reference.id}`}
+                type="button"
+                role="option"
+                aria-selected={index === suggestionIndex}
+                className={`flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-accent ${index === suggestionIndex ? 'bg-accent text-accent-foreground' : ''}`}
+                onMouseDown={(event) => {
+                  event.preventDefault()
+                  selectSuggestion(choice)
+                }}
+              >
+                <span className="w-4 shrink-0 text-center text-muted-foreground">{choice.reference.type === 'skill' ? '/' : choice.reference.type === 'mcp' ? '#' : choice.reference.type === 'session' ? '&' : '~'}</span>
+                <span className="min-w-0 flex-1 truncate font-medium">{choice.reference.label}</span>
+                <span className="max-w-[110px] truncate text-[10px] text-muted-foreground">{choice.description}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
 })

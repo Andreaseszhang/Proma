@@ -2551,6 +2551,10 @@
 .vault-ink-mde hr {
   display: none !important;
 }
+.vault-ink-mde .cm-line {
+  border-top: 0 !important;
+  border-bottom: 0 !important;
+}
 .vault-ink-mde .vault-wiki-bracket-hidden {
   display: none !important;
 }
@@ -2571,8 +2575,7 @@
   color: hsl(var(--muted-foreground));
   cursor: default;
   font-weight: 600;
-  text-decoration-style: dashed;
-  text-decoration-color: hsl(var(--muted-foreground) / 0.65);
+  text-decoration: none;
 }
 .vault-ink-mde .vault-markdown-table,
 .vault-ink-mde .vault-properties,

@@ -1,7 +1,7 @@
 import type { VaultFileEntry } from '@proma/shared'
 
 export type VaultReferenceType = 'skill' | 'mcp' | 'session' | 'todo' | 'calendar_event'
-export type VaultReferenceTrigger = '/' | '#' | '&' | '~' | '～' | '@'
+export type VaultReferenceTrigger = '/' | '#' | '&' | '~' | '～' | '@' | '*'
 
 export interface VaultReference {
   type: VaultReferenceType

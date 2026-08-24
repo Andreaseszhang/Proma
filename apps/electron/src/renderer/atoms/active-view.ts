@@ -18,3 +18,5 @@ export const activeViewAtom = atom<ActiveView>('conversations')
 
 /** Agent 技能视图当前子页，用于外部入口直达 MCP 管理 */
 export const agentSkillsTabAtom = atom<AgentSkillsCapabilityTab>('skills')
+/** 外部入口要求技能中心打开指定 Skill 详情。 */
+export const pendingAgentSkillSlugAtom = atom<string | null>(null)

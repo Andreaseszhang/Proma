@@ -179,8 +179,24 @@ class VaultTableWidget extends WidgetType {
   }
 }
 
+interface VaultPropertyEntry {
+  key: string
+  value: string
+}
+
+function isVaultDateValue(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}(?:[T ][\d:.+-]+)?$/.test(value)
+}
+
+function parseVaultListValue(value: string): string[] | null {
+  if (!value.startsWith('[') || !value.endsWith(']')) return null
+  const content = value.slice(1, -1).trim()
+  if (!content) return []
+  return content.split(',').map((item) => item.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean)
+}
+
 class VaultPropertiesWidget extends WidgetType {
-  constructor(private readonly entries: Array<{ key: string; value: string }>, private readonly from: number) {
+  constructor(private readonly entries: VaultPropertyEntry[], private readonly from: number) {
     super()
   }
 
@@ -189,20 +205,48 @@ class VaultPropertiesWidget extends WidgetType {
   }
 
   override toDOM(): HTMLElement {
-    const wrapper = document.createElement('div')
+    const wrapper = document.createElement('section')
     wrapper.className = 'vault-properties'
     wrapper.dataset.vaultBlockFrom = String(this.from)
-    const heading = document.createElement('div')
+    wrapper.setAttribute('aria-label', 'Properties')
+
+    const heading = document.createElement('h2')
     heading.className = 'vault-properties-heading'
     heading.textContent = 'Properties'
     wrapper.appendChild(heading)
-    const list = document.createElement('dl')
+
+    const list = document.createElement('div')
+    list.className = 'vault-properties-list'
     for (const entry of this.entries) {
-      const key = document.createElement('dt')
+      const dateValue = isVaultDateValue(entry.value)
+      const listValue = parseVaultListValue(entry.value)
+      const row = document.createElement('div')
+      row.className = 'vault-property-row'
+
+      const icon = document.createElement('span')
+      icon.className = `vault-property-icon ${dateValue ? 'vault-property-icon-date' : 'vault-property-icon-text'}`
+      icon.setAttribute('aria-hidden', 'true')
+
+      const key = document.createElement('span')
+      key.className = 'vault-property-key'
       key.textContent = entry.key
-      const value = document.createElement('dd')
-      value.textContent = entry.value || '未设置'
-      list.append(key, value)
+
+      const value = document.createElement('span')
+      value.className = `vault-property-value${dateValue ? ' vault-property-value-date' : ''}`
+      if (listValue) {
+        value.classList.add('vault-property-value-list')
+        for (const item of listValue) {
+          const chip = document.createElement('span')
+          chip.className = 'vault-property-value-chip'
+          chip.textContent = item
+          value.appendChild(chip)
+        }
+      } else {
+        value.textContent = entry.value || '未设置'
+      }
+
+      row.append(icon, key, value)
+      list.appendChild(row)
     }
     wrapper.appendChild(list)
     return wrapper

@@ -2488,6 +2488,9 @@
   outline: 2px solid hsl(var(--ring));
   outline-offset: 2px;
 }
+.vault-ink-mde hr {
+  display: none !important;
+}
 .vault-ink-mde .vault-wiki-bracket-hidden {
   display: none !important;
 }

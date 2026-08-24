@@ -385,6 +385,7 @@ export function AgentSkillsView(): React.ReactElement {
               isBuiltin={(slug) => data.defaultSkillSlugs.has(slug)}
               onOpen={setSelectedSkillSlug}
               onToggle={data.toggleSkill}
+              onTogglePin={data.toggleSkillPin}
               onUpdate={data.updateSkill}
             />
           ) : tab === 'mcp' ? (
@@ -503,6 +504,7 @@ interface SkillsTabProps {
   isBuiltin: (slug: string) => boolean
   onOpen: (slug: string) => void
   onToggle: (slug: string, enabled: boolean) => void
+  onTogglePin: (slug: string, pinned: boolean) => void
   onUpdate: (slug: string) => void
 }
 
@@ -515,6 +517,7 @@ function SkillsTab({
   isBuiltin,
   onOpen,
   onToggle,
+  onTogglePin,
   onUpdate,
 }: SkillsTabProps): React.ReactElement {
   if (total === 0) {
@@ -532,10 +535,10 @@ function SkillsTab({
         </div>
       )}
       {customSkills.length > 0 && (
-        <SkillSection title="我的 Skills" skills={customSkills} isBuiltin={isBuiltin} updatingSkill={updatingSkill} onOpen={onOpen} onToggle={onToggle} onUpdate={onUpdate} />
+        <SkillSection title="我的 Skills" skills={customSkills} isBuiltin={isBuiltin} updatingSkill={updatingSkill} onOpen={onOpen} onToggle={onToggle} onTogglePin={onTogglePin} onUpdate={onUpdate} />
       )}
       {builtinSkills.length > 0 && (
-        <SkillSection title="PROMA 内置" skills={builtinSkills} isBuiltin={isBuiltin} updatingSkill={updatingSkill} onOpen={onOpen} onToggle={onToggle} onUpdate={onUpdate} />
+        <SkillSection title="PROMA 内置" skills={builtinSkills} isBuiltin={isBuiltin} updatingSkill={updatingSkill} onOpen={onOpen} onToggle={onToggle} onTogglePin={onTogglePin} onUpdate={onUpdate} />
       )}
     </div>
   )
@@ -548,10 +551,11 @@ interface SkillSectionProps {
   updatingSkill: string | null
   onOpen: (slug: string) => void
   onToggle: (slug: string, enabled: boolean) => void
+  onTogglePin: (slug: string, pinned: boolean) => void
   onUpdate: (slug: string) => void
 }
 
-function SkillSection({ title, skills, isBuiltin, updatingSkill, onOpen, onToggle, onUpdate }: SkillSectionProps): React.ReactElement {
+function SkillSection({ title, skills, isBuiltin, updatingSkill, onOpen, onToggle, onTogglePin, onUpdate }: SkillSectionProps): React.ReactElement {
   const [collapsedGroups, setCollapsedGroups] = React.useState<Set<string>>(new Set())
   const groups = React.useMemo(() => groupSkills(skills), [skills])
 
@@ -594,6 +598,7 @@ function SkillSection({ title, skills, isBuiltin, updatingSkill, onOpen, onToggl
                       updating={updatingSkill === skill.slug}
                       onOpen={() => onOpen(skill.slug)}
                       onToggle={(enabled) => onToggle(skill.slug, enabled)}
+                      onTogglePin={(pinned) => onTogglePin(skill.slug, pinned)}
                       onUpdate={() => onUpdate(skill.slug)}
                     />
                   ))}

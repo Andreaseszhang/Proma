@@ -11,6 +11,7 @@ import type { SuggestionOptions } from '@tiptap/suggestion'
 import { CalendarDays, ListTodo, MessageSquareText, Sparkles, Server } from 'lucide-react'
 import { MentionList } from './MentionList'
 import type { MentionListRef } from './MentionList'
+import { orderSkillsForMention } from './skill-mention-ordering'
 import { createDebouncedSuggestionLoader, createLatestSuggestionRequestGuard, createMentionPopup, positionPopup, isSuggestionTriggerPresent, shouldSuppressEscTrigger, shouldClearEscSuppressionOnExit, type EscSuppressedTrigger } from './mention-popup-utils'
 import type { AgentSessionReferenceSearchResult } from '@proma/shared'
 import { shouldAllowMentionTrigger, shouldShowMentionSuggestion } from '@/components/ai-elements/mention-utils'
@@ -212,6 +213,7 @@ export interface SkillMentionItem {
   id: string
   name: string
   description?: string
+  pinned?: boolean
 }
 
 export function createSkillMentionSuggestion(
@@ -226,15 +228,15 @@ export function createSkillMentionSuggestion(
       emptyText: '无匹配 Skill',
       fetchItems: async (slug, q) => {
         const caps = await window.electronAPI.getWorkspaceCapabilities(slug)
-        return caps.skills
+        return orderSkillsForMention(caps.skills
           .filter((s) => s.enabled)
           .filter((s) => !q || s.name.toLowerCase().includes(q) || (s.slug ?? '').toLowerCase().includes(q))
-          .map((s) => ({ id: s.slug, name: s.name, description: s.description }))
+        ).map((s) => ({ id: s.slug, name: s.name, description: s.description, pinned: s.pinned }))
       },
       keyExtractor: (item) => item.id,
       renderItem: (item) => (
         <>
-          <Sparkles className="size-3.5 text-violet-500 flex-shrink-0" />
+          <Sparkles className={`size-3.5 flex-shrink-0 ${item.pinned ? 'text-yellow-500' : 'text-violet-500'}`} />
           <span className="truncate font-medium flex-1 min-w-0">{item.name}</span>
           {item.description && (
             <span className="truncate text-[10px] text-muted-foreground/50 max-w-[120px]">{item.description}</span>

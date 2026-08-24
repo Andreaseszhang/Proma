@@ -5,7 +5,7 @@
  */
 
 import * as React from 'react'
-import { Sparkles, RefreshCw, ShieldCheck, ArrowDownToLine } from 'lucide-react'
+import { Sparkles, RefreshCw, ShieldCheck, ArrowDownToLine, Pin } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
@@ -17,10 +17,11 @@ interface SkillCardProps {
   updating: boolean
   onOpen: () => void
   onToggle: (enabled: boolean) => void
+  onTogglePin: (pinned: boolean) => void
   onUpdate: () => void
 }
 
-export function SkillCard({ skill, isBuiltin, updating, onOpen, onToggle, onUpdate }: SkillCardProps): React.ReactElement {
+export function SkillCard({ skill, isBuiltin, updating, onOpen, onToggle, onTogglePin, onUpdate }: SkillCardProps): React.ReactElement {
   return (
     <div
       role="button"
@@ -53,12 +54,31 @@ export function SkillCard({ skill, isBuiltin, updating, onOpen, onToggle, onUpda
           </div>
           <div className="mt-0.5 truncate text-xs text-muted-foreground">{skill.slug}</div>
         </div>
-        <Switch
-          checked={skill.enabled}
-          onCheckedChange={onToggle}
-          onClick={(e) => e.stopPropagation()}
-          className="shrink-0"
-        />
+        <div className="flex shrink-0 items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label={skill.pinned ? '取消置顶 Skill' : '置顶 Skill'}
+                onClick={(e) => { e.stopPropagation(); onTogglePin(!skill.pinned) }}
+                className={cn(
+                  'flex size-7 items-center justify-center rounded-md text-muted-foreground transition-[opacity,colors] hover:bg-muted hover:text-foreground',
+                  skill.pinned
+                    ? 'bg-primary/10 text-primary hover:bg-primary/15 hover:text-primary'
+                    : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100',
+                )}
+              >
+                <Pin size={14} fill={skill.pinned ? 'currentColor' : 'none'} />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="top">{skill.pinned ? '取消置顶' : '置顶到 / 菜单顶部'}</TooltipContent>
+          </Tooltip>
+          <Switch
+            checked={skill.enabled}
+            onCheckedChange={onToggle}
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
       </div>
 
       <p className="line-clamp-2 min-h-[40px] text-[13px] leading-6 text-muted-foreground">

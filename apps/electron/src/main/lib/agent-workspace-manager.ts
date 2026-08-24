@@ -695,7 +695,7 @@ export function saveWorkspaceMcpConfig(workspaceSlug: string, config: WorkspaceM
 
 /** 扫描工作区活跃 Skills，仅返回 skills/ 下的 Skill */
 export function getWorkspaceSkills(workspaceSlug: string): SkillMeta[] {
-  return scanSkillsInDir(getWorkspaceSkillsDir(workspaceSlug), true)
+  return applySkillPins(scanSkillsInDir(getWorkspaceSkillsDir(workspaceSlug), true), workspaceSlug)
 }
 
 /** 解析 SKILL.md 的 YAML frontmatter，支持单行值、block scalar（`|` / `>`）和多行缩进 */
@@ -781,6 +781,13 @@ export function deleteWorkspaceSkill(workspaceSlug: string, skillSlug: string): 
   }
 
   rmSyncWithRetry(skillPath, { recursive: true, force: true })
+  const config = readWorkspaceConfig(workspaceSlug)
+  if (config.pinnedSkillSlugs?.includes(skillSlug)) {
+    writeWorkspaceConfig(workspaceSlug, {
+      ...config,
+      pinnedSkillSlugs: config.pinnedSkillSlugs.filter((slug) => slug !== skillSlug),
+    })
+  }
   console.log(`[Agent 工作区] 已删除 Skill: ${workspaceSlug}/${skillSlug}`)
 }
 
@@ -853,7 +860,28 @@ export function getDefaultSkillSlugs(): string[] {
 export function getAllWorkspaceSkills(workspaceSlug: string): SkillMeta[] {
   const activeSkills = scanSkillsInDir(getWorkspaceSkillsDir(workspaceSlug), true)
   const inactiveSkills = scanSkillsInDir(getInactiveSkillsDir(workspaceSlug), false)
-  return [...activeSkills, ...inactiveSkills]
+  return applySkillPins([...activeSkills, ...inactiveSkills], workspaceSlug)
+}
+
+/** Sets the per-workspace priority used by the chat input's `/` Skill menu. */
+export function setWorkspaceSkillPinned(workspaceSlug: string, skillSlug: string, pinned: boolean): void {
+  if (!getAllWorkspaceSkills(workspaceSlug).some((skill) => skill.slug === skillSlug)) {
+    throw new Error(`Skill 不存在: ${skillSlug}`)
+  }
+
+  const config = readWorkspaceConfig(workspaceSlug)
+  const current = config.pinnedSkillSlugs ?? []
+  const pinnedSkillSlugs = pinned
+    ? [...new Set([...current, skillSlug])]
+    : current.filter((slug) => slug !== skillSlug)
+
+  writeWorkspaceConfig(workspaceSlug, { ...config, pinnedSkillSlugs })
+  console.log(`[Agent 工作区] Skill ${pinned ? '置顶' : '取消置顶'}: ${workspaceSlug}/${skillSlug}`)
+}
+
+function applySkillPins(skills: SkillMeta[], workspaceSlug: string): SkillMeta[] {
+  const pinnedSkillSlugs = new Set(readWorkspaceConfig(workspaceSlug).pinnedSkillSlugs ?? [])
+  return skills.map((skill) => ({ ...skill, pinned: pinnedSkillSlugs.has(skill.slug) }))
 }
 
 /** 在 skills/ 和 skills-inactive/ 之间移动来切换启用/禁用 */
@@ -1819,6 +1847,8 @@ interface WorkspaceConfig {
   attachedDirectories?: string[]
   attachedFiles?: string[]
   worktreeRepos?: import('@proma/shared').WorkspaceWorktreeRepo[]
+  /** Skill slugs surfaced before other matching Skills in the chat `/` menu. */
+  pinnedSkillSlugs?: string[]
   /** User consent for Agent-initiated maintenance of the two AGENTS.md files. */
   projectKnowledgeMaintenanceApproved?: boolean
   /** Internal scheduling metadata only; Markdown remains the long-term memory source. */
@@ -1850,6 +1880,9 @@ function readWorkspaceConfig(workspaceSlug: string): WorkspaceConfig {
         : undefined,
       worktreeRepos: Array.isArray(data.worktreeRepos)
         ? data.worktreeRepos.filter((r) => r && typeof r.name === 'string' && typeof r.repoPath === 'string' && typeof r.worktreesPath === 'string')
+        : undefined,
+      pinnedSkillSlugs: Array.isArray(data.pinnedSkillSlugs)
+        ? [...new Set(data.pinnedSkillSlugs.filter((slug): slug is string => typeof slug === 'string'))]
         : undefined,
       projectKnowledgeMaintenanceApproved: data.projectKnowledgeMaintenanceApproved === true ? true : undefined,
       // Read the prior public setting only to preserve its cooldown timestamp; its

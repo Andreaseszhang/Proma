@@ -35,9 +35,17 @@ export function groupSkills(skills: SkillMeta[]): SkillGroup[] {
     .map(([title, groupSkills]) => ({
       id: title.toLowerCase(),
       title,
-      skills: groupSkills,
+      skills: orderPinnedSkills(groupSkills),
     }))
     .sort((a, b) => compareGroupTitle(a.title, b.title))
+}
+
+/** Keep categories in their existing order while surfacing pinned Skills within each category. */
+function orderPinnedSkills(skills: SkillMeta[]): SkillMeta[] {
+  return skills
+    .map((skill, index) => ({ skill, index }))
+    .sort((left, right) => Number(Boolean(right.skill.pinned)) - Number(Boolean(left.skill.pinned)) || left.index - right.index)
+    .map(({ skill }) => skill)
 }
 
 function compareGroupTitle(a: string, b: string): number {

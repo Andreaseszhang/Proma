@@ -301,6 +301,7 @@ import {
   getAllWorkspaceSkills,
   getOtherWorkspaceSkills,
   getDefaultSkillSlugs,
+  setWorkspaceSkillPinned,
   getWorkspaceCapabilities,
   getAgentWorkspace,
   getProjectFilesPath,
@@ -2621,6 +2622,13 @@ export function registerIpcHandlers(): void {
     AGENT_IPC_CHANNELS.TOGGLE_SKILL,
     async (_, workspaceSlug: string, skillSlug: string, enabled: boolean): Promise<void> => {
       return toggleWorkspaceSkill(workspaceSlug, skillSlug, enabled)
+    }
+  )
+
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.TOGGLE_SKILL_PIN,
+    async (_, workspaceSlug: string, skillSlug: string, pinned: boolean): Promise<void> => {
+      return setWorkspaceSkillPinned(workspaceSlug, skillSlug, pinned)
     }
   )
 

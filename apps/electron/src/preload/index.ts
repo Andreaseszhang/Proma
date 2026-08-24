@@ -652,6 +652,9 @@ export interface ElectronAPI {
   /** 切换工作区 Skill 启用/禁用 */
   toggleWorkspaceSkill: (workspaceSlug: string, skillSlug: string, enabled: boolean) => Promise<void>
 
+  /** 切换工作区 Skill 的置顶状态 */
+  setWorkspaceSkillPinned: (workspaceSlug: string, skillSlug: string, pinned: boolean) => Promise<void>
+
   /** 获取其他工作区的 Skill 列表 */
   getOtherWorkspaceSkills: (currentSlug: string) => Promise<OtherWorkspaceSkillsGroup[]>
 
@@ -1900,6 +1903,10 @@ const electronAPI: ElectronAPI = {
 
   toggleWorkspaceSkill: (workspaceSlug: string, skillSlug: string, enabled: boolean) => {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.TOGGLE_SKILL, workspaceSlug, skillSlug, enabled)
+  },
+
+  setWorkspaceSkillPinned: (workspaceSlug: string, skillSlug: string, pinned: boolean) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.TOGGLE_SKILL_PIN, workspaceSlug, skillSlug, pinned)
   },
 
   getOtherWorkspaceSkills: (currentSlug: string) => {

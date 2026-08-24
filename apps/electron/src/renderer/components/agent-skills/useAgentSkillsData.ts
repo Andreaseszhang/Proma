@@ -31,6 +31,7 @@ export interface AgentSkillsData {
   builtinMcpServers: BuiltinMcpServerSummary[]
   updatingSkill: string | null
   toggleSkill: (slug: string, enabled: boolean) => Promise<void>
+  toggleSkillPin: (slug: string, pinned: boolean) => Promise<void>
   deleteSkill: (slug: string, name: string) => Promise<boolean>
   updateSkill: (slug: string) => Promise<void>
   refreshMcpConfig: () => Promise<void>
@@ -102,6 +103,17 @@ export function useAgentSkillsData(): AgentSkillsData {
       toast.error('切换 Skill 状态失败')
     }
   }, [workspaceSlug])
+
+  const toggleSkillPin = React.useCallback(async (slug: string, pinned: boolean) => {
+    try {
+      await window.electronAPI.setWorkspaceSkillPinned(workspaceSlug, slug, pinned)
+      setSkills((prev) => prev.map((skill) => (skill.slug === slug ? { ...skill, pinned } : skill)))
+      bumpCapabilitiesVersion((v) => v + 1)
+    } catch (error) {
+      console.error('[Agent 技能] 切换 Skill 置顶状态失败:', error)
+      toast.error('切换 Skill 置顶状态失败')
+    }
+  }, [workspaceSlug, bumpCapabilitiesVersion])
 
   const deleteSkill = React.useCallback(async (slug: string, name: string): Promise<boolean> => {
     try {
@@ -203,6 +215,7 @@ export function useAgentSkillsData(): AgentSkillsData {
     builtinMcpServers,
     updatingSkill,
     toggleSkill,
+    toggleSkillPin,
     deleteSkill,
     updateSkill,
     refreshMcpConfig,

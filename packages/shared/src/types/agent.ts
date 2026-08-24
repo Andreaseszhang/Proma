@@ -1002,6 +1002,8 @@ export interface SkillMeta {
   icon?: string
   version?: string
   enabled: boolean
+  /** Whether this workspace prioritizes the Skill in the `/` command menu. */
+  pinned?: boolean
   /** 如果此 Skill 是从其他工作区导入的，则携带来源信息 */
   importSource?: SkillImportSource
   /** 是否有可用更新（源 Skill 版本 > importSource.sourceVersion） */
@@ -1739,6 +1741,8 @@ export const AGENT_IPC_CHANNELS = {
   DELETE_SKILL: 'agent:delete-skill',
   /** 切换工作区 Skill 启用/禁用 */
   TOGGLE_SKILL: 'agent:toggle-skill',
+  /** 切换工作区 Skill 的置顶状态 */
+  TOGGLE_SKILL_PIN: 'agent:toggle-skill-pin',
   /** 获取其他工作区的 Skill 列表 */
   GET_OTHER_WORKSPACE_SKILLS: 'agent:get-other-workspace-skills',
   /** 获取默认 Skills 的 slug 列表（来自 ~/.proma/default-skills/） */

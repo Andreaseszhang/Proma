@@ -6,6 +6,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactElement, ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import { useAtomValue, useSetAtom, useStore } from 'jotai'
 import type { AgentSessionMeta, ConversationMeta } from '@proma/shared'
 import { cn } from '@/lib/utils'
@@ -452,8 +453,8 @@ export function TabSwitcher(): ReactElement | null {
   const safeIndex = Math.min(selectedIndex, switcherModel.candidates.length - 1)
   let globalIndex = 0
 
-  return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center">
+  return createPortal(
+    <div data-app-modal-overlay="" className="fixed inset-0 z-[9999] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40" />
 
       <div className="relative bg-popover border border-border/50 rounded-xl shadow-2xl min-w-[420px] max-w-[540px] overflow-hidden">
@@ -510,7 +511,8 @@ export function TabSwitcher(): ReactElement | null {
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

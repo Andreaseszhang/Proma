@@ -266,6 +266,7 @@ function TabPreviewDropdown({
 
   return createPortal(
     <div
+      data-app-local-overlay=""
       className="fixed z-[9999] pt-1"
       style={{ top: pos.top, left: pos.left }}
       onMouseEnter={onMouseEnter}

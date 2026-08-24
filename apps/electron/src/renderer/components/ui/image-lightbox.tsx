@@ -130,6 +130,7 @@ export function ImageLightbox({
       <DialogPrimitive.Portal>
         {/* 遮罩层 — 与 DialogOverlay 完全一致 */}
         <DialogPrimitive.Overlay
+          data-app-modal-overlay=""
           className={cn(
             'fixed inset-0 z-[200] bg-black/40 titlebar-no-drag',
             'data-[state=open]:animate-in data-[state=closed]:animate-out',

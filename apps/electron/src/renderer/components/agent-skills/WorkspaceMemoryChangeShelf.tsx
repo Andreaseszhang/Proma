@@ -78,6 +78,7 @@ export function WorkspaceMemoryChangeShelf({ changes, memoryFiles, onOpen, onOpe
   const detail = hovered && anchorRect && typeof document !== 'undefined'
     ? createPortal(
         <div
+          data-app-local-overlay=""
           role="dialog"
           aria-label={change ? '记忆更新详情' : '工作区记忆文件'}
           onMouseEnter={keepOpen}

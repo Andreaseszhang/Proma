@@ -29,7 +29,7 @@ export function FaqDialog(): React.ReactElement {
   return (
     <DialogPrimitive.Root open={open} onOpenChange={(value) => setOpen(value)}>
       <DialogPrimitive.Portal>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-[80] bg-black/40 backdrop-blur-sm" />
+        <DialogPrimitive.Overlay data-app-modal-overlay="" className="fixed inset-0 z-[80] bg-black/40 backdrop-blur-sm" />
         <DialogPrimitive.Content
           className={cn(
             'fixed left-1/2 top-1/2 z-[81] flex h-[80vh] w-[min(860px,90vw)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-2xl dark:border-neutral-800 dark:bg-neutral-900',

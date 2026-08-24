@@ -468,6 +468,7 @@ export function SearchDialog(): React.ReactElement {
         <DialogPortal>
           <div
             aria-hidden
+            data-app-modal-overlay=""
             className="fixed inset-0 z-[99] bg-black/40 pointer-events-none animate-in fade-in-0 duration-150"
           />
         </DialogPortal>

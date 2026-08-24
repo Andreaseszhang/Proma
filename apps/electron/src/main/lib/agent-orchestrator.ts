@@ -77,6 +77,7 @@ import { generateCodexTitle } from './adapters/pi-codex-title-generator'
 import { createFallbackTitle, sanitizeGeneratedTitle, TITLE_PROMPT } from './title-generation'
 import { claimWorkspaceMemoryRefreshOpportunity } from './agent-memory-refresh-service'
 import { browserController } from './browser-controller'
+import { AgentPartialMessageStore } from './agent-partial-message'
 
 // ===== 类型定义 =====
 
@@ -913,6 +914,21 @@ export class AgentOrchestrator {
 
     // 5. 状态初始化
     const accumulatedMessages: SDKMessage[] = []
+    // Delta 只用于实时渲染，正常情况下由完整 assistant 消息收束。
+    // provider 卡住并被强制中止时可能永远没有 message_end，因此保留最后一份
+    // 可持久化快照，避免 utility runtime 超时后实时气泡被刷新流程清掉。
+    const partialAssistantMessages = new AgentPartialMessageStore({
+      sessionId,
+      createdAt: streamStartedAt,
+      modelId,
+      provider: channel.provider,
+    })
+    const persistPartialAssistantMessages = (durationMs?: number): void => {
+      const partials = partialAssistantMessages.drainDurable()
+      if (partials.length > 0) {
+        this.persistSDKMessages(sessionId, partials, durationMs)
+      }
+    }
     let pendingSkillActivations: SkillActivation[] = []
     const recordSkillActivation = (
       activations: SkillActivation[],
@@ -1545,6 +1561,7 @@ export class AgentOrchestrator {
         // adapter query exists yet to cancel. Never start that later query.
         if (this.activeSessions.get(sessionId) !== runGeneration) {
           const wasStoppedByUser = this.consumeStoppedByUser(sessionId, runGeneration)
+          persistPartialAssistantMessages(Date.now() - queryStartedAt)
           this.persistSDKMessages(sessionId, accumulatedMessages, Date.now() - queryStartedAt)
           try { updateAgentSessionMeta(sessionId, { stoppedByUser: wasStoppedByUser }) } catch { /* 会话可能已删除 */ }
           completeRun(getAgentSessionMessages(sessionId), { stoppedByUser: wasStoppedByUser, startedAt: streamStartedAt })
@@ -1607,6 +1624,7 @@ export class AgentOrchestrator {
             pendingNext = null
             let msg = iterResult.value
             if (isAssistantDeltaSDKMessage(msg)) {
+              partialAssistantMessages.applyDelta(msg.uuid, msg.delta)
               this.eventBus.emit(sessionId, {
                 kind: 'sdk_delta',
                 delta: {
@@ -1620,6 +1638,10 @@ export class AgentOrchestrator {
               continue
             }
             const isPartialMessage = isPartialSDKMessage(msg)
+            if (msg.type === 'assistant' && !isPartialMessage) {
+              const uuid = (msg as SDKAssistantMessage).uuid
+              if (uuid) partialAssistantMessages.markComplete(uuid)
+            }
             if (msg.type === 'result') {
               const skillActivations = mergeSkillActivations(
                 pendingSkillActivations,
@@ -1740,6 +1762,7 @@ export class AgentOrchestrator {
                   // Reuse the Pi UUID to replace the latest partial frame with normal markdown output.
                   this.eventBus.emit(sessionId, { kind: 'sdk_message', message: partialOutput })
                 }
+                persistPartialAssistantMessages(Date.now() - queryStartedAt)
                 this.persistSDKMessages(sessionId, accumulatedMessages, Date.now() - queryStartedAt)
                 accumulatedMessages.length = 0
                 if (typedError.code === 'prompt_too_long') {
@@ -1828,6 +1851,7 @@ export class AgentOrchestrator {
               capturedResultErrors = Array.isArray(rawResultErrors)
                 ? rawResultErrors.filter((e): e is string => typeof e === 'string' && e.trim().length > 0)
                 : undefined
+              persistPartialAssistantMessages(Date.now() - queryStartedAt)
               this.persistSDKMessages(sessionId, accumulatedMessages, Date.now() - queryStartedAt)
               accumulatedMessages.length = 0
               console.log(
@@ -1902,6 +1926,8 @@ export class AgentOrchestrator {
 
           const wasStoppedByUser = this.consumeStoppedByUser(sessionId, runGeneration)
 
+          // 完整 assistant 未到达时，用已收到的 Delta 快照保留中止前的输出。
+          persistPartialAssistantMessages(Date.now() - queryStartedAt)
           // 15. 持久化 assistant 消息
           this.persistSDKMessages(sessionId, accumulatedMessages, Date.now() - queryStartedAt)
 
@@ -1936,6 +1962,7 @@ export class AgentOrchestrator {
           // 本代际不再拥有 active slot，就只能收束自己，不能向新 run 泄漏终态。
           if (this.activeSessions.get(sessionId) !== runGeneration) {
             const wasStoppedByUser = this.consumeStoppedByUser(sessionId, runGeneration)
+            persistPartialAssistantMessages(Date.now() - queryStartedAt)
             this.persistSDKMessages(sessionId, accumulatedMessages, Date.now() - queryStartedAt)
             try { updateAgentSessionMeta(sessionId, { stoppedByUser: wasStoppedByUser }) } catch { /* 会话可能已删除 */ }
             completeRun(getAgentSessionMessages(sessionId), { stoppedByUser: wasStoppedByUser, startedAt: streamStartedAt })
@@ -1997,6 +2024,7 @@ export class AgentOrchestrator {
           console.error(`[Agent 编排] 执行失败:`, error)
 
           // 保存已累积的部分内容
+          persistPartialAssistantMessages(Date.now() - queryStartedAt)
           if (accumulatedMessages.length > 0) {
             try {
               this.persistSDKMessages(sessionId, accumulatedMessages, Date.now() - queryStartedAt)

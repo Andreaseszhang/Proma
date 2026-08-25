@@ -12,7 +12,7 @@ import { LeftSidebar } from './LeftSidebar'
 import { RightSidePanel } from './RightSidePanel'
 import { MainArea } from '@/components/tabs/MainArea'
 import { appModeAtom } from '@/atoms/app-mode'
-import { agentDiffPanelTabAtom, agentSessionsAtom, agentSidePanelLayoutAtomFamily, agentSidePanelLayoutMapAtom, currentAgentSessionIdAtom, currentSessionSidePanelOpenAtom, pruneAgentSidePanelLayouts } from '@/atoms/agent-atoms'
+import { agentDiffPanelTabAtom, agentSessionsAtom, agentSidePanelLayoutAtomFamily, agentSidePanelLayoutMapAtom, currentAgentSessionIdAtom, currentSessionSidePanelOpenAtom, isWorkspaceComponentTab, pruneAgentSidePanelLayouts } from '@/atoms/agent-atoms'
 import { leftSidebarWidthAtom } from '@/atoms/sidebar-atoms'
 import { sidebarCollapsedAtom } from '@/atoms/tab-atoms'
 import { automationFormAtom } from '@/atoms/automation-atoms'
@@ -25,18 +25,47 @@ import { WindowControls } from '@/components/WindowControls'
 import { SettingsPanel } from '@/components/settings/SettingsPanel'
 import { detectIsWindows, WINDOW_CONTROLS_INSET_RIGHT } from '@/lib/platform'
 import { cn } from '@/lib/utils'
+import { Toaster } from '@/components/ui/sonner'
 
 const MIN_RIGHT_PANEL_WIDTH = 360
+// 探索/委派 Agent 需要同时容纳消息正文、工具活动和输入区；略宽于普通文件栏，
+// 但显著小于浏览器/预览的半屏宽视图。
+const MIN_AGENT_SESSION_PANEL_WIDTH = 480
+// Todo、日程、能力和记忆都含列表与详情；与临时 Agent 一样需要可读的并排空间。
+const MIN_WORKSPACE_COMPONENT_PANEL_WIDTH = 480
 const RIGHT_PANEL_MAX_VIEWPORT_RATIO = 3 / 5
 const WIDE_RIGHT_PANEL_DEFAULT_VIEWPORT_RATIO = 1 / 2
+// 窄窗口时优先保留主会话的最小可读宽度；Agent 侧栏的 480px 仅在空间足够时强制。
+const MIN_MAIN_AREA_WIDTH = 320
+const COLLAPSED_LEFT_SIDEBAR_WIDTH = 60
+const CLASSIC_LEFT_SIDEBAR_LEADING_PADDING = 8
 
-function getRightPanelMaxWidth(viewportWidth: number): number {
-  return Math.max(MIN_RIGHT_PANEL_WIDTH, Math.floor(viewportWidth * RIGHT_PANEL_MAX_VIEWPORT_RATIO))
+function getRightPanelMinWidth(isAgentSessionTab: boolean, isWorkspaceComponent: boolean): number {
+  return isAgentSessionTab
+    ? MIN_AGENT_SESSION_PANEL_WIDTH
+    : isWorkspaceComponent
+      ? MIN_WORKSPACE_COMPONENT_PANEL_WIDTH
+      : MIN_RIGHT_PANEL_WIDTH
 }
 
-function clampRightPanelWidth(width: number, viewportWidth: number): number {
-  // 工作区可占整个应用的 3/5；避免窄窗口下最小宽度反而超过可用界面。
-  return Math.max(MIN_RIGHT_PANEL_WIDTH, Math.min(getRightPanelMaxWidth(viewportWidth), width))
+function getRightPanelMaxWidth(viewportWidth: number, leftSidebarOccupiedWidth: number): number {
+  // 宽视图不超过 3/5；更重要的是右栏不能侵占主工作区的最小可读宽度。
+  return Math.max(0, Math.min(
+    Math.floor(viewportWidth * RIGHT_PANEL_MAX_VIEWPORT_RATIO),
+    viewportWidth - leftSidebarOccupiedWidth - MIN_MAIN_AREA_WIDTH,
+  ))
+}
+
+function clampRightPanelWidth(
+  width: number,
+  viewportWidth: number,
+  minimumWidth = MIN_RIGHT_PANEL_WIDTH,
+  leftSidebarOccupiedWidth = 0,
+): number {
+  const maximumWidth = getRightPanelMaxWidth(viewportWidth, leftSidebarOccupiedWidth)
+  // 480px 是 Agent 会话的理想下限；在窄窗口中放宽它，而不是把中间会话挤到不可用。
+  const effectiveMinimumWidth = Math.min(minimumWidth, maximumWidth)
+  return Math.max(effectiveMinimumWidth, Math.min(maximumWidth, width))
 }
 
 const MIN_LEFT_SIDEBAR_WIDTH = 240
@@ -60,7 +89,7 @@ export function AppShell(): React.ReactElement {
   const isClassic = interfaceVariant === 'classic'
   // 定时任务表单打开时隐藏右侧文件面板，让中间区域扩展到全宽（表单内含自己的右栏配置）
   const activeView = useAtomValue(activeViewAtom)
-  const showRightPanel = appMode === 'agent' && !!currentSessionId && !automationForm.open && activeView !== 'planning' && activeView !== 'agent-skills'
+  const showRightPanel = appMode === 'agent' && !!currentSessionId && !(automationForm.open && activeView !== 'conversations') && activeView !== 'planning' && activeView !== 'agent-skills'
   const isWindows = React.useMemo(() => detectIsWindows(), [])
 
   // 左侧边栏可拖拽宽度
@@ -128,15 +157,29 @@ export function AppShell(): React.ReactElement {
   const rightPanelDragCleanup = React.useRef<(() => void) | null>(null)
   const [draggedRightPanelWidth, setDraggedRightPanelWidth] = React.useState<number | null>(null)
   currentSessionIdRef.current = currentSessionId
-  const clampedRightPanelWidth = clampRightPanelWidth(rightPanelLayout.width, viewportWidth)
+  const isAgentSessionRightTab = Boolean(
+    activeRightPanelTab?.startsWith('exploration:') || activeRightPanelTab?.startsWith('delegation:'),
+  )
+  const rightPanelMinimumWidth = getRightPanelMinWidth(isAgentSessionRightTab, Boolean(activeRightPanelTab && isWorkspaceComponentTab(activeRightPanelTab)))
+  const leftSidebarContentWidth = sidebarCollapsed ? COLLAPSED_LEFT_SIDEBAR_WIDTH : clampedLeftSidebarWidth
+  const leftSidebarOccupiedWidth = leftSidebarContentWidth + (isClassic ? CLASSIC_LEFT_SIDEBAR_LEADING_PADDING : 1)
+  const clampedRightPanelWidth = clampRightPanelWidth(
+    rightPanelLayout.width,
+    viewportWidth,
+    rightPanelMinimumWidth,
+    leftSidebarOccupiedWidth,
+  )
   const isWideRightWorkspace = Boolean(
     activeRightPanelTab?.startsWith('preview:') || activeRightPanelTab?.startsWith('browser:'),
   )
   // 首次打开预览/浏览器后，工作区维持宽视图；切回文件/改动不会自动收窄，交给用户拖拽决定。
   const effectiveWidePanelWidth = rightPanelLayout.widePanelWidthOverride === null
-    ? clampRightPanelWidth(Math.floor(viewportWidth * WIDE_RIGHT_PANEL_DEFAULT_VIEWPORT_RATIO), viewportWidth)
-    : clampRightPanelWidth(rightPanelLayout.widePanelWidthOverride, viewportWidth)
-  const persistedRightPanelWidth = rightPanelLayout.hasOpenedWideWorkspace ? effectiveWidePanelWidth : clampedRightPanelWidth
+    ? clampRightPanelWidth(Math.floor(viewportWidth * WIDE_RIGHT_PANEL_DEFAULT_VIEWPORT_RATIO), viewportWidth, MIN_RIGHT_PANEL_WIDTH, leftSidebarOccupiedWidth)
+    : clampRightPanelWidth(rightPanelLayout.widePanelWidthOverride, viewportWidth, MIN_RIGHT_PANEL_WIDTH, leftSidebarOccupiedWidth)
+  // 浏览器/预览打开过的会话可继续在文件页保留宽视图；探索和子 Agent
+  // 始终回到适中的 Agent 工作宽度，避免挤占主会话阅读区。
+  const usesWidePanelLayout = rightPanelLayout.hasOpenedWideWorkspace && !isAgentSessionRightTab
+  const persistedRightPanelWidth = usesWidePanelLayout ? effectiveWidePanelWidth : clampedRightPanelWidth
   const displayedRightPanelWidth = draggedRightPanelWidth ?? persistedRightPanelWidth
 
   React.useEffect(() => {
@@ -174,7 +217,7 @@ export function AppShell(): React.ReactElement {
     const dragSessionId = currentSessionId
     const startX = e.clientX
     const startWidth = displayedRightPanelWidth
-    const isWideWorkspace = rightPanelLayout.hasOpenedWideWorkspace
+    const isWideWorkspace = usesWidePanelLayout
     // 记录最新光标位置，rAF 回调读取它而非调度时捕获的旧事件，避免快拖时坐标滞后
     let latestClientX = startX
     let latestWidth = startWidth
@@ -183,7 +226,7 @@ export function AppShell(): React.ReactElement {
 
     const applyWidth = () => {
       const delta = startX - latestClientX
-      latestWidth = clampRightPanelWidth(startWidth + delta, viewportWidth)
+      latestWidth = clampRightPanelWidth(startWidth + delta, viewportWidth, rightPanelMinimumWidth, leftSidebarOccupiedWidth)
       setDraggedRightPanelWidth(latestWidth)
     }
 
@@ -226,7 +269,7 @@ export function AppShell(): React.ReactElement {
     rightPanelDragCleanup.current = cancelDrag
     document.addEventListener('mousemove', onMouseMove)
     document.addEventListener('mouseup', onMouseUp)
-  }, [currentSessionId, displayedRightPanelWidth, rightPanelLayout.hasOpenedWideWorkspace, setRightPanelLayout, viewportWidth])
+  }, [currentSessionId, displayedRightPanelWidth, leftSidebarOccupiedWidth, rightPanelMinimumWidth, setRightPanelLayout, usesWidePanelLayout, viewportWidth])
 
   return (
     <>
@@ -267,6 +310,8 @@ export function AppShell(): React.ReactElement {
             <div className={cn('flex-1 min-w-0 relative z-[60]', isClassic && 'p-2')}>
               {/* 主内容区域（TabBar + TabContent） */}
               <MainArea />
+              {/* 全局 Toast 固定在 Agent 历史主区右上角，不进入右侧原生浏览器面板。 */}
+              <Toaster position="top-right" offset={{ top: 58, right: 12 }} className="agent-history-toaster" />
             </div>
 
             {/* 右侧边栏：Agent 文件面板 */}

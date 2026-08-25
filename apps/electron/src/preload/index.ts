@@ -38,6 +38,7 @@ import type {
   RecentMessagesResult,
   MessageSearchResult,
   AgentSessionMeta,
+  AgentActiveSessionSnapshot,
   SetAgentSessionActiveWorktreeInput,
   SDKMessage,
   AgentSendInput,
@@ -132,7 +133,6 @@ import type {
   CreateTodoInput,
   StartTodoAgentInput,
   StartTodoAgentResult,
-  TodoAgentSessionActivation,
   UpdateTodoInput,
   CreateCalendarEventInput,
   UpdateCalendarEventInput,
@@ -520,6 +520,9 @@ export interface ElectronAPI {
   /** 创建 Agent 会话 */
   createAgentSession: (title?: string, channelId?: string, workspaceId?: string, modelId?: string) => Promise<AgentSessionMeta>
 
+  /** 获取当前主进程仍在执行的 Agent 会话，供 renderer 重载后恢复运行态 */
+  listActiveAgentSessionSnapshots: () => Promise<AgentActiveSessionSnapshot[]>
+
   /** 获取 Agent 会话 SDKMessage（Phase 4 新格式） */
   getAgentSessionSDKMessages: (id: string) => Promise<SDKMessage[]>
 
@@ -882,7 +885,7 @@ export interface ElectronAPI {
   showItemInFolder: (filePath: string, candidateBasePaths?: string[]) => Promise<boolean>
 
   /** 解析文件路径并读取内容（供内联预览使用） */
-  resolveAndReadFile: (filePath: string, access?: import('@proma/shared').FileAccessOptions) => Promise<{ resolvedPath: string; content: string; isBinary: boolean; isTooLarge: boolean } | null>
+  resolveAndReadFile: (filePath: string, access?: import('@proma/shared').FileAccessOptions) => Promise<import('@proma/shared').FilePreviewReadResult | null>
 
   /** 写入文本文件（供 Markdown 内联编辑使用） */
   writeTextFile: (filePath: string, content: string, access?: import('@proma/shared').FileAccessOptions) => Promise<boolean>
@@ -1211,14 +1214,10 @@ export interface ElectronAPI {
   onAutomationChanged: (callback: () => void) => () => void
 
   // ===== 任务 / 日程（Planning）=====
-  /** 打开或聚焦单例独立任务/日程窗口。 */
-  openPlanningWindow: () => Promise<void>
   listTodos: (query?: TodoListQuery) => Promise<Todo[]>
   createTodo: (input: CreateTodoInput) => Promise<Todo>
   /** 在主进程原子地关联项目并创建 Todo 的 Agent 会话。 */
   startTodoAgent: (input: StartTodoAgentInput) => Promise<StartTodoAgentResult>
-  /** 独立规划窗口启动 Todo 时由主窗口接收并打开对应 Agent 会话。 */
-  onTodoAgentSessionReady: (callback: (activation: TodoAgentSessionActivation) => void) => () => void
   updateTodo: (input: UpdateTodoInput) => Promise<Todo | undefined>
   deleteTodo: (id: string) => Promise<boolean>
   listCalendarEvents: (query?: CalendarEventListQuery) => Promise<CalendarEvent[]>
@@ -1722,6 +1721,10 @@ const electronAPI: ElectronAPI = {
 
   createAgentSession: (title?: string, channelId?: string, workspaceId?: string, modelId?: string) => {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.CREATE_SESSION, title, channelId, workspaceId, modelId)
+  },
+
+  listActiveAgentSessionSnapshots: () => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.ACTIVE_SESSIONS_SNAPSHOT)
   },
 
   getAgentSessionSDKMessages: (id: string) => {
@@ -2266,7 +2269,7 @@ const electronAPI: ElectronAPI = {
   },
 
   resolveAndReadFile: (filePath: string, access?: import('@proma/shared').FileAccessOptions) => {
-    return ipcRenderer.invoke('file:resolve-and-read', filePath, access) as Promise<{ resolvedPath: string; content: string; isBinary: boolean; isTooLarge: boolean } | null>
+    return ipcRenderer.invoke('file:resolve-and-read', filePath, access) as Promise<import('@proma/shared').FilePreviewReadResult | null>
   },
 
   writeTextFile: (filePath: string, content: string, access?: import('@proma/shared').FileAccessOptions) => {
@@ -2795,15 +2798,9 @@ const electronAPI: ElectronAPI = {
   },
 
   // ===== 任务 / 日程（Planning）=====
-  openPlanningWindow: () => ipcRenderer.invoke(PLANNING_IPC_CHANNELS.OPEN_WINDOW),
   listTodos: (query?: TodoListQuery) => ipcRenderer.invoke(PLANNING_IPC_CHANNELS.LIST_TODOS, query),
   createTodo: (input: CreateTodoInput) => ipcRenderer.invoke(PLANNING_IPC_CHANNELS.CREATE_TODO, input),
   startTodoAgent: (input: StartTodoAgentInput) => ipcRenderer.invoke(PLANNING_IPC_CHANNELS.START_TODO_AGENT, input),
-  onTodoAgentSessionReady: (callback: (activation: TodoAgentSessionActivation) => void) => {
-    const listener = (_: Electron.IpcRendererEvent, activation: TodoAgentSessionActivation): void => callback(activation)
-    ipcRenderer.on(PLANNING_IPC_CHANNELS.TODO_AGENT_SESSION_READY, listener)
-    return () => { ipcRenderer.removeListener(PLANNING_IPC_CHANNELS.TODO_AGENT_SESSION_READY, listener) }
-  },
   updateTodo: (input: UpdateTodoInput) => ipcRenderer.invoke(PLANNING_IPC_CHANNELS.UPDATE_TODO, input),
   deleteTodo: (id: string) => ipcRenderer.invoke(PLANNING_IPC_CHANNELS.DELETE_TODO, id),
   listCalendarEvents: (query?: CalendarEventListQuery) => ipcRenderer.invoke(PLANNING_IPC_CHANNELS.LIST_CALENDAR_EVENTS, query),

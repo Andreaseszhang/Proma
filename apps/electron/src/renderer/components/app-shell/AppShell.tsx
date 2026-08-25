@@ -82,7 +82,7 @@ export function AppShell(): React.ReactElement {
   const setSettingsOpen = useSetAtom(settingsOpenAtom)
   // 定时任务表单打开时隐藏右侧文件面板，让中间区域扩展到全宽（表单内含自己的右栏配置）
   const activeView = useAtomValue(activeViewAtom)
-  const showRightPanel = appMode === 'agent' && !!currentSessionId && !(automationForm.open && activeView !== 'conversations') && activeView !== 'planning' && activeView !== 'agent-skills' && activeView !== 'vault'
+  const showRightPanel = appMode === 'agent' && !!currentSessionId && !(automationForm.open && activeView !== 'conversations') && activeView !== 'planning' && activeView !== 'agent-skills'
   const isWindows = React.useMemo(() => detectIsWindows(), [])
 
   // 左侧边栏可拖拽宽度

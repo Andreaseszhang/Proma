@@ -363,7 +363,7 @@ function VaultMarkdownPane({
   )
 }
 
-export function VaultView(): React.ReactElement {
+export function VaultView({ embedded = false }: { embedded?: boolean }): React.ReactElement {
   const workspaces = useAtomValue(agentWorkspacesAtom)
   const sessions = useAtomValue(agentSessionsAtom)
   const currentWorkspaceId = useAtomValue(currentAgentWorkspaceIdAtom)
@@ -706,11 +706,11 @@ export function VaultView(): React.ReactElement {
 
   return (
     <>
-      <main className="flex h-full min-h-0 flex-col bg-muted/25">
-        <div className="relative z-10 h-[100px] shrink-0 border-b border-border/60 bg-muted/25" />
+      <main className={cn('flex h-full min-h-0 flex-col bg-muted/25', embedded && 'bg-content-area')}>
+        {!embedded && <div className="relative z-10 h-[100px] shrink-0 border-b border-border/60 bg-muted/25" />}
         <div className="flex min-h-0 flex-1">
-          <aside className="flex w-[280px] shrink-0 flex-col bg-muted/25 shadow-[1px_0_0_hsl(var(--border)/0.45)]">
-        <header className="flex h-14 items-center gap-2 px-3 titlebar-drag-region">
+          <aside className={cn('flex shrink-0 flex-col bg-muted/25 shadow-[1px_0_0_hsl(var(--border)/0.45)]', embedded ? 'w-[200px]' : 'w-[280px]')}>
+        <header className={cn('flex h-14 items-center gap-2 px-3', embedded ? 'titlebar-no-drag' : 'titlebar-drag-region')}>
           <BookOpen size={17} className="shrink-0 text-primary" />
           <div className="min-w-0 flex-1">
             <p className="truncate text-[13px] font-medium text-foreground">{config.displayName}</p>

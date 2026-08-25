@@ -6,7 +6,7 @@
 
 import * as React from 'react'
 import { useAtomValue, useSetAtom } from 'jotai'
-import { Blocks, Brain, CalendarDays, Clock, Columns2, FolderOpen, Globe, ListTodo, MessageCircle, PanelRight, Plus, Repeat2, ServerCog, SquareTerminal, X } from 'lucide-react'
+import { Blocks, Brain, BookOpen, CalendarDays, Clock, Columns2, FolderOpen, Globe, ListTodo, MessageCircle, PanelRight, Plus, Repeat2, ServerCog, SquareTerminal, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getScrollLeftToRevealTab } from '@/lib/tab-visibility'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
@@ -52,6 +52,7 @@ interface DiffPanelTabBarProps {
   onOpenFile: () => void
   onOpenTerminal?: () => void
   onOpenWorkspaceComponent?: (component: WorkspaceComponentTab) => void
+  onOpenVault?: () => void
   onOpenChat?: () => void
   /** 仅当前右侧 Tab 需要的紧凑动作，渲染于标签列表之后，不影响内容区布局。 */
   activeTabAction?: React.ReactNode
@@ -74,6 +75,7 @@ export function DiffPanelTabBar({
   onOpenFile,
   onOpenTerminal,
   onOpenWorkspaceComponent,
+  onOpenVault,
   onOpenChat,
   activeTabAction,
   visibleTabs,
@@ -394,6 +396,12 @@ export function DiffPanelTabBar({
                   打开项目记忆
                 </DropdownMenuItem>
               </>
+            )}
+            {onOpenVault && (
+              <DropdownMenuItem onSelect={onOpenVault}>
+                <BookOpen className="size-3.5" />
+                打开 Vault
+              </DropdownMenuItem>
             )}
             {onOpenChat && (
               <>

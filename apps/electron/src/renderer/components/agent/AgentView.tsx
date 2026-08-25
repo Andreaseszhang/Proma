@@ -69,7 +69,6 @@ import {
 } from '@/lib/stop-generation-target'
 import { previewFileMapAtom, previewPanelOpenMapAtom, quotedSelectionMapAtom, currentQuotedSelectionAtom } from '@/atoms/preview-atoms'
 import type { QuotedSelection } from '@/atoms/preview-atoms'
-import { activeViewAtom } from '@/atoms/active-view'
 import { pendingVaultQuoteAtom } from '@/atoms/vault-atoms'
 import {
   agentStreamingStatesAtom,
@@ -115,6 +114,7 @@ import {
   allPendingExitPlanRequestsAtom,
   agentDiffPanelTabAtom,
   agentSidePanelOpenAtomFamily,
+  currentSessionSidePanelOpenAtom,
   agentSideTemporaryAgentMapAtom,
   getExplorationSidePanelTab,
 } from '@/atoms/agent-atoms'
@@ -716,14 +716,16 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
   const historyQuoteNavigationRequestIdRef = React.useRef(0)
   const [historyQuoteNavigation, setHistoryQuoteNavigation] = React.useState<AgentHistoryQuoteNavigationRequest | null>(null)
   const setPendingVaultQuote = useSetAtom(pendingVaultQuoteAtom)
-  const setActiveView = useSetAtom(activeViewAtom)
+  const setSidePanelOpen = useSetAtom(currentSessionSidePanelOpenAtom)
+  const setVaultSidePanelTabMap = useSetAtom(agentDiffPanelTabAtom)
   const handleAddHistoryQuote = React.useCallback((quote: QuotedSelection): boolean => {
     return richTextInputRef.current?.insertAgentHistoryQuoteMention(quote) ?? false
   }, [])
   const handleQuoteHistoryToVault = React.useCallback((quote: QuotedSelection): void => {
     setPendingVaultQuote({ sessionId, quote })
-    setActiveView('vault')
-  }, [sessionId, setActiveView, setPendingVaultQuote])
+    setSidePanelOpen(true)
+    setVaultSidePanelTabMap((previous) => new Map(previous).set(sessionId, 'vault'))
+  }, [sessionId, setPendingVaultQuote, setSidePanelOpen, setVaultSidePanelTabMap])
   const handleAgentHistoryQuoteClick = React.useCallback((quote: QuotedSelection): void => {
     if (
       quote.sourceType !== 'agent-history'

@@ -7,7 +7,7 @@
 
 import * as React from 'react'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
-import { X, ExternalLink, ChevronRight, MoreHorizontal, FolderSearch, Pencil, FolderInput, GitBranch, GitMerge, MessageSquarePlus, FileDiff, FileText, FolderOpen, Globe, MessageCircle, Brain, Split, Blocks, CalendarDays, ListTodo, Clock, ServerCog, SquareTerminal } from 'lucide-react'
+import { X, ExternalLink, ChevronRight, MoreHorizontal, FolderSearch, Pencil, FolderInput, GitBranch, GitMerge, MessageSquarePlus, FileDiff, FileText, FolderOpen, Globe, MessageCircle, Brain, Split, Blocks, CalendarDays, ListTodo, Clock, ServerCog, SquareTerminal, BookOpen } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -25,6 +25,7 @@ import type { RightWorkspaceTabDragState, WorkspacePanelTab } from '@/components
 import { DiffChangesList } from '@/components/diff/DiffChangesList'
 import { ChatView } from '@/components/chat/ChatView'
 import { AgentView } from '@/components/agent/AgentView'
+import { VaultView } from '@/components/vault/VaultView'
 import {
   currentSessionSidePanelOpenAtom,
   agentFileSourceFilterMapAtom,
@@ -1194,6 +1195,7 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
   const workspaceTabs = React.useMemo<WorkspacePanelTab[]>(() => [
     { id: 'files', label: '文件', icon: <FolderOpen className="size-3.5" /> },
     { id: 'changes', label: '改动', icon: <FileDiff className="size-3.5" /> },
+    { id: 'vault', label: 'Vault', icon: <BookOpen className="size-3.5" /> },
     ...workspaceComponentTabs.map((component) => {
       const meta: Record<WorkspaceComponentTab, { label: string; icon: React.ReactNode }> = {
         todos: { label: 'Todo', icon: <ListTodo className="size-3.5" /> },
@@ -1546,6 +1548,8 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
       ) : (
         <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">等待项目初始化...</div>
       )
+    ) : paneTab === 'vault' ? (
+      <div className="min-h-0 flex-1 overflow-hidden"><VaultView embedded /></div>
     ) : paneTab === 'changes' ? (
       sessionPath ? (
         <DiffChangesList
@@ -1706,6 +1710,10 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
             onOpenWorkspaceComponent={(component) => {
               setWorkspaceComponentTabs((previous) => previous.includes(component) ? previous : [...previous, component])
               handleWorkspaceTabChange(component)
+            }}
+            onOpenVault={() => {
+              setIsOpen(true)
+              handleWorkspaceTabChange('vault')
             }}
             visibleTabs={split ? { left: split.leftTab, right: split.rightTab } : undefined}
             focusedPane={split?.focusedPane}

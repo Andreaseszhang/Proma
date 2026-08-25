@@ -2,7 +2,7 @@ import * as React from 'react'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import { toast } from 'sonner'
 import { AlertTriangle, Brain, ChevronDown, ChevronRight, Code2, Eye, FileText, FolderOpen, Loader2, RefreshCw, Save, Sparkles } from 'lucide-react'
-import type { SkillFileNode, WorkspaceMemorySummary } from '@proma/shared'
+import type { SkillFileNode, WorkspaceMemoryFileChange, WorkspaceMemorySummary } from '@proma/shared'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { SettingsCard } from '@/components/settings/primitives'
@@ -10,6 +10,8 @@ import { DefaultAppOpenButton } from '@/components/diff/DefaultAppOpenButton'
 import { AgentActionHint } from '@/components/agent/AgentActionHint'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { MessageResponse } from '@/components/ai-elements/message'
+import { LiveMarkdownDiffEditor } from '@/components/markdown/LiveMarkdownDiffEditor'
+import { LiveMarkdownEditor } from '@/components/markdown/LiveMarkdownEditor'
 import { agentPendingPromptAtom } from '@/atoms/agent-atoms'
 import { memoryFileNavigationAtom, workspaceMemoryChangesAtom } from '@/atoms/memory-change-atoms'
 import { useCreateSession } from '@/hooks/useCreateSession'
@@ -80,6 +82,7 @@ export function WorkspaceMemoryTab({ workspaceSlug, search, embedded = false }: 
   const [summary, setSummary] = React.useState<WorkspaceMemorySummary | null>(null)
   const [autoFiles, setAutoFiles] = React.useState<SkillFileNode[]>([])
   const [selected, setSelected] = React.useState<SelectedMemoryFile | null>(null)
+  const [reviewChange, setReviewChange] = React.useState<WorkspaceMemoryFileChange | null>(null)
   const [editText, setEditText] = React.useState('')
   const [loading, setLoading] = React.useState(true)
   const [loadingFile, setLoadingFile] = React.useState(false)
@@ -191,6 +194,7 @@ export function WorkspaceMemoryTab({ workspaceSlug, search, embedded = false }: 
         title: 'AGENTS.md',
         absolutePath: currentSummary.agentsMd.path,
       })
+      setReviewChange(null)
       setEditText(file.content ?? '')
       setIsDirty(false)
     } catch (err) {
@@ -201,7 +205,7 @@ export function WorkspaceMemoryTab({ workspaceSlug, search, embedded = false }: 
     }
   }, [summary, workspaceSlug, flushPendingSave])
 
-  const openAutoFile = React.useCallback(async (relativePath: string, knownSummary?: WorkspaceMemorySummary): Promise<void> => {
+  const openAutoFile = React.useCallback(async (relativePath: string, knownSummary?: WorkspaceMemorySummary, change?: WorkspaceMemoryFileChange): Promise<void> => {
     await flushPendingSave()
     setLoadingFile(true)
     try {
@@ -213,6 +217,7 @@ export function WorkspaceMemoryTab({ workspaceSlug, search, embedded = false }: 
         title: file.relativePath,
         absolutePath: autoMemoryPath(currentSummary, file.relativePath),
       })
+      setReviewChange(change ?? null)
       setEditText(file.content ?? '')
       setIsDirty(false)
     } catch (err) {
@@ -226,8 +231,8 @@ export function WorkspaceMemoryTab({ workspaceSlug, search, embedded = false }: 
   React.useEffect(() => {
     if (!memoryNavigationRequest || memoryNavigationRequest.workspaceSlug !== workspaceSlug) return
     void (async () => {
-      await openAutoFile(memoryNavigationRequest.relativePath)
-      setViewMode(memoryNavigationRequest.mode)
+      await openAutoFile(memoryNavigationRequest.relativePath, undefined, memoryNavigationRequest.change)
+      setViewMode(memoryNavigationRequest.change?.diff ? 'edit' : memoryNavigationRequest.mode)
       setMemoryNavigationRequest(null)
     })()
   }, [memoryNavigationRequest, openAutoFile, setMemoryNavigationRequest, workspaceSlug])
@@ -258,6 +263,7 @@ export function WorkspaceMemoryTab({ workspaceSlug, search, embedded = false }: 
   React.useEffect(() => {
     let cancelled = false
     setSelected(null)
+    setReviewChange(null)
     setEditText('')
     setIsDirty(false)
     setExpanded(new Set())
@@ -607,18 +613,33 @@ export function WorkspaceMemoryTab({ workspaceSlug, search, embedded = false }: 
             {loadingFile ? (
               <div className="flex flex-1 items-center justify-center text-sm text-muted-foreground">读取文件中...</div>
             ) : selected && viewMode === 'edit' ? (
-              <textarea
-                value={editText}
-                onChange={(event) => {
-                  setIsDirty(true)
-                  setEditText(event.target.value)
-                }}
-                spellCheck={false}
-                className="min-h-0 flex-1 resize-none bg-transparent p-4 font-mono text-[13px] leading-6 text-foreground outline-none placeholder:text-muted-foreground"
-                placeholder={selected.kind === 'agents'
-                  ? '# 项目指令\n\n写下未来 Agent 必须知道的项目规范、命令和决策。'
-                  : '# MEMORY\n\n写下稳定、可复用的自动记忆索引。'}
-              />
+              reviewChange?.relativePath === selected.relativePath && reviewChange.diff ? (
+                <LiveMarkdownDiffEditor
+                  beforeValue={reviewChange.diff.beforeContent}
+                  diffValue={reviewChange.diff.afterContent}
+                  value={editText}
+                  onChange={(nextText) => {
+                    setIsDirty(true)
+                    setEditText(nextText)
+                  }}
+                  onSave={() => void handleSave()}
+                  autoFocus
+                  className="flex-1"
+                />
+              ) : (
+                <LiveMarkdownEditor
+                  value={editText}
+                  onChange={(nextText) => {
+                    setIsDirty(true)
+                    setEditText(nextText)
+                  }}
+                  onSave={() => void handleSave()}
+                  className="flex-1"
+                  placeholder={selected.kind === 'agents'
+                    ? '# 项目指令\n\n写下未来 Agent 必须知道的项目规范、命令和决策。'
+                    : '# MEMORY\n\n写下稳定、可复用的自动记忆索引。'}
+                />
+              )
             ) : selected ? (
               <div className="min-h-0 flex-1 overflow-y-auto p-5">
                 {editText.trim() ? (

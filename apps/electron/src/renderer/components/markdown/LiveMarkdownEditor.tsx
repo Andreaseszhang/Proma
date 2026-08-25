@@ -33,6 +33,7 @@ export interface LiveMarkdownEditorProps {
   value: string
   onChange: (value: string) => void
   readOnly?: boolean
+  autoFocus?: boolean
   placeholder?: string
   className?: string
   onSave?: () => void
@@ -312,6 +313,7 @@ export const LiveMarkdownEditor = React.forwardRef<LiveMarkdownEditorHandle, Liv
   value,
   onChange,
   readOnly = false,
+  autoFocus = false,
   placeholder,
   className,
   onSave,
@@ -324,6 +326,7 @@ export const LiveMarkdownEditor = React.forwardRef<LiveMarkdownEditorHandle, Liv
   const onChangeRef = React.useRef(onChange)
   const onSaveRef = React.useRef(onSave)
   const readOnlyRef = React.useRef(readOnly)
+  const autoFocusRef = React.useRef(autoFocus)
   const renderMermaidRef = React.useRef(renderMermaid)
   const diffReviewRef = React.useRef(diffReview)
   valueRef.current = value
@@ -395,6 +398,7 @@ export const LiveMarkdownEditor = React.forwardRef<LiveMarkdownEditorHandle, Liv
       instanceRef.current = instance
       if (instance.getDoc() !== valueRef.current) instance.update(valueRef.current)
       ready = true
+      if (autoFocusRef.current && !readOnlyRef.current) instance.focus()
     })
 
     const onKeyDown = (event: KeyboardEvent): void => {

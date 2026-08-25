@@ -22,4 +22,6 @@ export const memoryFileNavigationAtom = atom<{
   workspaceSlug: string
   relativePath: string
   mode: 'preview' | 'edit'
+  /** The exact watcher event that opened this file, including its bounded Diff snapshots. */
+  change?: WorkspaceMemoryFileChange
 } | null>(null)

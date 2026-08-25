@@ -651,7 +651,7 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
     if (lastActivatedMemoryChangeRef.current === changeId) return
     lastActivatedMemoryChangeRef.current = changeId
     setWorkspaceComponentTabs((previous) => previous.includes('memory') ? previous : [...previous, 'memory'])
-    setMemoryNavigationRequest({ workspaceSlug: workspaceSlug!, relativePath: latestMemoryChange.relativePath, mode: 'preview' })
+    setMemoryNavigationRequest({ workspaceSlug: workspaceSlug!, relativePath: latestMemoryChange.relativePath, mode: 'edit', change: latestMemoryChange })
     setIsOpen(true)
     onTabChange('memory')
   }, [isAgentRunning, latestMemoryChange, onTabChange, setIsOpen, setMemoryNavigationRequest, setWorkspaceComponentTabs, workspaceSlug])

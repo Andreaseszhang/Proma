@@ -2438,3 +2438,101 @@
 .ProseMirror-focused .ProseMirror-gapcursor {
   display: block;
 }
+
+/* Reusable CodeMirror live Markdown preview. */
+.live-markdown-editor {
+  --ink-color: hsl(var(--foreground));
+  --ink-font-family: inherit;
+  --ink-editor-font-size: var(--md-preview-font-size, 15px);
+  --ink-editor-line-height: 1.625;
+  --ink-border-radius: 0;
+  --ink-block-background-color: transparent;
+  --ink-block-background-color-on-hover: transparent;
+  --ink-code-background-color: hsl(var(--muted) / 0.35);
+}
+.live-markdown-editor .ink-mde,
+.live-markdown-editor .ink-mde-editor,
+.live-markdown-editor .cm-editor,
+.live-markdown-editor .cm-scroller,
+.live-markdown-editor .cm-content {
+  background: transparent !important;
+}
+.live-markdown-editor .ink-mde {
+  height: 100%;
+  border: 0 !important;
+  color: hsl(var(--foreground));
+}
+.live-markdown-editor .ink-mde-editor {
+  padding: 0 !important;
+}
+.live-markdown-editor .cm-scroller {
+  font-family: inherit !important;
+}
+.live-markdown-editor .live-markdown-editor__syntax-hidden,
+.live-markdown-editor .live-markdown-editor__syntax-hidden * {
+  display: none !important;
+}
+.live-markdown-editor .cm-editor.cm-focused,
+.live-markdown-editor .cm-editor:focus-visible,
+.live-markdown-editor .cm-content:focus-visible {
+  outline: none !important;
+}
+.live-markdown-editor .cm-content,
+.live-markdown-editor .cm-content[contenteditable='true'] {
+  min-height: 100%;
+  padding: 0.75rem 1rem !important;
+  caret-color: hsl(var(--foreground)) !important;
+}
+.live-markdown-editor .cm-cursor {
+  border-left-color: hsl(var(--foreground)) !important;
+}
+.live-markdown-editor .cm-selectionBackground,
+.live-markdown-editor .cm-searchMatch,
+.live-markdown-editor .cm-searchMatch-selected {
+  background: transparent !important;
+}
+.live-markdown-editor hr {
+  display: block !important;
+  width: 100%;
+  margin: 1.35rem 0;
+  border: 0;
+  border-top: 1px solid hsl(var(--border) / 0.75);
+}
+.live-markdown-editor .cm-line {
+  border-top: 0 !important;
+  border-bottom: 0 !important;
+}
+.live-markdown-editor__table,
+.live-markdown-editor__mermaid,
+.live-markdown-editor__thematic-break {
+  display: block;
+  max-width: 100%;
+  margin: 0.9rem 0;
+}
+.live-markdown-editor__thematic-break {
+  width: 100%;
+  margin: 1.35rem 0;
+}
+.live-markdown-editor__thematic-break hr {
+  margin: 0;
+}
+.live-markdown-editor__table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.94em;
+}
+.live-markdown-editor__table th,
+.live-markdown-editor__table td {
+  padding: 0.5rem 0.7rem;
+  border-bottom: 1px solid hsl(var(--border) / 0.55);
+  text-align: left;
+  vertical-align: top;
+}
+.live-markdown-editor__table th {
+  background: hsl(var(--muted) / 0.45);
+  color: hsl(var(--foreground));
+  font-weight: 700;
+}
+.live-markdown-editor__table td {
+  color: hsl(var(--foreground) / 0.88);
+}

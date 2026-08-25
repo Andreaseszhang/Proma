@@ -2583,13 +2583,18 @@
 }
 .vault-ink-mde .vault-markdown-table,
 .vault-ink-mde .vault-properties,
-.vault-ink-mde .vault-mermaid-block {
+.vault-ink-mde .vault-mermaid-block,
+.vault-ink-mde .vault-horizontal-rule {
   display: block;
   margin: 0.9rem 0;
   max-width: 100%;
 }
-.vault-ink-mde .vault-markdown-table {
-  overflow-x: auto;
+.vault-ink-mde .vault-horizontal-rule {
+  width: 100%;
+  margin: 1.35rem 0;
+}
+.vault-ink-mde .vault-horizontal-rule hr {
+  margin: 0;
 }
 .vault-ink-mde .vault-markdown-table table {
   width: 100%;

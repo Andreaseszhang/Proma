@@ -196,6 +196,29 @@ function parseVaultListValue(value: string): string[] | null {
   return content.split(',').map((item) => item.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean)
 }
 
+class VaultHorizontalRuleWidget extends WidgetType {
+  constructor(private readonly from: number) {
+    super()
+  }
+
+  override eq(other: VaultHorizontalRuleWidget): boolean {
+    return this.from === other.from
+  }
+
+  override toDOM(): HTMLElement {
+    const wrapper = document.createElement('div')
+    wrapper.className = 'vault-horizontal-rule'
+    wrapper.dataset.vaultBlockFrom = String(this.from)
+    const rule = document.createElement('hr')
+    wrapper.appendChild(rule)
+    return wrapper
+  }
+
+  override ignoreEvent(): boolean {
+    return false
+  }
+}
+
 class VaultPropertiesWidget extends WidgetType {
   constructor(
     private readonly entries: VaultPropertyEntry[],
@@ -313,7 +336,7 @@ class VaultMermaidWidget extends WidgetType {
   }
 }
 
-export type VaultBlockKind = 'frontmatter' | 'table' | 'mermaid'
+export type VaultBlockKind = 'frontmatter' | 'table' | 'mermaid' | 'thematic_break'
 
 export interface VaultBlockMatch {
   kind: VaultBlockKind
@@ -396,6 +419,11 @@ export function detectVaultBlockKinds(markdown: string): VaultBlockMatch[] {
       continue
     }
 
+    if (/^ {0,3}([-*_])(?:\s*\1){2,}\s*$/.test(line)) {
+      matches.push({ kind: 'thematic_break', startLine: lineNumber, endLine: lineNumber })
+      continue
+    }
+
     if (!line.includes('|') || lineNumber >= lines.length || !isMarkdownTableSeparator(lines[lineNumber] ?? '')) continue
     const header = splitMarkdownTableRow(line)
     if (header.length < 2) continue
@@ -446,6 +474,15 @@ function buildVaultBlocks(state: EditorState, onChangeProperties: (entries: Vaul
         from,
         to,
         decoration: Decoration.replace({ widget: new VaultTableWidget(rows, from), block: true }),
+      }]
+    }
+
+    if (match.kind === 'thematic_break') {
+      return [{
+        kind: match.kind,
+        from,
+        to,
+        decoration: Decoration.replace({ widget: new VaultHorizontalRuleWidget(from), block: true }),
       }]
     }
 

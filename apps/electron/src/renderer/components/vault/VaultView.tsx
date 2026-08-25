@@ -366,6 +366,7 @@ export function VaultView(): React.ReactElement {
   )
   const [config, setConfig] = React.useState<VaultSummary | null>(null)
   const [candidates, setCandidates] = React.useState<VaultCandidate[]>([])
+  const [vaultDiscoveryComplete, setVaultDiscoveryComplete] = React.useState(false)
   const [files, setFiles] = React.useState<VaultFileEntry[]>([])
   const [loading, setLoading] = React.useState(true)
   const [fileLoading, setFileLoading] = React.useState(false)
@@ -427,9 +428,12 @@ export function VaultView(): React.ReactElement {
   }, [config, files, pendingQuote, selectedFile])
 
   React.useEffect(() => {
-    if (config) return
-    void window.electronAPI.discoverObsidianVaults().then(setCandidates).catch(() => setCandidates([]))
-  }, [config])
+    if (config || vaultDiscoveryComplete) return
+    void window.electronAPI.discoverObsidianVaults()
+      .then(setCandidates)
+      .catch(() => setCandidates([]))
+      .finally(() => setVaultDiscoveryComplete(true))
+  }, [config, vaultDiscoveryComplete])
 
   const openFile = React.useCallback(async (relativePath: string): Promise<void> => {
     const requestId = ++readRequestRef.current
@@ -479,12 +483,34 @@ export function VaultView(): React.ReactElement {
     void openFile(relativePath)
   }, [files, openFile])
 
-  const connectVault = async (): Promise<void> => {
+  const selectVaultManually = async (): Promise<void> => {
     const selected = await window.electronAPI.selectVault({ inboxPath: 'Proma Inbox', allowAgentWrites: false })
     if (!selected) return
     setConfig(selected)
+    setCandidates([])
+    setVaultDiscoveryComplete(true)
     setRefreshToken((value) => value + 1)
     toast.success(`已连接 ${selected.displayName}`)
+  }
+
+  const switchVault = async (): Promise<void> => {
+    setVaultDiscoveryComplete(false)
+    setCandidates([])
+    try {
+      const discovered = await window.electronAPI.discoverObsidianVaults()
+      setCandidates(discovered)
+      if (discovered.length > 0) {
+        setSelectedFile(null)
+        setReadResult(null)
+        setConfig(null)
+      } else {
+        await selectVaultManually()
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '无法扫描 Obsidian Vault')
+    } finally {
+      setVaultDiscoveryComplete(true)
+    }
   }
 
   const connectDiscoveredVault = async (candidate: VaultCandidate): Promise<void> => {
@@ -610,11 +636,9 @@ export function VaultView(): React.ReactElement {
           </div>
           <h1 className="mt-5 text-lg font-semibold text-foreground">连接你的 Vault</h1>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">Proma 只保存你授权的 Vault 路径。笔记正文始终保留在自己的 Markdown 文件中。</p>
-          <Button className="mt-6 gap-2" onClick={() => { void connectVault() }}>
-            <FolderOpen size={16} />
-            选择 Vault 文件夹
-          </Button>
-          {candidates.length > 0 && (
+          {!vaultDiscoveryComplete ? (
+            <div className="mt-6 flex justify-center text-muted-foreground"><Loader2 className="size-5 animate-spin" /></div>
+          ) : candidates.length > 0 ? (
             <div className="mt-7 text-left">
               <p className="mb-2 text-xs font-medium text-muted-foreground">检测到 Obsidian Vault</p>
               <div className="space-y-1">
@@ -631,6 +655,11 @@ export function VaultView(): React.ReactElement {
                 ))}
               </div>
             </div>
+          ) : (
+            <Button className="mt-6 gap-2" onClick={() => { void selectVaultManually() }}>
+              <FolderOpen size={16} />
+              选择 Vault 文件夹
+            </Button>
           )}
         </div>
       </main>
@@ -664,7 +693,7 @@ export function VaultView(): React.ReactElement {
           <div className="titlebar-no-drag flex shrink-0 items-center gap-1 border-t border-border/50 px-2 py-2">
             <button
               type="button"
-              onClick={() => { void connectVault() }}
+              onClick={() => { void switchVault() }}
               className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
               <FolderOpen size={14} className="shrink-0" />

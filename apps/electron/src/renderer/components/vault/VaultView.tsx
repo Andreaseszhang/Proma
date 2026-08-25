@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
-import { BookOpen, ChevronDown, ChevronRight, Folder, FolderOpen, Link2, Loader2, Plus, RefreshCw } from 'lucide-react'
+import { BookOpen, ChevronDown, ChevronRight, CircleHelp, Folder, FolderOpen, Loader2, Plus, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
 import type { VaultCandidate, VaultFileEntry, VaultReadResult, VaultSummary } from '@proma/shared'
 import { Button } from '@/components/ui/button'
@@ -177,6 +177,7 @@ function VaultMarkdownEditor({
   onRename,
   onOpenWikiLink,
   onActivateReference,
+  onOpenTutorial,
 }: {
   readResult: VaultReadResult
   files: VaultFileEntry[]
@@ -185,6 +186,7 @@ function VaultMarkdownEditor({
   onRename: (name: string) => Promise<void>
   onOpenWikiLink: (target: string) => void
   onActivateReference: (reference: VaultReferenceRange) => void
+  onOpenTutorial: () => void
 }): React.ReactElement {
   const [draft, setDraft] = React.useState(readResult.content)
   const [saving, setSaving] = React.useState(false)
@@ -260,14 +262,14 @@ function VaultMarkdownEditor({
             <TooltipTrigger asChild>
               <button
                 type="button"
-                aria-label="插入 Proma 引用"
-                onClick={() => setReferencePicker({})}
+                aria-label="Vault 使用帮助"
+                onClick={onOpenTutorial}
                 className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
-                <Link2 size={16} />
+                <CircleHelp size={16} />
               </button>
             </TooltipTrigger>
-            <TooltipContent>插入 Proma 引用</TooltipContent>
+            <TooltipContent>Vault 使用帮助</TooltipContent>
           </Tooltip>
         </div>
         <div className="min-h-0 flex-1">
@@ -308,6 +310,7 @@ function VaultMarkdownPane({
   onRename,
   onOpenWikiLink,
   onActivateReference,
+  onOpenTutorial,
 }: {
   readResult: VaultReadResult | null
   files: VaultFileEntry[]
@@ -317,6 +320,7 @@ function VaultMarkdownPane({
   onRename: (name: string) => Promise<void>
   onOpenWikiLink: (target: string) => void
   onActivateReference: (reference: VaultReferenceRange) => void
+  onOpenTutorial: () => void
 }): React.ReactElement {
   if (loading) {
     return (
@@ -339,6 +343,7 @@ function VaultMarkdownPane({
         onRename={onRename}
         onOpenWikiLink={onOpenWikiLink}
         onActivateReference={onActivateReference}
+        onOpenTutorial={onOpenTutorial}
       />
     </section>
   )
@@ -372,6 +377,7 @@ export function VaultView(): React.ReactElement {
   const [quoteTarget, setQuoteTarget] = React.useState('')
   const [quoteNewPath, setQuoteNewPath] = React.useState('')
   const [quoting, setQuoting] = React.useState(false)
+  const [vaultHelpOpen, setVaultHelpOpen] = React.useState(false)
   const selectedFileRef = React.useRef(selectedFile)
   const readRequestRef = React.useRef(0)
 
@@ -646,14 +652,6 @@ export function VaultView(): React.ReactElement {
           <div className="flex items-center gap-0.5 titlebar-no-drag">
             <Tooltip>
               <TooltipTrigger asChild>
-                <button type="button" aria-label="刷新 Vault" onClick={() => { void refresh() }} className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
-                  <RefreshCw size={14} />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>刷新 Vault</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
                 <button type="button" aria-label="新建笔记" onClick={() => { void createNote() }} className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
                   <Plus size={16} />
                 </button>
@@ -663,6 +661,24 @@ export function VaultView(): React.ReactElement {
           </div>
         </header>
           <VaultFileList files={files} selectedPath={selectedFile} onSelect={(path) => { void openFile(path) }} />
+          <div className="titlebar-no-drag flex shrink-0 items-center gap-1 border-t border-border/50 px-2 py-2">
+            <button
+              type="button"
+              onClick={() => { void connectVault() }}
+              className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <FolderOpen size={14} className="shrink-0" />
+              <span className="truncate">切换 Vault</span>
+            </button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button type="button" aria-label="刷新 Vault" onClick={() => { void refresh() }} className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
+                  <RefreshCw size={14} />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>刷新 Vault</TooltipContent>
+            </Tooltip>
+          </div>
           </aside>
           <VaultMarkdownPane
             readResult={readResult}
@@ -673,6 +689,7 @@ export function VaultView(): React.ReactElement {
             onRename={rename}
             onOpenWikiLink={openWikiLink}
             onActivateReference={activateReference}
+            onOpenTutorial={() => setVaultHelpOpen(true)}
           />
         </div>
       </main>
@@ -709,6 +726,31 @@ export function VaultView(): React.ReactElement {
               {quoting && <Loader2 className="mr-2 size-4 animate-spin" />}
               写入引用
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={vaultHelpOpen} onOpenChange={setVaultHelpOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>在 Proma 中使用 Obsidian Vault</DialogTitle>
+            <DialogDescription>Proma 直接读写你已授权 Vault 里的 Markdown 文件，笔记仍可在 Obsidian 中继续使用。</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 text-sm leading-6 text-muted-foreground">
+            <section>
+              <p className="font-medium text-foreground">编辑与保存</p>
+              <p>点击笔记开始编辑；按 Cmd/Ctrl + S 保存。左下角可以切换 Vault 或刷新文件列表。</p>
+            </section>
+            <section>
+              <p className="font-medium text-foreground">双向链接</p>
+              <p>输入 <code className="rounded bg-muted px-1 py-0.5 text-foreground">[[笔记名]]</code>，点击链接文字可在当前 Vault 中打开对应笔记。</p>
+            </section>
+            <section>
+              <p className="font-medium text-foreground">Proma 引用</p>
+              <p>在正文输入 <code className="rounded bg-muted px-1 py-0.5 text-foreground">/</code>、<code className="rounded bg-muted px-1 py-0.5 text-foreground">#</code>、<code className="rounded bg-muted px-1 py-0.5 text-foreground">&amp;</code>、<code className="rounded bg-muted px-1 py-0.5 text-foreground">~</code> 或 <code className="rounded bg-muted px-1 py-0.5 text-foreground">*</code>，会在光标旁显示对应建议；使用方向键和 Enter 选择。</p>
+            </section>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setVaultHelpOpen(false)}>知道了</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -578,6 +578,17 @@ interface VaultLiveMarkdownEditorProps {
   workspaceSlug: string | null
 }
 
+function getEditorCaretRect(host: HTMLElement): DOMRect | null {
+  const selection = window.getSelection()
+  if (selection?.rangeCount && selection.anchorNode && host.contains(selection.anchorNode)) {
+    const range = selection.getRangeAt(0).cloneRange()
+    range.collapse(true)
+    const rect = range.getBoundingClientRect()
+    if (rect.width || rect.height || (rect.left !== 0 && rect.top !== 0)) return rect
+  }
+  return host.querySelector<HTMLElement>('.cm-cursor')?.getBoundingClientRect() ?? null
+}
+
 export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorHandle, VaultLiveMarkdownEditorProps>(function VaultLiveMarkdownEditor({
   value,
   files,
@@ -635,7 +646,9 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
   React.useEffect(() => {
     if (!suggestion) return
     const updateAnchor = (): void => {
-      const cursor = hostRef.current?.querySelector<HTMLElement>('.cm-cursor')?.getBoundingClientRect()
+      const host = hostRef.current
+      if (!host) return
+      const cursor = getEditorCaretRect(host)
       if (!cursor) return
       const left = Math.min(Math.max(8, cursor.left), Math.max(8, window.innerWidth - 316))
       const top = Math.min(Math.max(8, cursor.bottom + 6), Math.max(8, window.innerHeight - 300))
@@ -790,7 +803,7 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
         event.preventDefault()
         const instance = instanceRef.current
         const from = instance?.selections()[0]?.end ?? 0
-        const cursor = host.querySelector<HTMLElement>('.cm-cursor')?.getBoundingClientRect()
+        const cursor = getEditorCaretRect(host)
         const trigger = event.key as VaultReferenceTrigger
         const type = trigger === '*' ? 'all' : vaultReferenceTypeForTrigger(trigger)
         if (!type) return

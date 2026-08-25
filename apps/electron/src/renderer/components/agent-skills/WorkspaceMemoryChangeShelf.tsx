@@ -45,6 +45,7 @@ export function WorkspaceMemoryChangeShelf({ workspaceSlug, sessionId, changes, 
   const [initialText, setInitialText] = React.useState('')
   const [editingState, setEditingState] = useAtom(workspaceMemoryEditingStateAtomFamily(sessionId))
   const openedAtRef = React.useRef(0)
+  const autoOpenedChangeIdRef = React.useRef<string | null>(null)
   const ignoreNextLocalChangeRef = React.useRef<string | null>(null)
   const lastHandledChangeIdRef = React.useRef<string | null>(null)
   const [loadingEditor, setLoadingEditor] = React.useState(false)
@@ -94,6 +95,16 @@ export function WorkspaceMemoryChangeShelf({ workspaceSlug, sessionId, changes, 
       setLoadingEditor(false)
     }
   }, [workspaceSlug])
+
+  // Agent 变更抵达时直接进入同一表面的可编辑 Diff，不再要求用户二次点击“编辑”。
+  React.useEffect(() => {
+    const latest = changes[0]
+    if (!latest || latest.kind === 'deleted') return
+    const changeId = `${latest.relativePath}:${latest.changedAt}`
+    if (autoOpenedChangeIdRef.current === changeId) return
+    autoOpenedChangeIdRef.current = changeId
+    if (!editingPath) void startEditing(latest.relativePath, latest)
+  }, [changes, editingPath, startEditing])
 
   const saveEditing = React.useCallback(async (): Promise<void> => {
     if (!editingPath) return
@@ -149,7 +160,6 @@ export function WorkspaceMemoryChangeShelf({ workspaceSlug, sessionId, changes, 
               setEditText(nextText)
               setEditingState((previous) => ({ ...previous, dirty: nextText !== initialText }))
             }}
-            fileName={editingPath}
             onSave={() => void saveEditing()}
             className="min-h-0 flex-1"
           />
@@ -194,7 +204,7 @@ export function WorkspaceMemoryChangeShelf({ workspaceSlug, sessionId, changes, 
           )}
 
           {hasDiff ? (
-            <pre className="max-h-[min(520px,calc(100vh-220px))] overflow-auto whitespace-pre-wrap break-words rounded-lg bg-muted/50 p-3 font-mono text-xs leading-5">
+            <pre className="whitespace-pre-wrap break-words rounded-lg bg-muted/50 p-3 font-mono text-xs leading-5">
               {change.diff?.context.map((line, lineIndex) => <div key={`context-${lineIndex}`} className="text-muted-foreground">  {line || ' '}</div>)}
               {change.diff?.removed.map((line, lineIndex) => <div key={`removed-${lineIndex}`} className="bg-red-500/10 px-1 text-red-700 dark:text-red-300">- {line || ' '}</div>)}
               {change.diff?.added.map((line, lineIndex) => <div key={`added-${lineIndex}`} className="bg-emerald-500/10 px-1 text-emerald-700 dark:text-emerald-300">+ {line || ' '}</div>)}
@@ -204,11 +214,6 @@ export function WorkspaceMemoryChangeShelf({ workspaceSlug, sessionId, changes, 
             <p className="rounded-lg bg-muted/50 p-3 text-xs leading-relaxed text-muted-foreground">该文件已变化，但无法生成受限文本 Diff。</p>
           )}
 
-          {change.kind !== 'deleted' && (
-            <div className="flex justify-end">
-              <Button size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => void startEditing(change.relativePath, change)} disabled={loadingEditor}><FileText size={13} className="mr-1" />审阅并编辑</Button>
-            </div>
-          )}
         </div>
       ) : (
         <div className="space-y-3">

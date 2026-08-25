@@ -2502,6 +2502,20 @@
   border-top: 0 !important;
   border-bottom: 0 !important;
 }
+.live-markdown-editor .live-markdown-editor__diff-addition {
+  background: light-dark(rgb(228,244,233), rgb(19,34,23));
+  box-shadow: inset 3px 0 rgb(67,167,71);
+}
+.live-markdown-editor__diff-deletions {
+  user-select: text;
+}
+.live-markdown-editor__diff-deletion {
+  min-height: calc(var(--ink-editor-line-height) * 1em);
+  padding: 0 1rem;
+  color: light-dark(rgb(173,44,37), rgb(255,178,171));
+  background: light-dark(rgb(248,231,230), rgb(39,22,20));
+  box-shadow: inset 3px 0 rgb(206,66,52);
+}
 .live-markdown-editor__table,
 .live-markdown-editor__mermaid,
 .live-markdown-editor__thematic-break {

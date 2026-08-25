@@ -3,6 +3,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { syntaxTree } from '@codemirror/language'
 import { Prec, RangeSetBuilder, StateEffect, StateField, type EditorState } from '@codemirror/state'
 import { Decoration, EditorView, WidgetType, keymap, type DecorationSet } from '@codemirror/view'
+import { parseDiffFromFile, type FileContents } from '@pierre/diffs'
 import ink, { type Instance } from 'ink-mde'
 import { MermaidBlock } from '@proma/ui'
 import { cn } from '@/lib/utils'
@@ -13,6 +14,7 @@ import {
   splitMarkdownTableRow,
   type MarkdownBlockKind,
 } from './live-markdown-editor-utils'
+import { canRenderMarkdownDiff } from './live-markdown-diff-editor-utils'
 
 const markdownSyntaxFocusEffect = StateEffect.define<boolean>()
 const hiddenMarkdownSyntax = Decoration.replace({ class: 'live-markdown-editor__syntax-hidden' })
@@ -34,6 +36,8 @@ export interface LiveMarkdownEditorProps {
   placeholder?: string
   className?: string
   onSave?: () => void
+  /** Keeps the Agent-produced change visible as editable inline Diff decorations. */
+  diffReview?: { beforeValue: string; afterValue: string }
   /** Overrides the built-in Mermaid renderer for hosts with a custom diagram surface. */
   renderMermaid?: (code: string) => React.ReactNode
 }
@@ -198,6 +202,73 @@ function buildMarkdownBlocks(state: EditorState, renderMermaid: (code: string) =
   })
 }
 
+class DeletedDiffLinesWidget extends WidgetType {
+  constructor(private readonly lines: string[]) {
+    super()
+  }
+
+  override eq(other: DeletedDiffLinesWidget): boolean {
+    return this.lines.join('\n') === other.lines.join('\n')
+  }
+
+  override toDOM(): HTMLElement {
+    const wrapper = document.createElement('div')
+    wrapper.className = 'live-markdown-editor__diff-deletions'
+    for (const line of this.lines) {
+      const row = document.createElement('div')
+      row.className = 'live-markdown-editor__diff-deletion'
+      row.textContent = `- ${line || ' '}`
+      wrapper.appendChild(row)
+    }
+    return wrapper
+  }
+
+  override ignoreEvent(): boolean {
+    return true
+  }
+}
+
+/** Builds stable line decorations once; later user edits map them instead of recomputing a Diff on every keystroke. */
+function createMarkdownDiffExtension(review: NonNullable<LiveMarkdownEditorProps['diffReview']>) {
+  if (!canRenderMarkdownDiff(review.beforeValue, review.afterValue) || review.beforeValue === review.afterValue) return []
+  const oldFile: FileContents = { name: 'document.md', contents: review.beforeValue }
+  const newFile: FileContents = { name: 'document.md', contents: review.afterValue }
+  let fileDiff: ReturnType<typeof parseDiffFromFile>
+  try {
+    fileDiff = parseDiffFromFile(oldFile, newFile)
+  } catch {
+    return []
+  }
+
+  const diffField = StateField.define<DecorationSet>({
+    create: (state) => {
+      const builder = new RangeSetBuilder<Decoration>()
+      for (const hunk of fileDiff.hunks) {
+        for (const content of hunk.hunkContent) {
+          if (content.type !== 'change') continue
+          if (content.deletions > 0) {
+            const deletedLines = fileDiff.deletionLines.slice(content.deletionLineIndex, content.deletionLineIndex + content.deletions)
+            const insertionLine = content.additionLineIndex
+            const position = insertionLine < state.doc.lines ? state.doc.line(insertionLine + 1).from : state.doc.length
+            builder.add(position, position, Decoration.widget({ widget: new DeletedDiffLinesWidget(deletedLines), side: -1, block: true }))
+          }
+          for (let index = 0; index < content.additions; index += 1) {
+            const lineIndex = content.additionLineIndex + index
+            if (lineIndex >= state.doc.lines) continue
+            const line = state.doc.line(lineIndex + 1)
+            builder.add(line.from, line.from, Decoration.line({ class: 'live-markdown-editor__diff-addition' }))
+          }
+        }
+      }
+      return builder.finish()
+    },
+    update: (value, transaction) => transaction.docChanged ? value.map(transaction.changes) : value,
+    provide: (field) => EditorView.decorations.from(field),
+  })
+
+  return [diffField]
+}
+
 function createMarkdownBlockExtension(renderMermaid: (code: string) => React.ReactNode) {
   const blockField = StateField.define<DecorationSet>({
     create: (state) => buildDecorations(state),
@@ -244,6 +315,7 @@ export const LiveMarkdownEditor = React.forwardRef<LiveMarkdownEditorHandle, Liv
   placeholder,
   className,
   onSave,
+  diffReview,
   renderMermaid = (code) => <MermaidBlock code={code} />,
 }, ref): React.ReactElement {
   const hostRef = React.useRef<HTMLDivElement>(null)
@@ -253,6 +325,7 @@ export const LiveMarkdownEditor = React.forwardRef<LiveMarkdownEditorHandle, Liv
   const onSaveRef = React.useRef(onSave)
   const readOnlyRef = React.useRef(readOnly)
   const renderMermaidRef = React.useRef(renderMermaid)
+  const diffReviewRef = React.useRef(diffReview)
   valueRef.current = value
   onChangeRef.current = onChange
   onSaveRef.current = onSave
@@ -298,7 +371,9 @@ export const LiveMarkdownEditor = React.forwardRef<LiveMarkdownEditorHandle, Liv
       plugins: [
         Prec.highest(keymap.of([{ key: 'Mod-s', run: () => { onSaveRef.current?.(); return Boolean(onSaveRef.current) } }])),
         ...markdownSyntaxVisibility,
-        ...createMarkdownBlockExtension((code) => renderMermaidRef.current(code)),
+        ...(diffReviewRef.current
+          ? createMarkdownDiffExtension(diffReviewRef.current)
+          : createMarkdownBlockExtension((code) => renderMermaidRef.current(code))),
       ].map((extension) => ({ type: 'default' as const, value: extension })),
       search: false,
       toolbar: {

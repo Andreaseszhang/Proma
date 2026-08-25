@@ -1087,6 +1087,9 @@ export interface WorkspaceMemoryFileChange {
     removed: string[]
     added: string[]
     truncated: boolean
+    /** 受现有文本大小限制保护的完整快照，供审阅/编辑器渲染准确 Diff。 */
+    beforeContent: string
+    afterContent: string
   }
 }
 

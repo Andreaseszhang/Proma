@@ -4,6 +4,8 @@ import { ChevronLeft, ChevronRight, FileText, Loader2, Save, X } from 'lucide-re
 import type { WorkspaceMemoryFileChange } from '@proma/shared'
 import { Button } from '@/components/ui/button'
 import { workspaceMemoryEditingStateAtomFamily } from '@/atoms/memory-change-atoms'
+import { LiveMarkdownDiffEditor } from '@/components/markdown/LiveMarkdownDiffEditor'
+import { LiveMarkdownEditor } from '@/components/markdown/LiveMarkdownEditor'
 
 interface MemoryFileListItem {
   relativePath: string
@@ -38,6 +40,7 @@ function formatUpdatedAt(updatedAt?: number): string {
 export function WorkspaceMemoryChangeShelf({ workspaceSlug, sessionId, changes, memoryFiles, className }: WorkspaceMemoryChangeShelfProps): React.ReactElement {
   const [index, setIndex] = React.useState(0)
   const [editingPath, setEditingPath] = React.useState<string | null>(null)
+  const [editingChange, setEditingChange] = React.useState<WorkspaceMemoryFileChange | null>(null)
   const [editText, setEditText] = React.useState('')
   const [initialText, setInitialText] = React.useState('')
   const [editingState, setEditingState] = useAtom(workspaceMemoryEditingStateAtomFamily(sessionId))
@@ -73,13 +76,14 @@ export function WorkspaceMemoryChangeShelf({ workspaceSlug, sessionId, changes, 
     setEditingState((previous) => ({ ...previous, remoteChanged: true }))
   }, [changes, editText, editingPath, setEditingState, workspaceSlug])
 
-  const startEditing = React.useCallback(async (relativePath: string): Promise<void> => {
+  const startEditing = React.useCallback(async (relativePath: string, reviewedChange?: WorkspaceMemoryFileChange): Promise<void> => {
     setLoadingEditor(true)
     setError(null)
     try {
       const file = await window.electronAPI.readWorkspaceAutoMemoryFile(workspaceSlug, relativePath)
       openedAtRef.current = Date.now()
       setEditingPath(file.relativePath)
+      setEditingChange(reviewedChange ?? null)
       setEditText(file.content ?? '')
       setInitialText(file.content ?? '')
       setEditingState({ editingPath: file.relativePath, dirty: false, remoteChanged: false })
@@ -126,6 +130,7 @@ export function WorkspaceMemoryChangeShelf({ workspaceSlug, sessionId, changes, 
             <Button size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => {
               if (editingState.dirty && !window.confirm('项目记忆有未保存修改。确定丢弃并返回预览吗？')) return
               setEditingPath(null)
+              setEditingChange(null)
               setError(null)
               setEditingState({ editingPath: null, dirty: false, remoteChanged: false })
             }} disabled={saving}>返回预览</Button>
@@ -135,24 +140,30 @@ export function WorkspaceMemoryChangeShelf({ workspaceSlug, sessionId, changes, 
             </Button>
           </div>
         </div>
-        <textarea
-          autoFocus
-          value={editText}
-          onChange={(event) => {
-            const nextText = event.target.value
-            setEditText(nextText)
-            setEditingState((previous) => ({ ...previous, dirty: nextText !== initialText }))
-          }}
-          onKeyDown={(event) => {
-            if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 's') {
-              event.preventDefault()
-              void saveEditing()
-            }
-          }}
-          spellCheck={false}
-          className="min-h-0 flex-1 resize-none rounded-lg border border-border/70 bg-background p-3 font-mono text-xs leading-5 text-foreground outline-none transition-[border-color,box-shadow] focus:border-primary focus:ring-2 focus:ring-primary/20"
-          aria-label={`编辑 ${editingPath}`}
-        />
+        {editingChange?.diff ? (
+          <LiveMarkdownDiffEditor
+            beforeValue={editingChange.diff.beforeContent}
+            diffValue={editingChange.diff.afterContent}
+            value={editText}
+            onChange={(nextText) => {
+              setEditText(nextText)
+              setEditingState((previous) => ({ ...previous, dirty: nextText !== initialText }))
+            }}
+            fileName={editingPath}
+            onSave={() => void saveEditing()}
+            className="min-h-0 flex-1"
+          />
+        ) : (
+          <LiveMarkdownEditor
+            value={editText}
+            onChange={(nextText) => {
+              setEditText(nextText)
+              setEditingState((previous) => ({ ...previous, dirty: nextText !== initialText }))
+            }}
+            onSave={() => void saveEditing()}
+            className="min-h-0 flex-1 rounded-lg border border-border/70"
+          />
+        )}
         {editingState.remoteChanged && <p className="mt-2 shrink-0 text-xs text-amber-600 dark:text-amber-400">文件已被外部更新；为避免覆盖，保存已暂停。请返回预览后重新打开。</p>}
         {error && <p className="mt-2 shrink-0 text-xs text-destructive">{error}</p>}
       </section>
@@ -195,7 +206,7 @@ export function WorkspaceMemoryChangeShelf({ workspaceSlug, sessionId, changes, 
 
           {change.kind !== 'deleted' && (
             <div className="flex justify-end">
-              <Button size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => void startEditing(change.relativePath)} disabled={loadingEditor}><FileText size={13} className="mr-1" />编辑文件</Button>
+              <Button size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => void startEditing(change.relativePath, change)} disabled={loadingEditor}><FileText size={13} className="mr-1" />审阅并编辑</Button>
             </div>
           )}
         </div>

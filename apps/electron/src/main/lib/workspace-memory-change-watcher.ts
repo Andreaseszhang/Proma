@@ -44,7 +44,16 @@ function createChange(relativePath: string, before: FileSnapshot | undefined, af
   return {
     relativePath, kind, changedAt: Date.now(), diffAvailable: true,
     preview: firstMeaningfulLine(added) ?? firstMeaningfulLine(removed),
-    diff: { context: previous.slice(Math.max(0, prefix - 1), prefix), removed: removed.slice(0, MAX_DIFF_LINES), added: added.slice(0, MAX_DIFF_LINES), truncated: removed.length > MAX_DIFF_LINES || added.length > MAX_DIFF_LINES },
+    // 完整快照只在既有 96KB 文本文件限制内随变更事件发送；渲染层据此可做准确的
+    // 审阅 Diff，而摘要字段仍服务于轻量提示与旧调用方。
+    diff: {
+      context: previous.slice(Math.max(0, prefix - 1), prefix),
+      removed: removed.slice(0, MAX_DIFF_LINES),
+      added: added.slice(0, MAX_DIFF_LINES),
+      truncated: removed.length > MAX_DIFF_LINES || added.length > MAX_DIFF_LINES,
+      beforeContent: before?.text ?? '',
+      afterContent: after?.text ?? '',
+    },
   }
 }
 

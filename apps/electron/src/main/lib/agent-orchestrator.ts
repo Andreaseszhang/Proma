@@ -69,6 +69,7 @@ import { exitPlanService, type ExitPlanPermissionResult } from './agent-exit-pla
 import { validateToolInput } from './agent-tool-input-validator'
 import { estimateTokenCount, WRITE_CONTENT_TOKEN_THRESHOLD } from './agent-tool-token-estimator'
 import { buildPiBuiltinTools } from './adapters/pi-builtin-tools'
+import { getVaultUserContext } from './vault-service'
 import { buildPiMcpTools } from './adapters/pi-mcp-tools'
 import { buildAgentRuntimeEnv, type AgentRuntimeEnv } from './agent-runtime-env'
 import { isVisibleRunMessage } from './agent-run-message-visibility'
@@ -1007,11 +1008,14 @@ export class AgentOrchestrator {
       // 从源会话继承并持久化，避免历史相对路径在恢复时切换到另一文件根。
 
       // 必须与 runtime 接收的附加目录保持一致；视觉助手据此限制允许外发的图片路径。
+      const vaultUserContext = getVaultUserContext(sessionId)
+      const vaultRootPath = vaultUserContext?.rootPath
       const allAdditionalDirectories = collectAttachedDirectories({
         extraDirs: additionalDirectories,
         sessionMeta,
         workspaceSlug,
       })
+      if (vaultRootPath && !allAdditionalDirectories.includes(vaultRootPath)) allAdditionalDirectories.push(vaultRootPath)
       const browserAllowedRoots = [...new Set([
         workspaceId ? agentCwd : undefined,
         workspaceSlug ? getProjectFilesPath(workspaceSlug) : undefined,
@@ -1062,6 +1066,7 @@ export class AgentOrchestrator {
         workspaceSlug,
         agentCwd,
         userBrowserContext: browserController.getUserContext(sessionId),
+        userVaultContext: vaultUserContext,
       })
       // 11.5 注入 mention 引用指令（Skill/MCP/会话）— 仅影响 prompt，不影响持久化
       let enrichedMessage = userMessage
@@ -2316,10 +2321,11 @@ export class AgentOrchestrator {
       : undefined
 
     const userBrowserContext = browserController.getUserContext(sessionId)
+    const userVaultContext = getVaultUserContext(sessionId)
     // 运行中的 Agent 收到队列消息时也必须看到用户刚刚主动打开的页面。
     // 未打开浏览器时保持既有消息形态，避免给每条插队消息重复注入无关环境块。
-    let enrichedText = userBrowserContext
-      ? `${buildDynamicContext({ userBrowserContext })}\n\n${text}`
+    let enrichedText = userBrowserContext || userVaultContext
+      ? `${buildDynamicContext({ userBrowserContext, userVaultContext })}\n\n${text}`
       : text
     const referencedSessionsBlock = buildReferencedSessionsPrompt(sessionId, mentionedSessionIds, workspaceSlug)
     if (referencedSessionsBlock) {

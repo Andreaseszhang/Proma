@@ -170,6 +170,8 @@ import {
   formatVaultSourceBlock,
   getConfiguredVaultFileSystem,
   getVaultSummary,
+  setVaultUserContext,
+  clearVaultUserContext,
   updateVaultConfig,
 } from './lib/vault-service'
 import { registerUpdaterIpc } from './lib/updater/updater-ipc'
@@ -5963,6 +5965,18 @@ export function registerIpcHandlers(): void {
       content: `${current.content}${separator}${sourceBlock}\n`,
       expectedSha256: typeof value.expectedSha256 === 'string' ? value.expectedSha256 : current.sha256,
     })
+  })
+
+  ipcMain.handle(VAULT_IPC_CHANNELS.SET_USER_CONTEXT, async (_, sessionId: unknown, relativePath: unknown, open: unknown): Promise<void> => {
+    if (typeof sessionId !== 'string' || sessionId.trim().length === 0) throw new Error('Vault 会话 ID 非法')
+    if (open === false) {
+      clearVaultUserContext(sessionId)
+      return
+    }
+    if (relativePath !== null && relativePath !== undefined && typeof relativePath !== 'string') {
+      throw new Error('Vault relativePath 非法')
+    }
+    setVaultUserContext(sessionId, typeof relativePath === 'string' ? relativePath : null)
   })
 
   // ===== Windows Agent Island =====

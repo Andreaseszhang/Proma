@@ -83,4 +83,5 @@ export const VAULT_IPC_CHANNELS = {
   RENAME_FILE: 'vault:rename-file',
   SEARCH: 'vault:search',
   APPEND_SOURCE: 'vault:append-source',
+  SET_USER_CONTEXT: 'vault:set-user-context',
 } as const

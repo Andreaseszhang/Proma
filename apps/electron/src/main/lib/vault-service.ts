@@ -114,6 +114,48 @@ function readableSnippet(content: string, query: string): { snippet: string; lin
   return null
 }
 
+export interface VaultUserContextSnapshot {
+  rootPath: string
+  displayName: string
+  relativePath: string | null
+  allowAgentWrites: boolean
+  openedAt: number
+}
+
+const vaultUserContextBySession = new Map<string, VaultUserContextSnapshot>()
+
+export function setVaultUserContext(sessionId: string, relativePath: string | null): void {
+  if (!sessionId) return
+  const config = getVaultConfig()
+  if (!config) {
+    vaultUserContextBySession.delete(sessionId)
+    return
+  }
+  vaultUserContextBySession.set(sessionId, {
+    rootPath: config.rootPath,
+    displayName: config.displayName,
+    relativePath: relativePath?.trim() || null,
+    allowAgentWrites: config.allowAgentWrites,
+    openedAt: Date.now(),
+  })
+}
+
+export function clearVaultUserContext(sessionId: string): void {
+  vaultUserContextBySession.delete(sessionId)
+}
+
+export function getVaultUserContext(sessionId: string): VaultUserContextSnapshot | null {
+  const context = vaultUserContextBySession.get(sessionId)
+  const config = getVaultConfig()
+  if (!context || !config) return null
+  return {
+    ...context,
+    rootPath: config.rootPath,
+    displayName: config.displayName,
+    allowAgentWrites: config.allowAgentWrites,
+  }
+}
+
 export interface VaultFileSystem {
   listFiles(): VaultFileEntry[]
   readFile(relativePath: string): VaultReadResult
@@ -359,6 +401,7 @@ export function updateVaultConfig(options: { inboxPath?: string; allowAgentWrite
 export function clearVaultConfig(): void {
   const path = getVaultConfigPath()
   if (existsSync(path)) unlinkSync(path)
+  vaultUserContextBySession.clear()
 }
 
 export function getConfiguredVaultFileSystem(): VaultFileSystem {

@@ -2,13 +2,14 @@ import * as React from 'react'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import { BookOpen, ChevronDown, ChevronRight, CircleHelp, Folder, FolderOpen, Loader2, Plus, RefreshCw } from 'lucide-react'
 import { toast } from 'sonner'
-import type { VaultCandidate, VaultFileEntry, VaultReadResult, VaultSummary } from '@proma/shared'
+import type { VaultCandidate, VaultFileEntry, VaultReadResult, VaultSummary, SkillMeta } from '@proma/shared'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { VaultLiveMarkdownEditor, type VaultLiveMarkdownEditorHandle } from './VaultLiveMarkdownEditor'
 import { VaultReferencePicker } from './VaultReferencePicker'
+import { SkillDetailSheet } from '@/components/agent-skills/SkillDetailSheet'
 import {
   selectedVaultFileAtom,
   vaultReadResultAtom,
@@ -16,8 +17,8 @@ import {
   pendingVaultQuoteAtom,
 } from '@/atoms/vault-atoms'
 import { cn } from '@/lib/utils'
-import { agentWorkspacesAtom, agentSessionsAtom, currentAgentWorkspaceIdAtom } from '@/atoms/agent-atoms'
-import { activeViewAtom, agentSkillsTabAtom, pendingAgentSkillSlugAtom } from '@/atoms/active-view'
+import { agentWorkspacesAtom, agentSessionsAtom, currentAgentWorkspaceIdAtom, workspaceCapabilitiesVersionAtom } from '@/atoms/agent-atoms'
+import { activeViewAtom, agentSkillsTabAtom } from '@/atoms/active-view'
 import { planningSelectedCalendarEventIdAtom, planningSelectedTodoIdAtom, planningTabAtom } from '@/atoms/planning-atoms'
 import { useOpenSession } from '@/hooks/useOpenSession'
 import {
@@ -355,7 +356,7 @@ export function VaultView(): React.ReactElement {
   const currentWorkspaceId = useAtomValue(currentAgentWorkspaceIdAtom)
   const setActiveView = useSetAtom(activeViewAtom)
   const setSkillsTab = useSetAtom(agentSkillsTabAtom)
-  const setPendingSkillSlug = useSetAtom(pendingAgentSkillSlugAtom)
+  const bumpCapabilities = useSetAtom(workspaceCapabilitiesVersionAtom)
   const setPlanningTab = useSetAtom(planningTabAtom)
   const setSelectedTodoId = useSetAtom(planningSelectedTodoIdAtom)
   const setSelectedCalendarEventId = useSetAtom(planningSelectedCalendarEventIdAtom)
@@ -379,6 +380,8 @@ export function VaultView(): React.ReactElement {
   const [quoteNewPath, setQuoteNewPath] = React.useState('')
   const [quoting, setQuoting] = React.useState(false)
   const [vaultHelpOpen, setVaultHelpOpen] = React.useState(false)
+  const [skillDetail, setSkillDetail] = React.useState<{ skill: SkillMeta; isBuiltin: boolean; skillsDir: string } | null>(null)
+  const [skillUpdating, setSkillUpdating] = React.useState(false)
   const selectedFileRef = React.useRef(selectedFile)
   const readRequestRef = React.useRef(0)
 
@@ -452,6 +455,28 @@ export function VaultView(): React.ReactElement {
     }
   }, [setReadResult, setSelectedFile])
 
+  const openSkillDetail = React.useCallback(async (slug: string): Promise<void> => {
+    if (!workspaceSlug) {
+      toast.message('请先在 Agent 模式下选择项目，再打开 Skill')
+      return
+    }
+    try {
+      const [skills, defaultSlugs, skillsDir] = await Promise.all([
+        window.electronAPI.getWorkspaceSkills(workspaceSlug),
+        window.electronAPI.getDefaultSkillSlugs(),
+        window.electronAPI.getWorkspaceSkillsDir(workspaceSlug),
+      ])
+      const skill = skills.find((item) => item.slug === slug)
+      if (!skill) {
+        toast.message(`当前项目未找到 Skill：${slug}`)
+        return
+      }
+      setSkillDetail({ skill, isBuiltin: defaultSlugs.includes(slug), skillsDir })
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '无法打开 Skill 详情')
+    }
+  }, [workspaceSlug])
+
   const activateReference = React.useCallback((reference: VaultReferenceRange): void => {
     if (reference.type === 'session') {
       const session = sessions.find((item) => item.id === reference.id)
@@ -459,9 +484,8 @@ export function VaultView(): React.ReactElement {
       return
     }
     if (reference.type === 'skill') {
-      setSkillsTab('skills')
-      setPendingSkillSlug(reference.id)
-      setActiveView('agent-skills')
+      // Keep the current note open and reveal the Skill editor beside it.
+      void openSkillDetail(reference.id)
       return
     }
     if (reference.type === 'todo' || reference.type === 'calendar_event') {
@@ -471,8 +495,9 @@ export function VaultView(): React.ReactElement {
       setActiveView('planning')
       return
     }
-    toast.message('MCP 引用暂不支持直接打开，请使用编辑引用操作')
-  }, [openSession, sessions, setActiveView, setPendingSkillSlug, setPlanningTab, setSelectedCalendarEventId, setSelectedTodoId, setSkillsTab])
+    setSkillsTab('mcp')
+    setActiveView('agent-skills')
+  }, [openSession, openSkillDetail, sessions, setActiveView, setPlanningTab, setSelectedCalendarEventId, setSelectedTodoId, setSkillsTab])
 
   const openWikiLink = React.useCallback((target: string): void => {
     const relativePath = resolveVaultWikiLink(target, files)
@@ -783,6 +808,46 @@ export function VaultView(): React.ReactElement {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <SkillDetailSheet
+        skill={skillDetail?.skill ?? null}
+        workspaceSlug={workspaceSlug ?? ''}
+        isBuiltin={skillDetail?.isBuiltin ?? false}
+        updating={skillUpdating}
+        onOpenChange={(open) => { if (!open) setSkillDetail(null) }}
+        onToggle={(enabled) => {
+          const slug = skillDetail?.skill.slug
+          if (!slug || !workspaceSlug) return
+          void window.electronAPI.toggleWorkspaceSkill(workspaceSlug, slug, enabled)
+            .then(() => {
+              setSkillDetail((current) => current ? { ...current, skill: { ...current.skill, enabled } } : current)
+              bumpCapabilities((version) => version + 1)
+            })
+            .catch(() => toast.error('切换 Skill 状态失败'))
+        }}
+        onUpdate={() => {
+          const slug = skillDetail?.skill.slug
+          if (!slug || !workspaceSlug || skillUpdating) return
+          setSkillUpdating(true)
+          void window.electronAPI.updateSkillFromSource(workspaceSlug, slug)
+            .then((updated) => {
+              setSkillDetail((current) => current ? { ...current, skill: updated } : current)
+              bumpCapabilities((version) => version + 1)
+              toast.success(`已同步更新 Skill：${updated.name}`)
+            })
+            .catch((error) => toast.error(error instanceof Error ? error.message : '更新 Skill 失败'))
+            .finally(() => setSkillUpdating(false))
+        }}
+        onRequestDelete={() => {
+          setSkillDetail(null)
+          setSkillsTab('skills')
+          setActiveView('agent-skills')
+          toast.message('请在技能中心确认删除 Skill')
+        }}
+        onOpenFolder={() => {
+          if (skillDetail?.skillsDir) window.electronAPI.openFile(`${skillDetail.skillsDir}/${skillDetail.skill.slug}`)
+        }}
+        onChanged={() => bumpCapabilities((version) => version + 1)}
+      />
     </>
   )
 }

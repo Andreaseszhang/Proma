@@ -136,9 +136,9 @@ class VaultReferenceWidget extends WidgetType {
     button.className = `vault-reference-chip ${chipClass}`
     button.dataset.referenceTrigger = trigger
     button.textContent = `${trigger}${this.reference.label}`
-    button.title = '点击打开引用；编辑引用请使用工具按钮'
-    button.addEventListener('click', () => {
-      if (this.reference.type === 'mcp') this.onEdit(this.reference)
+    button.title = '点击打开引用；Option/Alt 点击重新选择引用'
+    button.addEventListener('click', (event) => {
+      if (event.altKey) this.onEdit(this.reference)
       else this.onActivate(this.reference)
     })
     return button
@@ -498,6 +498,11 @@ function buildVaultBlocks(state: EditorState, onChangeProperties: (entries: Vaul
   })
 }
 
+/** Chip source is revealed only when the caret sits inside or right after the marker. */
+export function isCaretInsideReference(caretPositions: number[], from: number, to: number): boolean {
+  return caretPositions.some((position) => position > from && position <= to)
+}
+
 function createVaultReferenceExtension({
   onOpenWikiLink,
   onEditReference,
@@ -537,8 +542,9 @@ function createVaultReferenceExtension({
     }))
     const isInsideBlock = (from: number, to: number): boolean => allBlocks.some((block) => from >= block.from && to <= block.to)
 
+    const caretPositions = state.selection.ranges.map((range) => range.head)
     for (const reference of parseVaultReferences(doc)) {
-      if (activeLines.has(state.doc.lineAt(reference.from).number) || isInsideBlock(reference.from, reference.to)) continue
+      if (isCaretInsideReference(caretPositions, reference.from, reference.to) || isInsideBlock(reference.from, reference.to)) continue
       decorations.push({
         from: reference.from,
         to: reference.to,

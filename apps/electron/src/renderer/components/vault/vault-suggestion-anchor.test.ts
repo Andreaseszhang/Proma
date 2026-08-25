@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import type { EditorView } from '@codemirror/view'
-import { clampSuggestionPosition, getEditorCaretAnchor, isVaultTriggerContext, nextSuggestionIndex, shouldCloseVaultSuggestion } from './VaultLiveMarkdownEditor'
+import { clampSuggestionPosition, getEditorCaretAnchor, isCaretInsideReference, isVaultTriggerContext, nextSuggestionIndex, shouldCloseVaultSuggestion } from './VaultLiveMarkdownEditor'
 
 interface FakeWindow {
   innerWidth: number
@@ -96,5 +96,19 @@ describe('Vault reference trigger typing', () => {
     expect(nextSuggestionIndex(0, 3, -1)).toBe(2)
     expect(nextSuggestionIndex(1, 3, -1)).toBe(0)
     expect(nextSuggestionIndex(0, 0, 1)).toBe(0)
+  })
+})
+
+describe('Vault reference chip source visibility', () => {
+  test('Given a caret at the end of a chip When the note renders Then the raw marker becomes visible', () => {
+    expect(isCaretInsideReference([40], 10, 40)).toBe(true)
+    expect(isCaretInsideReference([25], 10, 40)).toBe(true)
+  })
+
+  test('Given a caret elsewhere on the same line When the note renders Then the chip stays rendered', () => {
+    expect(isCaretInsideReference([10], 10, 40)).toBe(false)
+    expect(isCaretInsideReference([9], 10, 40)).toBe(false)
+    expect(isCaretInsideReference([41], 10, 40)).toBe(false)
+    expect(isCaretInsideReference([], 10, 40)).toBe(false)
   })
 })

@@ -6,6 +6,7 @@ import { RangeSetBuilder, StateEffect, StateField, type EditorState } from '@cod
 import {
   Decoration,
   EditorView,
+  ViewPlugin,
   WidgetType,
   type DecorationSet,
 } from '@codemirror/view'
@@ -615,15 +616,48 @@ interface VaultLiveMarkdownEditorProps {
   workspaceSlug: string | null
 }
 
-function getEditorCaretRect(host: HTMLElement): DOMRect | null {
+interface VaultCaretAnchor {
+  left: number
+  bottom: number
+}
+
+function isUsableRect(rect: DOMRect | undefined): boolean {
+  if (!rect) return false
+  return rect.width > 0 || rect.height > 0 || rect.left > 0 || rect.top > 0
+}
+
+/** Resolves the caret viewport position, preferring CodeMirror's own geometry. */
+export function getEditorCaretAnchor(view: EditorView | null, host: HTMLElement): VaultCaretAnchor {
+  if (view) {
+    try {
+      const coords = view.coordsAtPos(view.state.selection.main.head)
+      if (coords) return { left: coords.left, bottom: coords.bottom }
+    } catch {
+      // Fall through to DOM-based measurement below.
+    }
+  }
+
   const selection = window.getSelection()
   if (selection?.rangeCount && selection.anchorNode && host.contains(selection.anchorNode)) {
     const range = selection.getRangeAt(0).cloneRange()
     range.collapse(true)
     const rect = range.getBoundingClientRect()
-    if (rect.width || rect.height || (rect.left !== 0 && rect.top !== 0)) return rect
+    if (isUsableRect(rect)) return { left: rect.left, bottom: rect.bottom }
   }
-  return host.querySelector<HTMLElement>('.cm-cursor')?.getBoundingClientRect() ?? null
+
+  const cursorRect = host.querySelector<HTMLElement>('.cm-cursor')?.getBoundingClientRect()
+  if (isUsableRect(cursorRect)) return { left: cursorRect!.left, bottom: cursorRect!.bottom }
+
+  // Anchor inside the editor instead of collapsing to the viewport origin.
+  const hostRect = host.getBoundingClientRect()
+  return { left: hostRect.left + 16, bottom: hostRect.top + 40 }
+}
+
+export function clampSuggestionPosition(anchor: VaultCaretAnchor): { left: number; top: number } {
+  return {
+    left: Math.min(Math.max(8, anchor.left), Math.max(8, window.innerWidth - 316)),
+    top: Math.min(Math.max(8, anchor.bottom + 6), Math.max(8, window.innerHeight - 300)),
+  }
 }
 
 export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorHandle, VaultLiveMarkdownEditorProps>(function VaultLiveMarkdownEditor({
@@ -638,6 +672,7 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
   workspaceSlug,
 }, ref): React.ReactElement {
   const hostRef = React.useRef<HTMLDivElement>(null)
+  const viewRef = React.useRef<EditorView | null>(null)
   const instanceRef = React.useRef<Instance | null>(null)
   const valueRef = React.useRef(value)
   const onChangeRef = React.useRef(onChange)
@@ -685,10 +720,7 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
     const updateAnchor = (): void => {
       const host = hostRef.current
       if (!host) return
-      const cursor = getEditorCaretRect(host)
-      if (!cursor) return
-      const left = Math.min(Math.max(8, cursor.left), Math.max(8, window.innerWidth - 316))
-      const top = Math.min(Math.max(8, cursor.bottom + 6), Math.max(8, window.innerHeight - 300))
+      const { left, top } = clampSuggestionPosition(getEditorCaretAnchor(viewRef.current, host))
       setSuggestion((current) => current ? { ...current, left, top } : current)
     }
     const scroller = hostRef.current?.querySelector<HTMLElement>('.cm-scroller')
@@ -754,6 +786,14 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
         toolbar: false,
       },
       plugins: [
+        ViewPlugin.define((view) => {
+          viewRef.current = view
+          return {
+            destroy: () => {
+              if (viewRef.current === view) viewRef.current = null
+            },
+          }
+        }),
         ...markdownSyntaxVisibility,
         ...createVaultReferenceExtension({
           onActivateReference: (reference) => onActivateReferenceRef.current(reference),
@@ -839,13 +879,12 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
       if (!event.metaKey && !event.ctrlKey && !event.altKey && ['/', '#', '&', '~', '～', '*'].includes(event.key)) {
         event.preventDefault()
         const instance = instanceRef.current
-        const from = instance?.selections()[0]?.end ?? 0
-        const cursor = getEditorCaretRect(host)
+        const view = viewRef.current
+        const from = view?.state.selection.main.head ?? instance?.selections()[0]?.end ?? 0
         const trigger = event.key as VaultReferenceTrigger
         const type = trigger === '*' ? 'all' : vaultReferenceTypeForTrigger(trigger)
         if (!type) return
-        const left = Math.min(Math.max(8, cursor?.left ?? 8), Math.max(8, window.innerWidth - 316))
-        const top = Math.min(Math.max(8, (cursor?.bottom ?? 32) + 6), Math.max(8, window.innerHeight - 300))
+        const { left, top } = clampSuggestionPosition(getEditorCaretAnchor(view, host))
         setSuggestion({ trigger, type, query: '', from, left, top })
       }
     }

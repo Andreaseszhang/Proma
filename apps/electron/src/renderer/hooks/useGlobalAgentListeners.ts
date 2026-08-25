@@ -84,6 +84,7 @@ import { getSessionFileChangeKind, getOwnedSessionWatcherPaths, upsertSessionFil
 import { removeQueuedMessage, createQueuedAgentStreamState } from '@/lib/agent-message-queue'
 import { createAgentStreamEventBatcher } from '@/lib/agent-stream-event-batcher'
 import { getChangedWorkspaceComponentFromSdkMessage } from '@/lib/agent-component-activation'
+import { mergeActiveAgentSessionSnapshot } from '@/lib/agent-active-session-snapshot'
 
 /** 触发右侧文件浏览器自动定位的写入类工具集合 */
 const WRITE_TOOLS = new Set(['Write', 'Edit', 'MultiEdit', 'NotebookEdit', 'Update'])
@@ -850,6 +851,9 @@ export function useGlobalAgentListeners(): void {
     }
 
     const isWindows = detectIsWindows()
+    // 初始化快照与 STREAM_COMPLETE 可跨 IPC channel 乱序抵达。完成处理回收
+    // startedAt 后仍需保留一个短生命周期的终态标记，避免迟到快照复活旧 run。
+    const latestTerminalRunStartedAt = new Map<string, number>()
 
     /**
      * 当前前台会话在本轮首次产生文件改动时，自动展开右侧工作区并切到「改动」。
@@ -935,7 +939,23 @@ export function useGlobalAgentListeners(): void {
       })().catch(() => { /* 文件监听不应影响会话流 */ })
     })
 
-    // ===== 0. 初始化：从持久化 meta 恢复 stoppedByUser 状态 =====
+    // ===== 0. 初始化：恢复 stoppedByUser 与主进程真实运行态 =====
+    // 运行态不落盘，窗口重载或 renderer 晚订阅时必须从主进程 activeSessions
+    // 补一份快照；快照只提升缺失/更旧的状态，不覆盖已收到的完成态。
+    window.electronAPI.listActiveAgentSessionSnapshots().then((snapshots) => {
+      unstable_batchedUpdates(() => {
+        for (const snapshot of snapshots) {
+          store.set(agentSessionStreamingStateAtomFamily(snapshot.sessionId), (existing) => {
+            return mergeActiveAgentSessionSnapshot(
+              existing,
+              snapshot,
+              latestTerminalRunStartedAt.get(snapshot.sessionId),
+            )
+          })
+        }
+      })
+    }).catch(console.error)
+
     window.electronAPI.listActiveAgentSessions().then((sessions) => {
       const stoppedIds = new Set<string>(
         sessions.filter((s) => s.stoppedByUser).map((s) => s.id)
@@ -959,6 +979,10 @@ export function useGlobalAgentListeners(): void {
           ? payload.event
           : null
         if (runStartedEvent) {
+          const latestTerminalStartedAt = latestTerminalRunStartedAt.get(sessionId)
+          if (latestTerminalStartedAt != null && runStartedEvent.startedAt > latestTerminalStartedAt) {
+            latestTerminalRunStartedAt.delete(sessionId)
+          }
           // 队列 run 会先通过独立 IPC 发送 started 投影，但该投影可能在窗口
           // 重载或跨 renderer 路由时丢失。run_started 是同一轮的第二个权威启动信号，
           // 必须在首个 SDK/tool 事件之前恢复 running、startedAt 和正常的 live UI。
@@ -1448,6 +1472,12 @@ export function useGlobalAgentListeners(): void {
         // 不发"任务已完成"通知（任务并未真正完成）、不清后台任务列表、不重载消息——
         // 等后台任务完成时 Agent 会自动唤醒续轮。
         const backgroundTasksPending = data.backgroundTasksPending === true
+        if (!backgroundTasksPending && data.startedAt != null) {
+          const previousTerminalStartedAt = latestTerminalRunStartedAt.get(data.sessionId)
+          if (previousTerminalStartedAt == null || data.startedAt > previousTerminalStartedAt) {
+            latestTerminalRunStartedAt.set(data.sessionId, data.startedAt)
+          }
+        }
         const hasStreamError = store.get(agentStreamErrorsAtom).has(data.sessionId)
 
         // 主进程随完成事件携带刚落盘的单条 meta；不要为此重新拉取整个会话索引。

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import type { EditorView } from '@codemirror/view'
-import { clampSuggestionPosition, getEditorCaretAnchor, isVaultTriggerContext, shouldCloseVaultSuggestion } from './VaultLiveMarkdownEditor'
+import { clampSuggestionPosition, getEditorCaretAnchor, isVaultTriggerContext, nextSuggestionIndex, shouldCloseVaultSuggestion } from './VaultLiveMarkdownEditor'
 
 interface FakeWindow {
   innerWidth: number
@@ -88,5 +88,13 @@ describe('Vault reference trigger typing', () => {
     expect(shouldCloseVaultSuggestion('*')).toBe(true)
     expect(shouldCloseVaultSuggestion('and/or')).toBe(true)
     expect(shouldCloseVaultSuggestion('line\nbreak')).toBe(true)
+  })
+
+  test('Given an open suggestion list When arrow keys navigate Then the highlighted item wraps around', () => {
+    expect(nextSuggestionIndex(0, 3, 1)).toBe(1)
+    expect(nextSuggestionIndex(2, 3, 1)).toBe(0)
+    expect(nextSuggestionIndex(0, 3, -1)).toBe(2)
+    expect(nextSuggestionIndex(1, 3, -1)).toBe(0)
+    expect(nextSuggestionIndex(0, 0, 1)).toBe(0)
   })
 })

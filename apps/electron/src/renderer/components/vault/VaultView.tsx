@@ -775,7 +775,7 @@ export function VaultView(): React.ReactElement {
             </section>
             <section>
               <p className="font-medium text-foreground">Proma 引用</p>
-              <p>在正文输入 <code className="rounded bg-muted px-1 py-0.5 text-foreground">/</code>、<code className="rounded bg-muted px-1 py-0.5 text-foreground">#</code>、<code className="rounded bg-muted px-1 py-0.5 text-foreground">&amp;</code>、<code className="rounded bg-muted px-1 py-0.5 text-foreground">~</code> 或 <code className="rounded bg-muted px-1 py-0.5 text-foreground">*</code>，会在光标旁显示对应建议；使用方向键和 Enter 选择。</p>
+              <p>在行首或空格后输入 <code className="rounded bg-muted px-1 py-0.5 text-foreground">/</code>、<code className="rounded bg-muted px-1 py-0.5 text-foreground">#</code>、<code className="rounded bg-muted px-1 py-0.5 text-foreground">&amp;</code>、<code className="rounded bg-muted px-1 py-0.5 text-foreground">~</code> 或 <code className="rounded bg-muted px-1 py-0.5 text-foreground">*</code>，会在光标旁显示建议；符号本身仍会正常写入笔记。继续输入可过滤，方向键选择，Enter 插入引用，Esc 关闭建议并保留已输入的符号。</p>
             </section>
           </div>
           <DialogFooter>

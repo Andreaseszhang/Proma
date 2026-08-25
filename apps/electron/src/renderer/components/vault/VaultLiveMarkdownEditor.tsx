@@ -653,6 +653,21 @@ export function getEditorCaretAnchor(view: EditorView | null, host: HTMLElement)
   return { left: hostRect.left + 16, bottom: hostRect.top + 40 }
 }
 
+const vaultReferenceTriggers: VaultReferenceTrigger[] = ['/', '#', '&', '~', '～', '*']
+
+/** Triggers only fire at a word start so ordinary Markdown typing is untouched. */
+export function isVaultTriggerContext(charBefore: string): boolean {
+  return charBefore === '' || /\s/.test(charBefore)
+}
+
+/** Keeps normal Markdown input usable: `# `, `**bold**` and multi-line text dismiss the popup. */
+export function shouldCloseVaultSuggestion(query: string): boolean {
+  if (query === '') return false
+  if (/[\r\n]/.test(query)) return true
+  if (/^\s/.test(query)) return true
+  return vaultReferenceTriggers.some((trigger) => query.includes(trigger))
+}
+
 export function clampSuggestionPosition(anchor: VaultCaretAnchor): { left: number; top: number } {
   return {
     left: Math.min(Math.max(8, anchor.left), Math.max(8, window.innerWidth - 316)),
@@ -734,11 +749,17 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
 
   const selectSuggestion = React.useCallback((choice: VaultReferenceChoice): void => {
     const current = suggestionRef.current
-    const instance = instanceRef.current
-    if (!current || !instance) return
-    instance.insert(serializeVaultReference(choice.reference), { start: current.from, end: current.from })
+    const view = viewRef.current
+    if (!current || !view) return
+    const marker = serializeVaultReference(choice.reference)
+    // Replace the typed trigger and query so the raw symbol never lingers in the note.
+    const to = Math.max(current.from, view.state.selection.main.head)
+    view.dispatch({
+      changes: { from: current.from, to, insert: marker },
+      selection: { anchor: current.from + marker.length },
+    })
     setSuggestion(null)
-    instance.focus()
+    view.focus()
   }, [])
 
 
@@ -793,6 +814,24 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
               if (viewRef.current === view) viewRef.current = null
             },
           }
+        }),
+        EditorView.updateListener.of((update) => {
+          const current = suggestionRef.current
+          if (!current) return
+          if (!update.docChanged && !update.selectionSet) return
+          const head = update.state.selection.main.head
+          const typed = head > current.from ? update.state.doc.sliceString(current.from, head) : ''
+          if (!typed.startsWith(current.trigger)) {
+            setSuggestion(null)
+            return
+          }
+          const query = typed.slice(current.trigger.length)
+          if (shouldCloseVaultSuggestion(query)) {
+            setSuggestion(null)
+            return
+          }
+          const { left, top } = clampSuggestionPosition(getEditorCaretAnchor(update.view, host))
+          setSuggestion((previous) => previous ? { ...previous, query, left, top } : previous)
         }),
         ...markdownSyntaxVisibility,
         ...createVaultReferenceExtension({
@@ -856,36 +895,30 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
           })
           return
         }
-        if (event.key === 'Enter') {
+        if (event.key === 'Enter' || event.key === 'Tab') {
           event.preventDefault()
           const choice = suggestionItemsRef.current[suggestionIndexRef.current]
           if (choice) selectSuggestion(choice)
           return
         }
-        if (event.key === 'Backspace') {
-          event.preventDefault()
-          setSuggestion((current) => {
-            if (!current || current.query.length === 0) return null
-            return { ...current, query: current.query.slice(0, -1) }
-          })
-          return
-        }
-        if (!event.metaKey && !event.ctrlKey && !event.altKey && event.key.length === 1) {
-          event.preventDefault()
-          setSuggestion((current) => current ? { ...current, query: current.query + event.key } : current)
-        }
+        // Everything else keeps editing the document; the update listener re-derives the query.
         return
       }
-      if (!event.metaKey && !event.ctrlKey && !event.altKey && ['/', '#', '&', '~', '～', '*'].includes(event.key)) {
-        event.preventDefault()
-        const instance = instanceRef.current
-        const view = viewRef.current
-        const from = view?.state.selection.main.head ?? instance?.selections()[0]?.end ?? 0
+      if (!event.metaKey && !event.ctrlKey && !event.altKey && vaultReferenceTriggers.includes(event.key as VaultReferenceTrigger)) {
         const trigger = event.key as VaultReferenceTrigger
         const type = trigger === '*' ? 'all' : vaultReferenceTypeForTrigger(trigger)
         if (!type) return
-        const { left, top } = clampSuggestionPosition(getEditorCaretAnchor(view, host))
-        setSuggestion({ trigger, type, query: '', from, left, top })
+        // Let the character land in the document first, then decide whether to suggest.
+        window.setTimeout(() => {
+          const view = viewRef.current
+          if (!view) return
+          const head = view.state.selection.main.head
+          const from = head - trigger.length
+          if (from < 0 || view.state.doc.sliceString(from, head) !== trigger) return
+          if (!isVaultTriggerContext(from > 0 ? view.state.doc.sliceString(from - 1, from) : '')) return
+          const { left, top } = clampSuggestionPosition(getEditorCaretAnchor(view, host))
+          setSuggestion({ trigger, type, query: '', from, left, top })
+        }, 0)
       }
     }
     host.addEventListener('keydown', onKeyDown)

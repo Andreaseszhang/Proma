@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import type { EditorView } from '@codemirror/view'
-import { clampSuggestionPosition, getEditorCaretAnchor } from './VaultLiveMarkdownEditor'
+import { clampSuggestionPosition, getEditorCaretAnchor, isVaultTriggerContext, shouldCloseVaultSuggestion } from './VaultLiveMarkdownEditor'
 
 interface FakeWindow {
   innerWidth: number
@@ -67,5 +67,26 @@ describe('Vault reference suggestion anchoring', () => {
   test('Given a caret near the viewport edge When the popup opens Then it is clamped on screen', () => {
     const position = clampSuggestionPosition({ left: 1430, bottom: 895 })
     expect(position).toEqual({ left: 1124, top: 600 })
+  })
+})
+
+describe('Vault reference trigger typing', () => {
+  test('Given a trigger symbol inside a word When it is typed Then no suggestion opens', () => {
+    expect(isVaultTriggerContext('')).toBe(true)
+    expect(isVaultTriggerContext(' ')).toBe(true)
+    expect(isVaultTriggerContext('\n')).toBe(true)
+    expect(isVaultTriggerContext('a')).toBe(false)
+    expect(isVaultTriggerContext('约')).toBe(false)
+  })
+
+  test('Given ordinary Markdown input When the trigger stays in the document Then the popup dismisses itself', () => {
+    expect(shouldCloseVaultSuggestion('')).toBe(false)
+    expect(shouldCloseVaultSuggestion('daily')).toBe(false)
+    expect(shouldCloseVaultSuggestion('vault design')).toBe(false)
+
+    expect(shouldCloseVaultSuggestion(' heading')).toBe(true)
+    expect(shouldCloseVaultSuggestion('*')).toBe(true)
+    expect(shouldCloseVaultSuggestion('and/or')).toBe(true)
+    expect(shouldCloseVaultSuggestion('line\nbreak')).toBe(true)
   })
 })

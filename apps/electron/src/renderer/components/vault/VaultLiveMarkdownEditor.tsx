@@ -135,8 +135,9 @@ class VaultReferenceWidget extends WidgetType {
           : '~'
     button.className = `vault-reference-chip ${chipClass}`
     button.dataset.referenceTrigger = trigger
+    button.dataset.referenceType = this.reference.type
+    button.dataset.referenceLabel = this.reference.label
     button.textContent = `${trigger}${this.reference.label}`
-    button.title = '点击打开引用；Option/Alt 点击重新选择引用'
     button.addEventListener('click', (event) => {
       if (event.altKey) this.onEdit(this.reference)
       else this.onActivate(this.reference)
@@ -660,6 +661,22 @@ export function getEditorCaretAnchor(view: EditorView | null, host: HTMLElement)
   return { left: hostRect.left + 16, bottom: hostRect.top + 40 }
 }
 
+const vaultReferenceTypeLabels: Record<VaultReferenceType, string> = {
+  skill: 'Skill',
+  mcp: 'MCP',
+  session: '会话',
+  todo: '待办',
+  calendar_event: '日程',
+}
+
+const vaultReferenceOpenHints: Record<VaultReferenceType, string> = {
+  skill: '点击在右侧打开 Skill 编辑页',
+  mcp: '点击打开 MCP 页面',
+  session: '点击打开对应会话',
+  todo: '点击定位到对应待办',
+  calendar_event: '点击定位到对应日程',
+}
+
 const vaultReferenceTriggers: VaultReferenceTrigger[] = ['/', '#', '&', '~', '～', '*']
 
 /** Triggers only fire at a word start so ordinary Markdown typing is untouched. */
@@ -713,6 +730,7 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
   const [suggestion, setSuggestion] = React.useState<{ trigger: VaultReferenceTrigger; type: VaultReferenceType | 'all'; query: string; from: number; left: number; top: number } | null>(null)
   const [suggestionItems, setSuggestionItems] = React.useState<VaultReferenceChoice[]>([])
   const [suggestionIndex, setSuggestionIndex] = React.useState(0)
+  const [chipTooltip, setChipTooltip] = React.useState<{ title: string; hint: string; left: number; top: number } | null>(null)
   const suggestionRef = React.useRef(suggestion)
   const suggestionItemsRef = React.useRef(suggestionItems)
   const suggestionIndexRef = React.useRef(suggestionIndex)
@@ -729,6 +747,35 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
   onActivateReferenceRef.current = onActivateReference
   workspaceSlugRef.current = workspaceSlug
   filesRef.current = files
+
+  React.useEffect(() => {
+    const host = hostRef.current
+    if (!host) return
+    const showTooltip = (event: MouseEvent): void => {
+      const chip = (event.target as HTMLElement | null)?.closest<HTMLElement>('.vault-reference-chip')
+      if (!chip) return
+      const type = chip.dataset.referenceType as VaultReferenceType | undefined
+      if (!type || !vaultReferenceTypeLabels[type]) return
+      const rect = chip.getBoundingClientRect()
+      setChipTooltip({
+        title: `${vaultReferenceTypeLabels[type]} · ${chip.dataset.referenceLabel ?? ''}`,
+        hint: `${vaultReferenceOpenHints[type]} · Option 点击重新选择`,
+        left: Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - 288)),
+        top: Math.max(8, rect.top - 8),
+      })
+    }
+    const hideTooltip = (event: MouseEvent): void => {
+      const nextTarget = event.relatedTarget as HTMLElement | null
+      if (nextTarget?.closest('.vault-reference-chip')) return
+      setChipTooltip(null)
+    }
+    host.addEventListener('mouseover', showTooltip)
+    host.addEventListener('mouseout', hideTooltip)
+    return () => {
+      host.removeEventListener('mouseover', showTooltip)
+      host.removeEventListener('mouseout', hideTooltip)
+    }
+  }, [])
 
   React.useEffect(() => {
     if (!suggestion) {
@@ -975,6 +1022,17 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
 
   return (
     <div ref={hostRef} className="vault-ink-mde relative h-full min-h-0 [&_.ink-mde]:h-full [&_.ink-mde-editor]:min-h-0 [&_.ink-mde-editor]:overflow-auto">
+      {chipTooltip && createPortal(
+        <div
+          role="tooltip"
+          className="pointer-events-none fixed z-[110] max-w-[280px] -translate-y-full rounded-md bg-popover px-2.5 py-1.5 shadow-lg ring-1 ring-border/60"
+          style={{ left: chipTooltip.left, top: chipTooltip.top }}
+        >
+          <p className="truncate text-[12px] font-medium text-foreground">{chipTooltip.title}</p>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">{chipTooltip.hint}</p>
+        </div>,
+        document.body,
+      )}
       {suggestion && createPortal(
         <div
           className="fixed z-[100] w-[300px] overflow-hidden rounded-lg bg-popover shadow-lg ring-1 ring-border/60"

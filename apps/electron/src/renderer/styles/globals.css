@@ -2444,6 +2444,11 @@
 .vault-ink-mde .vault-markdown-syntax-hidden * {
   display: none !important;
 }
+.vault-ink-mde .cm-editor.cm-focused,
+.vault-ink-mde .cm-editor:focus-visible,
+.vault-ink-mde .cm-content:focus-visible {
+  outline: none !important;
+}
 .vault-ink-mde .cm-content,
 .vault-ink-mde .cm-content[contenteditable='true'] {
   caret-color: hsl(var(--foreground)) !important;

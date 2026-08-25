@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
-import { BookOpen, ChevronDown, ChevronRight, CircleHelp, Folder, FolderOpen, Loader2, Plus, RefreshCw } from 'lucide-react'
+import { BookOpen, ChevronDown, ChevronRight, CircleHelp, Folder, FolderOpen, Loader2, Plus, RefreshCw, Save } from 'lucide-react'
 import { toast } from 'sonner'
 import type { VaultCandidate, VaultFileEntry, VaultReadResult, VaultSummary, SkillMeta } from '@proma/shared'
 import { Button } from '@/components/ui/button'
@@ -259,6 +259,19 @@ function VaultMarkdownEditor({
             }}
             className="h-10 min-w-0 flex-1 bg-transparent px-4 text-3xl font-semibold leading-tight text-foreground outline-none placeholder:text-muted-foreground/50"
           />
+          {draft !== readResult.content ? (
+            <Button
+              size="sm"
+              className="h-8 shrink-0 gap-1.5"
+              disabled={saving}
+              onClick={() => { void save() }}
+            >
+              {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Save size={14} />}
+              {saving ? '保存中' : '保存'}
+            </Button>
+          ) : (
+            <span className="shrink-0 text-[11px] text-muted-foreground">已保存</span>
+          )}
           <Tooltip>
             <TooltipTrigger asChild>
               <button
@@ -270,7 +283,7 @@ function VaultMarkdownEditor({
                 <CircleHelp size={16} />
               </button>
             </TooltipTrigger>
-            <TooltipContent>Vault 使用帮助</TooltipContent>
+            <TooltipContent>Vault 使用帮助（Cmd/Ctrl + S 保存）</TooltipContent>
           </Tooltip>
         </div>
         <div className="min-h-0 flex-1">

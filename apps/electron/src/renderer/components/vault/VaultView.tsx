@@ -30,6 +30,7 @@ import {
   type VaultReferenceType,
 } from './vault-reference-utils'
 import { getVaultEditorKey, shouldAdoptVaultReadContent } from './vault-editor-lifecycle'
+import { getVaultEditorHeaderActions } from './vault-editor-header-actions'
 import { getVaultSidebarLayout } from './vault-sidebar-layout'
 import { OBSIDIAN_NAME, ObsidianIcon, PROMA_MANAGED_VAULT_LABEL } from '@/components/obsidian/obsidian-brand'
 
@@ -193,10 +194,37 @@ function VaultFileList({
   return <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3 titlebar-no-drag">{renderEntries(tree, 0)}</div>
 }
 
+function VaultRefreshButton({
+  refreshing,
+  onRefresh,
+}: {
+  refreshing: boolean
+  onRefresh: () => void
+}): React.ReactElement {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          aria-label={`刷新 ${OBSIDIAN_NAME}`}
+          disabled={refreshing}
+          onClick={onRefresh}
+          className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+        >
+          <RefreshCw size={14} className={cn(refreshing && 'animate-spin')} />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>刷新 {OBSIDIAN_NAME}</TooltipContent>
+    </Tooltip>
+  )
+}
+
 function VaultMarkdownEditor({
   readResult,
   files,
   workspaceSlug,
+  refreshing,
+  onRefresh,
   onSave,
   onRename,
   onOpenWikiLink,
@@ -206,6 +234,8 @@ function VaultMarkdownEditor({
   readResult: VaultReadResult
   files: VaultFileEntry[]
   workspaceSlug: string | null
+  refreshing: boolean
+  onRefresh: () => void
   onSave: (nextContent: string) => Promise<void>
   onRename: (name: string) => Promise<void>
   onOpenWikiLink: (target: string) => void
@@ -290,32 +320,45 @@ function VaultMarkdownEditor({
             }}
             className="h-10 min-w-0 flex-1 bg-transparent px-4 text-3xl font-semibold leading-tight text-foreground outline-none placeholder:text-muted-foreground/50"
           />
-          {draft !== readResult.content ? (
-            <Button
-              size="sm"
-              className="h-8 shrink-0 gap-1.5"
-              disabled={saving}
-              onClick={() => { void save() }}
-            >
-              {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Save size={14} />}
-              {saving ? '保存中' : '保存'}
-            </Button>
-          ) : (
-            <span className="shrink-0 text-[11px] text-muted-foreground">已保存</span>
-          )}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                aria-label={`${OBSIDIAN_NAME} 使用帮助`}
-                onClick={onOpenTutorial}
-                className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              >
-                <CircleHelp size={16} />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>{OBSIDIAN_NAME} 使用帮助（Cmd/Ctrl + S 保存）</TooltipContent>
-          </Tooltip>
+          <div className="flex shrink-0 items-center gap-1">
+            {getVaultEditorHeaderActions(draft !== readResult.content).map((action) => {
+              if (action === 'refresh') {
+                return <VaultRefreshButton key={action} refreshing={refreshing} onRefresh={onRefresh} />
+              }
+              if (action === 'save') {
+                return (
+                  <Button
+                    key={action}
+                    size="sm"
+                    className="h-8 shrink-0 gap-1.5"
+                    disabled={saving}
+                    onClick={() => { void save() }}
+                  >
+                    {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Save size={14} />}
+                    {saving ? '保存中' : '保存'}
+                  </Button>
+                )
+              }
+              if (action === 'saved-status') {
+                return <span key={action} className="shrink-0 px-1 text-[11px] text-muted-foreground">已保存</span>
+              }
+              return (
+                <Tooltip key={action}>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label={`${OBSIDIAN_NAME} 使用帮助`}
+                      onClick={onOpenTutorial}
+                      className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    >
+                      <CircleHelp size={16} />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>{OBSIDIAN_NAME} 使用帮助（Cmd/Ctrl + S 保存）</TooltipContent>
+                </Tooltip>
+              )
+            })}
+          </div>
         </div>
         <div className="min-h-0 flex-1">
           <VaultLiveMarkdownEditor
@@ -351,6 +394,8 @@ function VaultMarkdownPane({
   files,
   loading,
   workspaceSlug,
+  refreshing,
+  onRefresh,
   onSave,
   onRename,
   onOpenWikiLink,
@@ -361,21 +406,31 @@ function VaultMarkdownPane({
   files: VaultFileEntry[]
   loading: boolean
   workspaceSlug: string | null
+  refreshing: boolean
+  onRefresh: () => void
   onSave: (nextContent: string) => Promise<void>
   onRename: (name: string) => Promise<void>
   onOpenWikiLink: (target: string) => void
   onActivateReference: (reference: VaultReferenceRange) => void
   onOpenTutorial: () => void
 }): React.ReactElement {
-  if (loading) {
+  if (loading || !readResult) {
     return (
-      <div className="flex h-full items-center justify-center text-muted-foreground">
-        <Loader2 className="size-5 animate-spin" />
-      </div>
+      <section className="flex min-w-0 flex-1 flex-col bg-muted/25">
+        <div className="mx-auto flex h-full w-full max-w-5xl flex-col px-5 py-5">
+          <div className="titlebar-no-drag flex min-w-0 items-center gap-2">
+            <p className="min-w-0 flex-1 truncate px-4 text-sm text-muted-foreground">{loading ? '正在加载笔记' : '选择一篇笔记开始编辑'}</p>
+            <VaultRefreshButton refreshing={refreshing} onRefresh={onRefresh} />
+          </div>
+          {loading && (
+            <div className="flex min-h-0 flex-1 items-center justify-center text-muted-foreground">
+              <Loader2 className="size-5 animate-spin" />
+            </div>
+          )}
+        </div>
+      </section>
     )
   }
-
-  if (!readResult) return <></>
 
   return (
     <section className="flex min-w-0 flex-1 flex-col bg-muted/25">
@@ -384,6 +439,8 @@ function VaultMarkdownPane({
         readResult={readResult}
         files={files}
         workspaceSlug={workspaceSlug}
+        refreshing={refreshing}
+        onRefresh={onRefresh}
         onSave={onSave}
         onRename={onRename}
         onOpenWikiLink={onOpenWikiLink}
@@ -414,6 +471,7 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
   const [vaultDiscoveryComplete, setVaultDiscoveryComplete] = React.useState(false)
   const [files, setFiles] = React.useState<VaultFileEntry[]>([])
   const [loading, setLoading] = React.useState(true)
+  const [refreshing, setRefreshing] = React.useState(false)
   const [fileLoading, setFileLoading] = React.useState(false)
   const [selectedFile, setSelectedFile] = useAtom(selectedVaultFileAtom)
   const [readResult, setReadResult] = useAtom(vaultReadResultAtom)
@@ -451,8 +509,9 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
     void window.electronAPI.setVaultUserContext(sessionId, selectedFile, true)
   }, [selectedFile, sessionId])
 
-  const refresh = React.useCallback(async ({ showLoading = false } = {}): Promise<void> => {
+  const refresh = React.useCallback(async ({ showLoading = false, userInitiated = false } = {}): Promise<void> => {
     if (showLoading) setLoading(true)
+    if (userInitiated) setRefreshing(true)
     try {
       const nextConfig = await window.electronAPI.ensureDefaultVault()
       setConfig(nextConfig)
@@ -477,7 +536,8 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
     } catch (error) {
       toast.error(error instanceof Error ? error.message : `无法读取 ${OBSIDIAN_NAME}`)
     } finally {
-      setLoading(false)
+      if (showLoading) setLoading(false)
+      if (userInitiated) setRefreshing(false)
     }
   }, [setReadResult, setSelectedFile])
 
@@ -846,7 +906,7 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
                 onSelect={(path) => { void openFile(path) }}
                 onDelete={setDeleteTarget}
               />
-              <div className="titlebar-no-drag flex shrink-0 items-center gap-1 border-t border-border/50 px-2 py-2">
+              <div className="titlebar-no-drag flex shrink-0 items-center border-t border-border/50 px-2 py-2">
                 <button
                   type="button"
                   onClick={() => { void switchVault() }}
@@ -855,14 +915,6 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
                   <FolderOpen size={14} className="shrink-0" />
                   <span className="truncate">切换 {OBSIDIAN_NAME}</span>
                 </button>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button type="button" aria-label={`刷新 ${OBSIDIAN_NAME}`} onClick={() => { void refresh({ showLoading: true }) }} className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
-                      <RefreshCw size={14} />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent>刷新 {OBSIDIAN_NAME}</TooltipContent>
-                </Tooltip>
               </div>
             </aside>
           )}
@@ -871,6 +923,8 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
             files={files}
             loading={fileLoading}
             workspaceSlug={workspaceSlug}
+            refreshing={refreshing}
+            onRefresh={() => { void refresh({ userInitiated: true }) }}
             onSave={save}
             onRename={rename}
             onOpenWikiLink={openWikiLink}
@@ -934,7 +988,7 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
           <div className="space-y-4 text-sm leading-6 text-muted-foreground">
             <section>
               <p className="font-medium text-foreground">编辑与保存</p>
-              <p>点击笔记开始编辑；按 Cmd/Ctrl + S 保存。左下角可以切换 {OBSIDIAN_NAME} 或刷新文件列表。</p>
+              <p>点击笔记开始编辑；按 Cmd/Ctrl + S 保存。左下角可以切换 {OBSIDIAN_NAME}，笔记标题右上角可以刷新文件列表。</p>
             </section>
             <section>
               <p className="font-medium text-foreground">双向链接</p>

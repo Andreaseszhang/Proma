@@ -707,7 +707,7 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
                   >
                     <BookOpen size={15} className="shrink-0 text-primary" />
                     <span className="truncate">{candidate.displayName}</span>
-                    {candidate.isPromaManaged && <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">Proma 专属</span>}
+                    {candidate.isPromaManaged && <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">Proma Vault</span>}
                   </button>
                 ))}
               </div>

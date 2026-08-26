@@ -24,7 +24,7 @@ import type {
   VaultWriteInput,
   VaultWriteResult,
 } from '@proma/shared'
-import { getVaultConfigPath } from './config-paths'
+import { getDefaultVaultDir, getVaultConfigPath, resolveDefaultVaultDir } from './config-paths'
 import { readJsonFileSafe, writeJsonFileAtomic, writeTextFileAtomic } from './safe-file'
 
 const MAX_VAULT_FILE_BYTES = 2 * 1024 * 1024
@@ -352,7 +352,16 @@ export function getVaultSummary(): VaultSummary | null {
   }
 }
 
-export function configureVault(rootPath: string, options: { inboxPath?: string; allowAgentWrites?: boolean } = {}): VaultSummary {
+function vaultSummary(config: VaultConfig): VaultSummary {
+  return {
+    displayName: config.displayName,
+    inboxPath: config.inboxPath,
+    allowAgentWrites: config.allowAgentWrites,
+    configuredAt: config.configuredAt,
+  }
+}
+
+function configureVaultAt(rootPath: string, configPath: string, options: { inboxPath?: string; allowAgentWrites?: boolean } = {}): VaultSummary {
   const root = assertVaultRoot(rootPath)
   const inboxPath = options.inboxPath?.trim() || 'Proma Inbox'
   const normalizedInboxPath = normalizeRelativeMarkdownPath(join(inboxPath, 'placeholder.md')).replace(/\/placeholder\.md$/, '')
@@ -363,13 +372,25 @@ export function configureVault(rootPath: string, options: { inboxPath?: string; 
     allowAgentWrites: options.allowAgentWrites === true,
     configuredAt: Date.now(),
   }
-  writeJsonFileAtomic(getVaultConfigPath(), config)
-  return {
-    displayName: config.displayName,
-    inboxPath: config.inboxPath,
-    allowAgentWrites: config.allowAgentWrites,
-    configuredAt: config.configuredAt,
-  }
+  writeJsonFileAtomic(configPath, config)
+  return vaultSummary(config)
+}
+
+export function configureVault(rootPath: string, options: { inboxPath?: string; allowAgentWrites?: boolean } = {}): VaultSummary {
+  return configureVaultAt(rootPath, getVaultConfigPath(), options)
+}
+
+export function ensureDefaultVaultAt(configPath: string, rootPath: string): VaultSummary {
+  const current = parseVaultConfig(readJsonFileSafe<unknown>(configPath))
+  if (current) return vaultSummary(current)
+  return configureVaultAt(rootPath, configPath, { inboxPath: 'Proma Inbox', allowAgentWrites: false })
+}
+
+/** 确保 Vault 页面可直接使用 Proma 管理的本地 Markdown 目录，且不改变已有选择。 */
+export function ensureDefaultVault(): VaultSummary {
+  const current = getVaultConfig()
+  if (current) return vaultSummary(current)
+  return ensureDefaultVaultAt(getVaultConfigPath(), getDefaultVaultDir())
 }
 
 export function authorizeDiscoveredVault(rootPath: string, options: { inboxPath?: string; allowAgentWrites?: boolean } = {}): VaultSummary {
@@ -416,6 +437,13 @@ export function discoverObsidianVaultCandidates(): VaultCandidate[] {
     : platform() === 'win32'
       ? [join(process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'), 'obsidian', 'obsidian.json')]
       : [join(process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config'), 'obsidian', 'obsidian.json')]
+  const managedRootPath = resolveDefaultVaultDir(dirname(getVaultConfigPath()))
+  let managedRoot: string | null = null
+  try {
+    managedRoot = existsSync(managedRootPath) ? assertVaultRoot(managedRootPath) : null
+  } catch {
+    managedRoot = null
+  }
   const candidates = new Map<string, VaultCandidate>()
 
   for (const configPath of configPaths) {
@@ -425,6 +453,7 @@ export function discoverObsidianVaultCandidates(): VaultCandidate[] {
         if (typeof vault.path !== 'string' || !vault.path) continue
         try {
           const root = assertVaultRoot(vault.path)
+          if (root === managedRoot) continue
           candidates.set(root, {
             path: root,
             displayName: basename(root) || 'Vault',

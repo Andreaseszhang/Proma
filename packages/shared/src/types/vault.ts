@@ -71,6 +71,7 @@ export interface VaultSourceSnapshot {
 
 export const VAULT_IPC_CHANNELS = {
   GET_CONFIG: 'vault:get-config',
+  ENSURE_DEFAULT: 'vault:ensure-default',
   DISCOVER: 'vault:discover',
   SELECT: 'vault:select',
   AUTHORIZE_CANDIDATE: 'vault:authorize-candidate',

@@ -167,6 +167,7 @@ import {
   clearVaultConfig,
   configureVault,
   discoverObsidianVaultCandidates,
+  ensureDefaultVault,
   formatVaultSourceBlock,
   getConfiguredVaultFileSystem,
   getVaultSummary,
@@ -5856,6 +5857,8 @@ export function registerIpcHandlers(): void {
   // ===== 用户授权的 Markdown Vault =====
 
   ipcMain.handle(VAULT_IPC_CHANNELS.GET_CONFIG, async () => getVaultSummary())
+
+  ipcMain.handle(VAULT_IPC_CHANNELS.ENSURE_DEFAULT, async () => ensureDefaultVault())
 
   ipcMain.handle(VAULT_IPC_CHANNELS.DISCOVER, async () => discoverObsidianVaultCandidates())
 

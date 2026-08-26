@@ -28,6 +28,7 @@ import {
   type VaultReferenceRange,
   type VaultReferenceType,
 } from './vault-reference-utils'
+import { getVaultSidebarLayout } from './vault-sidebar-layout'
 
 function displayDocumentTitle(filename: string): string {
   return filename.replace(/\.md$/i, '')
@@ -394,6 +395,7 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
   const [quoting, setQuoting] = React.useState(false)
   const [vaultHelpOpen, setVaultHelpOpen] = React.useState(false)
   const [vaultSidebarCollapsed, setVaultSidebarCollapsed] = React.useState(false)
+  const vaultSidebarLayout = getVaultSidebarLayout(vaultSidebarCollapsed, embedded)
   const [skillDetail, setSkillDetail] = React.useState<{ skill: SkillMeta; isBuiltin: boolean; skillsDir: string } | null>(null)
   const [skillUpdating, setSkillUpdating] = React.useState(false)
   const selectedFileRef = React.useRef(selectedFile)
@@ -419,7 +421,8 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
   const refresh = React.useCallback(async (): Promise<void> => {
     setLoading(true)
     try {
-      const nextConfig = await window.electronAPI.getVaultConfig()
+      const configuredVault = await window.electronAPI.getVaultConfig()
+      const nextConfig = configuredVault ?? await window.electronAPI.ensureDefaultVault()
       setConfig(nextConfig)
       setFiles(nextConfig ? await window.electronAPI.listVaultFiles() : [])
       if (!nextConfig) {
@@ -722,66 +725,70 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
     <>
       <main className={cn('flex h-full min-h-0 flex-col bg-muted/25', embedded && 'bg-content-area')}>
         {!embedded && <div className="relative z-10 h-[100px] shrink-0 border-b border-border/60 bg-muted/25" />}
-        <div className="flex min-h-0 flex-1">
-          <aside className={cn('flex shrink-0 flex-col bg-muted/25 shadow-[1px_0_0_hsl(var(--border)/0.45)] transition-[width] duration-200', vaultSidebarCollapsed ? 'w-9' : embedded ? 'w-[200px]' : 'w-[280px]')}>
-        <header className={cn('flex h-14 items-center gap-2', vaultSidebarCollapsed ? 'justify-center px-1' : 'px-3', embedded ? 'titlebar-no-drag' : 'titlebar-drag-region')}>
-          {vaultSidebarCollapsed ? (
+        <div className="relative flex min-h-0 flex-1">
+          {vaultSidebarLayout.renderExpandButton && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <button type="button" aria-label="展开 Vault 侧栏" onClick={() => setVaultSidebarCollapsed(false)} className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground titlebar-no-drag">
+                <button
+                  type="button"
+                  aria-label="展开 Vault 文件树"
+                  onClick={() => setVaultSidebarCollapsed(false)}
+                  className="titlebar-no-drag absolute left-2 top-2 z-20 flex size-7 items-center justify-center rounded-md bg-background/90 text-muted-foreground shadow-sm hover:bg-muted hover:text-foreground"
+                >
                   <PanelLeftOpen size={15} />
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="right">展开 Vault 侧栏</TooltipContent>
+              <TooltipContent side="right">展开 Vault 文件树</TooltipContent>
             </Tooltip>
-          ) : (
-            <>
-              <BookOpen size={17} className="shrink-0 text-primary" />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[13px] font-medium text-foreground">{config.displayName}</p>
-                <p className="truncate text-[11px] text-muted-foreground">{files.length} 篇 Markdown 笔记</p>
-              </div>
-              <div className="flex items-center gap-0.5 titlebar-no-drag">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button type="button" aria-label="折叠 Vault 侧栏" onClick={() => setVaultSidebarCollapsed(true)} className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
-                      <PanelLeftClose size={15} />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent>折叠 Vault 侧栏</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button type="button" aria-label="新建笔记" onClick={() => { void createNote() }} className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
-                      <Plus size={16} />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent>新建笔记</TooltipContent>
-                </Tooltip>
-              </div>
-            </>
           )}
-        </header>
-          {!vaultSidebarCollapsed && <VaultFileList files={files} selectedPath={selectedFile} onSelect={(path) => { void openFile(path) }} />}
-          {!vaultSidebarCollapsed && <div className="titlebar-no-drag flex shrink-0 items-center gap-1 border-t border-border/50 px-2 py-2">
-            <button
-              type="button"
-              onClick={() => { void switchVault() }}
-              className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            >
-              <FolderOpen size={14} className="shrink-0" />
-              <span className="truncate">切换 Vault</span>
-            </button>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button type="button" aria-label="刷新 Vault" onClick={() => { void refresh() }} className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
-                  <RefreshCw size={14} />
+          {vaultSidebarLayout.renderSidebar && (
+            <aside className={cn('flex shrink-0 flex-col bg-muted/25 shadow-[1px_0_0_hsl(var(--border)/0.45)]', vaultSidebarLayout.widthClass)}>
+              <header className={cn('flex h-14 items-center gap-2 px-3', embedded ? 'titlebar-no-drag' : 'titlebar-drag-region')}>
+                <BookOpen size={17} className="shrink-0 text-primary" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13px] font-medium text-foreground">{config.displayName}</p>
+                  <p className="truncate text-[11px] text-muted-foreground">{files.length} 篇 Markdown 笔记</p>
+                </div>
+                <div className="flex items-center gap-0.5 titlebar-no-drag">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button type="button" aria-label="折叠 Vault 文件树" onClick={() => setVaultSidebarCollapsed(true)} className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
+                        <PanelLeftClose size={15} />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>折叠 Vault 文件树</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button type="button" aria-label="新建笔记" onClick={() => { void createNote() }} className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
+                        <Plus size={16} />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>新建笔记</TooltipContent>
+                  </Tooltip>
+                </div>
+              </header>
+              <VaultFileList files={files} selectedPath={selectedFile} onSelect={(path) => { void openFile(path) }} />
+              <div className="titlebar-no-drag flex shrink-0 items-center gap-1 border-t border-border/50 px-2 py-2">
+                <button
+                  type="button"
+                  onClick={() => { void switchVault() }}
+                  className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  <FolderOpen size={14} className="shrink-0" />
+                  <span className="truncate">切换 Vault</span>
                 </button>
-              </TooltipTrigger>
-              <TooltipContent>刷新 Vault</TooltipContent>
-            </Tooltip>
-          </div>}
-          </aside>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button type="button" aria-label="刷新 Vault" onClick={() => { void refresh() }} className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
+                      <RefreshCw size={14} />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>刷新 Vault</TooltipContent>
+                </Tooltip>
+              </div>
+            </aside>
+          )}
           <VaultMarkdownPane
             readResult={readResult}
             files={files}

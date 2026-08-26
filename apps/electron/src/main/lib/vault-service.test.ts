@@ -2,8 +2,10 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { getDefaultVaultDir, resolveDefaultVaultDir } from './config-paths'
 import {
   createVaultFileSystem,
+  ensureDefaultVaultAt,
   formatVaultSourceBlock,
 } from './vault-service'
 
@@ -27,6 +29,50 @@ afterEach(() => {
 })
 
 describe('Vault file system', () => {
+  test('Given production and development config roots When default Vault paths are resolved Then each stays under its Proma config directory', () => {
+    expect(resolveDefaultVaultDir(join('/Users', 'andreas', '.proma'))).toBe(join('/Users', 'andreas', '.proma', 'vault'))
+    expect(resolveDefaultVaultDir(join('/Users', 'andreas', '.proma-dev'))).toBe(join('/Users', 'andreas', '.proma-dev', 'vault'))
+  })
+
+  test('Given no configured Vault When the managed Vault is ensured Then its directory and config are initialized idempotently', () => {
+    const configRoot = join(makeTempRoot(), '.proma-dev')
+    const vaultRoot = getDefaultVaultDir(configRoot)
+    const configPath = join(configRoot, 'vault.json')
+
+    const first = ensureDefaultVaultAt(configPath, vaultRoot)
+    const second = ensureDefaultVaultAt(configPath, vaultRoot)
+
+    expect(vaultRoot).toBe(join(configRoot, 'vault'))
+    expect(existsSync(vaultRoot)).toBe(true)
+    expect(existsSync(configPath)).toBe(true)
+    expect(first).toEqual(second)
+    expect(first).toMatchObject({ displayName: 'vault', inboxPath: 'Proma Inbox', allowAgentWrites: false })
+  })
+
+  test('Given an existing external Vault config When the managed Vault is ensured Then the external selection is preserved', () => {
+    const configRoot = join(makeTempRoot(), '.proma-dev')
+    const managedRoot = getDefaultVaultDir(configRoot)
+    const externalRoot = makeTempRoot()
+    const configPath = join(configRoot, 'vault.json')
+    const configuredAt = Date.UTC(2026, 7, 26)
+    writeFile(configPath, JSON.stringify({
+      rootPath: externalRoot,
+      displayName: 'External Notes',
+      inboxPath: 'Inbox',
+      allowAgentWrites: true,
+      configuredAt,
+    }))
+
+    const summary = ensureDefaultVaultAt(configPath, managedRoot)
+
+    expect(summary).toEqual({
+      displayName: 'External Notes',
+      inboxPath: 'Inbox',
+      allowAgentWrites: true,
+      configuredAt,
+    })
+  })
+
   test('Given an authorized Vault When files are listed Then only visible Markdown files are returned', () => {
     const root = makeTempRoot()
     writeFile(join(root, 'Inbox', 'idea.md'), '# Idea')

@@ -167,6 +167,27 @@ export function getVaultConfigPath(): string {
 }
 
 /**
+ * 解析 Proma 管理的默认 Markdown Vault 目录。
+ */
+export function resolveDefaultVaultDir(configDir: string): string {
+  return join(configDir, 'vault')
+}
+
+/**
+ * 获取 Proma 管理的默认 Markdown Vault 目录，并在首次使用时创建。
+ *
+ * @returns 正式版本 ~/.proma/vault/，开发模式 ~/.proma-dev/vault/
+ */
+export function getDefaultVaultDir(configDir = getConfigDir()): string {
+  const dir = resolveDefaultVaultDir(configDir)
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true })
+    console.log(`[配置] 已创建默认 Vault 目录: ${dir}`)
+  }
+  return dir
+}
+
+/**
  * 获取系统默认 App 探测缓存路径
  *
  * @returns ~/.proma/default-apps.json

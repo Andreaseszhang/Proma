@@ -6,7 +6,7 @@
  */
 
 import { join, basename } from 'node:path'
-import { mkdirSync, existsSync, cpSync, rmSync, readdirSync, readFileSync } from 'node:fs'
+import { mkdirSync, existsSync, cpSync, rmSync, readdirSync, readFileSync, renameSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { rmSyncWithRetry } from './fs-retry'
 
@@ -730,12 +730,29 @@ export function getSdkConfigDir(): string {
 }
 
 /**
- * 获取 Scratch Pad 文件路径
+ * 获取 Scratch Pad 文件路径。
  *
- * @returns ~/.proma/scratch-pad.md
+ * 首次访问时将旧版配置根目录下的文件原子移动到 Proma 管理的默认 Vault。
+ * 如果目标文件已存在或移动失败，则继续使用旧路径，绝不覆盖任一份内容。
+ *
+ * @returns 正式版本 ~/.proma/vault/scratch-pad.md，开发模式 ~/.proma-dev/vault/scratch-pad.md
  */
-export function getScratchPadPath(): string {
-  return join(getConfigDir(), 'scratch-pad.md')
+export function getScratchPadPath(configDir = getConfigDir()): string {
+  const legacyPath = join(configDir, 'scratch-pad.md')
+  const vaultPath = join(getDefaultVaultDir(configDir), 'scratch-pad.md')
+  if (!existsSync(legacyPath)) return vaultPath
+  if (existsSync(vaultPath)) {
+    console.warn(`[配置] Scratch Pad 迁移目标已存在，继续使用旧文件: ${legacyPath}`)
+    return legacyPath
+  }
+  try {
+    renameSync(legacyPath, vaultPath)
+    console.log(`[配置] 已迁移 Scratch Pad 到默认 Vault: ${vaultPath}`)
+    return vaultPath
+  } catch (error) {
+    console.error(`[配置] Scratch Pad 迁移失败，继续使用旧文件: ${legacyPath}`, error)
+    return legacyPath
+  }
 }
 
 /**

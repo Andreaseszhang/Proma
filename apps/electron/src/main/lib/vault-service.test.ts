@@ -219,6 +219,70 @@ describe('Vault file system', () => {
     expect(() => vault.deleteFile({ relativePath: 'linked-folder/outside.md' })).toThrow('软链接')
     expect(existsSync(join(root, 'linked.md'))).toBe(true)
     expect(existsSync(outsideFile)).toBe(true)
+  test('Given no note for today When an untitled note is created Then the readable base filename is used', () => {
+    const root = makeTempRoot()
+    const vault = createVaultFileSystem(root)
+
+    const created = vault.createUntitledNote('Proma Inbox', '# First', new Date(2026, 7, 26, 10, 0, 0))
+
+    expect(created).toMatchObject({ ok: true, relativePath: 'Proma Inbox/Untitled 2026-08-26.md' })
+    expect(vault.readFile('Proma Inbox/Untitled 2026-08-26.md').content).toBe('# First')
+  })
+
+  test('Given today base filename already exists When another untitled note is created Then it uses the next readable sequence without replacing the original', () => {
+    const root = makeTempRoot()
+    const vault = createVaultFileSystem(root)
+    const now = new Date(2026, 7, 26, 10, 0, 0)
+    vault.createUntitledNote('Proma Inbox', '# First', now)
+
+    const created = vault.createUntitledNote('Proma Inbox', '# Second', now)
+
+    expect(created).toMatchObject({ ok: true, relativePath: 'Proma Inbox/Untitled 2026-08-26 2.md' })
+    expect(vault.readFile('Proma Inbox/Untitled 2026-08-26.md').content).toBe('# First')
+    expect(vault.readFile('Proma Inbox/Untitled 2026-08-26 2.md').content).toBe('# Second')
+  })
+
+  test('Given several existing untitled filename conflicts When another note is created Then the first unused sequence is selected', () => {
+    const root = makeTempRoot()
+    const vault = createVaultFileSystem(root)
+    const now = new Date(2026, 7, 26, 10, 0, 0)
+    writeFile(join(root, 'Proma Inbox', 'Untitled 2026-08-26.md'), '# Existing base')
+    writeFile(join(root, 'Proma Inbox', 'Untitled 2026-08-26 2.md'), '# Existing second')
+    writeFile(join(root, 'Proma Inbox', 'Untitled 2026-08-26 4.md'), '# Existing fourth')
+
+    const created = vault.createUntitledNote('Proma Inbox', '# New', now)
+
+    expect(created).toMatchObject({ ok: true, relativePath: 'Proma Inbox/Untitled 2026-08-26 3.md' })
+    expect(vault.readFile('Proma Inbox/Untitled 2026-08-26 4.md').content).toBe('# Existing fourth')
+  })
+
+  test('Given rapid repeated untitled-note requests When they create the same day note Then every result has a unique file and preserves its own content', async () => {
+    const root = makeTempRoot()
+    const vault = createVaultFileSystem(root)
+    const now = new Date(2026, 7, 26, 10, 0, 0)
+
+    const created = await Promise.all(Array.from({ length: 8 }, (_, index) => Promise.resolve().then(() => (
+      vault.createUntitledNote('Proma Inbox', `# Request ${index + 1}`, now)
+    ))))
+
+    const paths = created.map((result) => {
+      if (!result.ok) throw new Error('未命名笔记创建不应发生内容冲突')
+      return result.relativePath
+    })
+    expect(new Set(paths).size).toBe(8)
+    expect(paths).toEqual([
+      'Proma Inbox/Untitled 2026-08-26.md',
+      'Proma Inbox/Untitled 2026-08-26 2.md',
+      'Proma Inbox/Untitled 2026-08-26 3.md',
+      'Proma Inbox/Untitled 2026-08-26 4.md',
+      'Proma Inbox/Untitled 2026-08-26 5.md',
+      'Proma Inbox/Untitled 2026-08-26 6.md',
+      'Proma Inbox/Untitled 2026-08-26 7.md',
+      'Proma Inbox/Untitled 2026-08-26 8.md',
+    ])
+    for (const [index, relativePath] of paths.entries()) {
+      expect(vault.readFile(relativePath).content).toBe(`# Request ${index + 1}`)
+    }
   })
 
   test('Given a session snapshot When it is formatted Then the Vault contains a portable quote and source URI', () => {

@@ -1,14 +1,17 @@
 import { createHash } from 'node:crypto'
 import {
+  closeSync,
   existsSync,
   lstatSync,
   mkdirSync,
+  openSync,
   readdirSync,
   readFileSync,
   realpathSync,
   renameSync,
   statSync,
   unlinkSync,
+  writeFileSync,
 } from 'node:fs'
 import { homedir, platform } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
@@ -115,6 +118,32 @@ function readableSnippet(content: string, query: string): { snippet: string; lin
   return null
 }
 
+function formatLocalDate(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function untitledNoteFilename(date: Date, sequence: number): string {
+  const suffix = sequence === 1 ? '' : ` ${sequence}`
+  return `Untitled ${formatLocalDate(date)}${suffix}.md`
+}
+
+function createFileExclusively(filePath: string, content: string): boolean {
+  let descriptor: number | undefined
+  try {
+    descriptor = openSync(filePath, 'wx')
+    writeFileSync(descriptor, content, 'utf-8')
+    return true
+  } catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'EEXIST') return false
+    throw error
+  } finally {
+    if (descriptor !== undefined) closeSync(descriptor)
+  }
+}
+
 export interface VaultUserContextSnapshot {
   rootPath: string
   displayName: string
@@ -161,6 +190,7 @@ export interface VaultFileSystem {
   listFiles(): VaultFileEntry[]
   readFile(relativePath: string): VaultReadResult
   writeFile(input: VaultWriteInput): VaultWriteResult
+  createUntitledNote(inboxPath: string, content?: string, now?: Date): VaultWriteResult
   renameFile(input: VaultRenameInput): VaultReadResult
   deleteFile(input: VaultDeleteInput): void
   search(query: string, limit?: number): VaultSearchResult[]
@@ -243,6 +273,25 @@ export function createVaultFileSystem(rootPath: string): VaultFileSystem {
     return { ok: true, relativePath: result.relativePath, sha256: result.sha256, modifiedAt: result.modifiedAt }
   }
 
+  const createUntitledNote = (inboxPath: string, content = '', now = new Date()): VaultWriteResult => {
+    if (Buffer.byteLength(content, 'utf-8') > MAX_VAULT_FILE_BYTES) {
+      throw new Error('Vault 写入内容超过 2 MB 限制')
+    }
+    const normalizedInboxPath = normalizeRelativeMarkdownPath(join(inboxPath, 'placeholder.md')).replace(/\/placeholder\.md$/, '')
+
+    for (let sequence = 1; sequence <= Number.MAX_SAFE_INTEGER; sequence++) {
+      const target = getSafeVaultTarget(root, `${normalizedInboxPath}/${untitledNoteFilename(now, sequence)}`)
+      mkdirSync(dirname(target.absolutePath), { recursive: true })
+      // Directory creation introduces new ancestors, so validate again before exclusive creation.
+      const revalidated = getSafeVaultTarget(root, target.relativePath)
+      if (!createFileExclusively(revalidated.absolutePath, content)) continue
+      const result = readFile(revalidated.relativePath)
+      return { ok: true, relativePath: result.relativePath, sha256: result.sha256, modifiedAt: result.modifiedAt }
+    }
+
+    throw new Error('Vault 无法分配未命名笔记文件名')
+  }
+
   const renameFile = (input: VaultRenameInput): VaultReadResult => {
     const source = getSafeVaultTarget(root, input.relativePath)
     const current = readFile(source.relativePath)
@@ -308,7 +357,7 @@ export function createVaultFileSystem(rootPath: string): VaultFileSystem {
     return results
   }
 
-  return { listFiles, readFile, writeFile, renameFile, deleteFile, search }
+  return { listFiles, readFile, writeFile, createUntitledNote, renameFile, deleteFile, search }
 }
 
 function sanitizeQuoteLabel(value: string): string {
@@ -458,6 +507,13 @@ export function getConfiguredVaultFileSystem(): VaultFileSystem {
   const config = getVaultConfig()
   if (!config) throw new Error('尚未选择 Obsidian')
   return createVaultFileSystem(config.rootPath)
+}
+
+/** 在已配置 Vault 的 Inbox 中原子创建一个不覆盖既有笔记的未命名 Markdown 文件。 */
+export function createUntitledVaultFile(): VaultWriteResult {
+  const config = getVaultConfig()
+  if (!config) throw new Error('尚未选择 Vault')
+  return createVaultFileSystem(config.rootPath).createUntitledNote(config.inboxPath)
 }
 
 export function discoverVaultCandidates(): VaultCandidate[] {

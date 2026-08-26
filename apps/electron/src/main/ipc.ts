@@ -166,6 +166,7 @@ import {
   authorizeDiscoveredVault,
   clearVaultConfig,
   configureVault,
+  createUntitledVaultFile,
   discoverObsidianVaultCandidates,
   discoverVaultCandidates,
   selectDefaultVault,
@@ -5929,6 +5930,8 @@ export function registerIpcHandlers(): void {
     if (typeof relativePath !== 'string' || typeof content !== 'string') throw new Error('Obsidian 新建笔记参数非法')
     return getConfiguredVaultFileSystem().writeFile({ relativePath, content, createOnly: true })
   })
+
+  ipcMain.handle(VAULT_IPC_CHANNELS.CREATE_UNTITLED_FILE, async () => createUntitledVaultFile())
 
   ipcMain.handle(VAULT_IPC_CHANNELS.RENAME_FILE, async (_, input: unknown) => {
     if (!input || typeof input !== 'object') throw new Error('Obsidian 重命名参数非法')

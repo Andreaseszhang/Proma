@@ -617,10 +617,8 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
 
   const createNote = async (): Promise<void> => {
     if (!config) return
-    const filename = `Untitled ${new Intl.DateTimeFormat('en-CA').format(new Date())}.md`
-    const relativePath = `${config.inboxPath}/${filename}`
     try {
-      const result = await window.electronAPI.createVaultFile(relativePath, '')
+      const result = await window.electronAPI.createUntitledVaultFile()
       if (!result.ok) return
       setRefreshToken((value) => value + 1)
       await openFile(result.relativePath)

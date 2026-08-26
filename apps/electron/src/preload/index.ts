@@ -6,7 +6,7 @@
  */
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, AGENT_ISLAND_IPC_CHANNELS } from '@proma/shared'
+import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, AGENT_ISLAND_IPC_CHANNELS, TERMINAL_IPC_CHANNELS } from '@proma/shared'
 import { USER_PROFILE_IPC_CHANNELS, SETTINGS_IPC_CHANNELS, SCRATCH_PAD_IPC_CHANNELS, APP_ICON_IPC_CHANNELS, DOCK_BADGE_IPC_CHANNELS, STORAGE_IPC_CHANNELS } from '../types'
 import type {
   RuntimeStatus,
@@ -149,6 +149,16 @@ import type {
   ResolvePlanningNativeSyncConflictInput,
   PlanningSyncProfile,
   SavePlanningSyncProfileInput,
+  AgentTerminalCloseEvent,
+  AgentTerminalOpenEvent,
+  TerminalCreateInput,
+  TerminalInput,
+  TerminalResizeInput,
+  TerminalState,
+  TerminalOutputEvent,
+  TerminalOutputAck,
+  TerminalSnapshot,
+  TerminalExitEvent,
 } from '@proma/shared'
 import type {
   UserProfile,
@@ -196,6 +206,18 @@ export interface ElectronAPI {
    * 用户安装完 Git / Node 后触发，强制刷新缓存
    */
   reinitRuntime: () => Promise<RuntimeStatus>
+
+  // ===== 本地终端 =====
+  createTerminal: (input: TerminalCreateInput) => Promise<TerminalState>
+  writeTerminal: (input: TerminalInput) => Promise<void>
+  resizeTerminal: (input: TerminalResizeInput) => Promise<void>
+  killTerminal: (terminalId: string) => Promise<void>
+  getTerminalSnapshot: (terminalId: string) => Promise<TerminalSnapshot>
+  acknowledgeTerminalOutput: (input: TerminalOutputAck) => void
+  onAgentTerminalOpen: (callback: (event: AgentTerminalOpenEvent) => void) => () => void
+  onAgentTerminalClose: (callback: (event: AgentTerminalCloseEvent) => void) => () => void
+  onTerminalOutput: (callback: (event: TerminalOutputEvent) => void) => () => void
+  onTerminalExit: (callback: (event: TerminalExitEvent) => void) => () => void
 
   /**
    * 获取指定目录的 Git 仓库状态
@@ -748,6 +770,8 @@ export interface ElectronAPI {
 
   /** 订阅 Agent 标题自动更新事件 */
   onAgentTitleUpdated: (callback: (data: { sessionId: string; title: string }) => void) => () => void
+  /** 订阅 Agent 主动更新活动 Worktree 的事件 */
+  onAgentActiveWorktreeUpdated: (callback: (session: AgentSessionMeta) => void) => () => void
 
   // ===== Agent 权限系统 =====
 
@@ -1278,6 +1302,33 @@ const electronAPI: ElectronAPI = {
 
   reinitRuntime: () => {
     return ipcRenderer.invoke(IPC_CHANNELS.REINIT_RUNTIME)
+  },
+
+  createTerminal: (input: TerminalCreateInput) => ipcRenderer.invoke(TERMINAL_IPC_CHANNELS.CREATE, input),
+  writeTerminal: (input: TerminalInput) => ipcRenderer.invoke(TERMINAL_IPC_CHANNELS.INPUT, input),
+  resizeTerminal: (input: TerminalResizeInput) => ipcRenderer.invoke(TERMINAL_IPC_CHANNELS.RESIZE, input),
+  killTerminal: (terminalId: string) => ipcRenderer.invoke(TERMINAL_IPC_CHANNELS.KILL, terminalId),
+  getTerminalSnapshot: (terminalId: string) => ipcRenderer.invoke(TERMINAL_IPC_CHANNELS.SNAPSHOT, terminalId),
+  acknowledgeTerminalOutput: (input: TerminalOutputAck) => ipcRenderer.send(TERMINAL_IPC_CHANNELS.ACK_OUTPUT, input),
+  onAgentTerminalOpen: (callback: (event: AgentTerminalOpenEvent) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, event: AgentTerminalOpenEvent): void => callback(event)
+    ipcRenderer.on(TERMINAL_IPC_CHANNELS.AGENT_OPEN, listener)
+    return () => ipcRenderer.removeListener(TERMINAL_IPC_CHANNELS.AGENT_OPEN, listener)
+  },
+  onAgentTerminalClose: (callback: (event: AgentTerminalCloseEvent) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, event: AgentTerminalCloseEvent): void => callback(event)
+    ipcRenderer.on(TERMINAL_IPC_CHANNELS.AGENT_CLOSE, listener)
+    return () => ipcRenderer.removeListener(TERMINAL_IPC_CHANNELS.AGENT_CLOSE, listener)
+  },
+  onTerminalOutput: (callback: (event: TerminalOutputEvent) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, event: TerminalOutputEvent): void => callback(event)
+    ipcRenderer.on(TERMINAL_IPC_CHANNELS.OUTPUT, listener)
+    return () => ipcRenderer.removeListener(TERMINAL_IPC_CHANNELS.OUTPUT, listener)
+  },
+  onTerminalExit: (callback: (event: TerminalExitEvent) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, event: TerminalExitEvent): void => callback(event)
+    ipcRenderer.on(TERMINAL_IPC_CHANNELS.EXIT, listener)
+    return () => ipcRenderer.removeListener(TERMINAL_IPC_CHANNELS.EXIT, listener)
   },
 
   getGitRepoStatus: (dirPath: string) => {
@@ -2071,6 +2122,11 @@ const electronAPI: ElectronAPI = {
     const listener = (_: unknown, data: { sessionId: string; title: string }): void => callback(data)
     ipcRenderer.on(AGENT_IPC_CHANNELS.TITLE_UPDATED, listener)
     return () => { ipcRenderer.removeListener(AGENT_IPC_CHANNELS.TITLE_UPDATED, listener) }
+  },
+  onAgentActiveWorktreeUpdated: (callback: (session: AgentSessionMeta) => void) => {
+    const listener = (_: unknown, session: AgentSessionMeta): void => callback(session)
+    ipcRenderer.on(AGENT_IPC_CHANNELS.ACTIVE_WORKTREE_UPDATED, listener)
+    return () => { ipcRenderer.removeListener(AGENT_IPC_CHANNELS.ACTIVE_WORKTREE_UPDATED, listener) }
   },
 
   // Agent 权限系统

@@ -5,6 +5,7 @@ import {
   replaceAgentSessionInFreshnessOrder,
   upsertAgentSession,
   mergeFetchedAgentSessions,
+  isDelegatedSessionHighlighted,
 } from './agent-session-list'
 
 function makeSession(
@@ -79,6 +80,26 @@ describe('upsertAgentSession', () => {
     const result = upsertAgentSession([parent, childA], childB)
     // 父会话与子会话 a 都必须仍然在列表中
     expect(result.map((s) => s.id).sort()).toEqual(['child-a', 'child-b', 'parent'])
+  })
+})
+
+describe('isDelegatedSessionHighlighted', () => {
+  test('Given 当前父会话右侧激活某个子会话 When 判断 Then 只有这个子会话处于高亮态', () => {
+    expect(isDelegatedSessionHighlighted('child', 'parent', 'parent', 'child')).toBe(true)
+    expect(isDelegatedSessionHighlighted('other-child', 'parent', 'parent', 'child')).toBe(false)
+  })
+
+  test('Given 当前父会话处于主区域且右侧激活子会话 When 判断父会话与子会话 Then 两者都被标记为高亮态', () => {
+    expect(isDelegatedSessionHighlighted('parent', 'parent', null, null)).toBe(true)
+    expect(isDelegatedSessionHighlighted('child', 'parent', 'parent', 'child')).toBe(true)
+  })
+
+  test('Given 另一个父会话下激活子会话且该父会话仍有 Tab When 当前父会话不同 Then 不高亮另一个父会话的子会话', () => {
+    expect(isDelegatedSessionHighlighted('child', 'current-parent', 'other-parent', 'child')).toBe(false)
+  })
+
+  test('Given 没有激活右侧子会话 When 判断 Then 子会话不标记为高亮态', () => {
+    expect(isDelegatedSessionHighlighted('child', 'parent', 'parent', null)).toBe(false)
   })
 })
 

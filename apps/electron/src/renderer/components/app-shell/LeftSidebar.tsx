@@ -112,6 +112,7 @@ import {
   collectAgentSessionTreeIds,
   groupArchivedAgentSessionsByProject,
   isAgentSessionVisibleInTrees,
+  isDelegatedSessionHighlighted,
   replaceAgentSessionInFreshnessOrder,
   sortAgentSessionsByUpdatedAtDesc,
 } from '@/lib/agent-session-list'
@@ -4406,12 +4407,19 @@ const DelegatedChildSessionItem = React.memo(function DelegatedChildSessionItem(
   onToggleArchive,
 }: DelegatedChildSessionItemProps): React.ReactElement {
   const sessionHoverPreviewEnabled = useAtomValue(sessionHoverPreviewEnabledAtom)
+  const activeSidePanelTab = useAtomValue(agentDiffPanelTabAtom).get(session.parentSessionId ?? '')
   const status = getDelegatedChildStatus(session, agentIndicatorMap)
+  const openInSidePanel = isDelegatedSessionHighlighted(
+    session.id,
+    activeSessionId,
+    session.parentSessionId ?? null,
+    activeSidePanelTab === getDelegationSidePanelTab(session.id) ? session.id : null,
+  )
 
   return (
     <AgentSessionItem
       session={session}
-      active={session.id === activeSessionId}
+      active={openInSidePanel}
       indicatorStatus={status}
       disableMiniMap={!sessionHoverPreviewEnabled}
       relativeTimeNow={relativeTimeNow}

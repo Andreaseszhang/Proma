@@ -174,6 +174,16 @@ export function mergeFetchedAgentSessions(
   return sortAgentSessionsByUpdatedAtDesc([...mergedFetched, ...survivingLocalOnly])
 }
 
+export function isDelegatedSessionHighlighted(
+  sessionId: string,
+  activeSessionId: string | null,
+  parentSessionId: string | null,
+  activeDelegationSessionId: string | null,
+): boolean {
+  if (sessionId === activeSessionId) return true
+  return parentSessionId === activeSessionId && sessionId === activeDelegationSessionId
+}
+
 /** 收集可见会话树里的父/子会话 id，用于判断当前会话是否已显示在侧栏中。 */
 export function collectAgentSessionTreeIds(
   items: readonly AgentSessionTreeLike[],

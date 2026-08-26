@@ -29,6 +29,7 @@ import {
   type VaultReferenceRange,
   type VaultReferenceType,
 } from './vault-reference-utils'
+import { getVaultEditorKey, shouldAdoptVaultReadContent } from './vault-editor-lifecycle'
 import { getVaultSidebarLayout } from './vault-sidebar-layout'
 import { OBSIDIAN_NAME, ObsidianIcon, PROMA_MANAGED_VAULT_LABEL } from '@/components/obsidian/obsidian-brand'
 
@@ -212,11 +213,19 @@ function VaultMarkdownEditor({
   onOpenTutorial: () => void
 }): React.ReactElement {
   const [draft, setDraft] = React.useState(readResult.content)
+  const previousReadContentRef = React.useRef(readResult.content)
   const [saving, setSaving] = React.useState(false)
   const [filename, setFilename] = React.useState(displayDocumentTitle(readResult.relativePath.split('/').pop() ?? readResult.relativePath))
   const [referencePicker, setReferencePicker] = React.useState<{ reference?: VaultReference; range?: VaultReferenceRange; type?: VaultReferenceType } | null>(null)
   const editorPageRef = React.useRef<HTMLDivElement>(null)
   const editorRef = React.useRef<VaultLiveMarkdownEditorHandle>(null)
+  React.useEffect(() => {
+    const previousReadContent = previousReadContentRef.current
+    previousReadContentRef.current = readResult.content
+    if (!shouldAdoptVaultReadContent(draft, previousReadContent)) return
+    setDraft(readResult.content)
+  }, [draft, readResult.content])
+
   const updateProperties = React.useCallback((entries: Array<{ key: string; value: string }>): void => {
     setDraft((current) => replaceVaultFrontmatterProperties(current, entries))
   }, [])
@@ -371,7 +380,7 @@ function VaultMarkdownPane({
   return (
     <section className="flex min-w-0 flex-1 flex-col bg-muted/25">
       <VaultMarkdownEditor
-        key={`${readResult.relativePath}:${readResult.sha256}`}
+        key={getVaultEditorKey(readResult.relativePath)}
         readResult={readResult}
         files={files}
         workspaceSlug={workspaceSlug}
@@ -423,6 +432,7 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
   const [skillUpdating, setSkillUpdating] = React.useState(false)
   const selectedFileRef = React.useRef(selectedFile)
   const readRequestRef = React.useRef(0)
+  const initialRefreshRef = React.useRef(true)
 
   React.useEffect(() => {
     selectedFileRef.current = selectedFile
@@ -441,8 +451,8 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
     void window.electronAPI.setVaultUserContext(sessionId, selectedFile, true)
   }, [selectedFile, sessionId])
 
-  const refresh = React.useCallback(async (): Promise<void> => {
-    setLoading(true)
+  const refresh = React.useCallback(async ({ showLoading = false } = {}): Promise<void> => {
+    if (showLoading) setLoading(true)
     try {
       const nextConfig = await window.electronAPI.ensureDefaultVault()
       setConfig(nextConfig)
@@ -472,7 +482,9 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
   }, [setReadResult, setSelectedFile])
 
   React.useEffect(() => {
-    void refresh()
+    const showLoading = initialRefreshRef.current
+    initialRefreshRef.current = false
+    void refresh({ showLoading })
   }, [refresh, refreshToken])
 
   React.useEffect(() => {
@@ -677,8 +689,15 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
         toast.error('文件已在外部修改，请重新打开后再保存')
         return
       }
-      setReadResult(await window.electronAPI.readVaultFile(result.relativePath))
-      setRefreshToken((value) => value + 1)
+      // Preserve the live editor instance: update the known write result rather
+      // than rereading/rekeying the document through the global refresh path.
+      setReadResult({
+        relativePath: result.relativePath,
+        content,
+        sha256: result.sha256,
+        modifiedAt: result.modifiedAt,
+      })
+      setFiles(await window.electronAPI.listVaultFiles())
       toast.success(`已保存到 ${OBSIDIAN_NAME}`)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '保存失败')
@@ -841,7 +860,7 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
                 </button>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <button type="button" aria-label={`刷新 ${OBSIDIAN_NAME}`} onClick={() => { void refresh() }} className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
+                    <button type="button" aria-label={`刷新 ${OBSIDIAN_NAME}`} onClick={() => { void refresh({ showLoading: true }) }} className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
                       <RefreshCw size={14} />
                     </button>
                   </TooltipTrigger>

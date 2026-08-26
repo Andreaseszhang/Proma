@@ -330,8 +330,6 @@ export interface AppSettings {
   richTextRenderingEnabled?: boolean
   /** Markdown 预览字号档位（默认 'medium'，对应 15px） */
   markdownFontSize?: MarkdownFontSize
-  /** 上次是否在 Scratch Pad 页（用于重启恢复） */
-  scratchPadActive?: boolean
   /** 应用图标变体 ID（dock + window icon），'default' 或 logo 变体 id */
   appIconVariant?: string
   /** 语音输入设置（Access Token 以加密态存储，由专用服务解密后返回渲染进程） */

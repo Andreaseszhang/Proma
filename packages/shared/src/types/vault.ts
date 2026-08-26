@@ -36,6 +36,11 @@ export interface VaultRenameInput {
   expectedSha256?: string
 }
 
+export interface VaultDeleteInput {
+  relativePath: string
+  expectedSha256?: string
+}
+
 export interface VaultReadResult {
   relativePath: string
   content: string
@@ -85,6 +90,7 @@ export const VAULT_IPC_CHANNELS = {
   WRITE_FILE: 'vault:write-file',
   CREATE_FILE: 'vault:create-file',
   RENAME_FILE: 'vault:rename-file',
+  DELETE_FILE: 'vault:delete-file',
   SEARCH: 'vault:search',
   APPEND_SOURCE: 'vault:append-source',
   SET_USER_CONTEXT: 'vault:set-user-context',

@@ -15,6 +15,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'nod
 import type {
   VaultCandidate,
   VaultConfig,
+  VaultDeleteInput,
   VaultFileEntry,
   VaultReadResult,
   VaultRenameInput,
@@ -161,6 +162,7 @@ export interface VaultFileSystem {
   readFile(relativePath: string): VaultReadResult
   writeFile(input: VaultWriteInput): VaultWriteResult
   renameFile(input: VaultRenameInput): VaultReadResult
+  deleteFile(input: VaultDeleteInput): void
   search(query: string, limit?: number): VaultSearchResult[]
 }
 
@@ -264,6 +266,26 @@ export function createVaultFileSystem(rootPath: string): VaultFileSystem {
     return readFile(revalidatedTarget.relativePath)
   }
 
+  const deleteFile = (input: VaultDeleteInput): void => {
+    const target = getSafeVaultTarget(root, input.relativePath)
+    if (!existsSync(target.absolutePath)) throw new Error(`Vault 文件不存在: ${target.relativePath}`)
+    const stats = lstatSync(target.absolutePath)
+    if (!stats.isFile()) throw new Error('Vault 目标不是普通文件')
+    if (input.expectedSha256) {
+      if (stats.size > MAX_VAULT_FILE_BYTES) throw new Error('Vault 文件超过 2 MB 校验上限')
+      const current = readFile(target.relativePath)
+      if (input.expectedSha256 !== current.sha256) {
+        throw new Error('文件已在外部修改，请刷新后再删除')
+      }
+    }
+
+    // Revalidate immediately before unlinking so no symlinked ancestor is accepted.
+    const revalidated = getSafeVaultTarget(root, target.relativePath)
+    const revalidatedStats = lstatSync(revalidated.absolutePath)
+    if (!revalidatedStats.isFile()) throw new Error('Vault 目标不是普通文件')
+    unlinkSync(revalidated.absolutePath)
+  }
+
   const search = (query: string, limit = 20): VaultSearchResult[] => {
     const normalizedQuery = query.trim().toLowerCase()
     if (!normalizedQuery) return []
@@ -286,7 +308,7 @@ export function createVaultFileSystem(rootPath: string): VaultFileSystem {
     return results
   }
 
-  return { listFiles, readFile, writeFile, renameFile, search }
+  return { listFiles, readFile, writeFile, renameFile, deleteFile, search }
 }
 
 function sanitizeQuoteLabel(value: string): string {

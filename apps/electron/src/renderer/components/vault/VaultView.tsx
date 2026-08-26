@@ -1,9 +1,10 @@
 import * as React from 'react'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
-import { ChevronDown, ChevronRight, CircleHelp, Folder, FolderOpen, Loader2, PanelLeftClose, PanelLeftOpen, Plus, RefreshCw, Save } from 'lucide-react'
+import { ChevronDown, ChevronRight, CircleHelp, Folder, FolderOpen, Loader2, PanelLeftClose, PanelLeftOpen, Plus, RefreshCw, Save, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { VaultCandidate, VaultFileEntry, VaultReadResult, VaultSummary, SkillMeta } from '@proma/shared'
 import { Button } from '@/components/ui/button'
+import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -84,10 +85,12 @@ function VaultFileList({
   files,
   selectedPath,
   onSelect,
+  onDelete,
 }: {
   files: VaultFileEntry[]
   selectedPath: string | null
   onSelect: (relativePath: string) => void
+  onDelete: (file: VaultFileEntry) => void
 }): React.ReactElement {
   const tree = React.useMemo(() => buildVaultTree(files), [files])
   const folderPaths = React.useMemo(() => collectFolderPaths(tree), [tree])
@@ -151,19 +154,36 @@ function VaultFileList({
         .map((file) => {
           const selected = selectedPath === file.relativePath
           return (
-            <button
+            <div
               key={file.relativePath}
-              type="button"
-              title={file.relativePath}
-              onClick={() => onSelect(file.relativePath)}
               className={cn(
-                'flex h-8 w-full min-w-0 items-center gap-2 rounded-md pr-2 text-left text-[13px] transition-colors',
+                'group flex h-8 w-full min-w-0 items-center rounded-md transition-colors',
                 selected ? 'bg-accent text-accent-foreground shadow-sm' : 'text-foreground/70 hover:bg-muted/70 hover:text-foreground',
               )}
               style={{ paddingLeft: `${18 + Math.min(depth, 6) * 14}px` }}
             >
-              <span className="min-w-0 truncate">{displayDocumentTitle(file.name)}</span>
-            </button>
+              <button
+                type="button"
+                title={file.relativePath}
+                onClick={() => onSelect(file.relativePath)}
+                className="h-full min-w-0 flex-1 truncate text-left text-[13px]"
+              >
+                {displayDocumentTitle(file.name)}
+              </button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={`删除笔记 ${displayDocumentTitle(file.name)}`}
+                    onClick={() => onDelete(file)}
+                    className="mr-1 flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-[opacity,color,background-color] hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover:opacity-100"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="right">删除笔记</TooltipContent>
+              </Tooltip>
+            </div>
           )
         })}
     </>
@@ -395,6 +415,8 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
   const [quoteNewPath, setQuoteNewPath] = React.useState('')
   const [quoting, setQuoting] = React.useState(false)
   const [vaultHelpOpen, setVaultHelpOpen] = React.useState(false)
+  const [deleteTarget, setDeleteTarget] = React.useState<VaultFileEntry | null>(null)
+  const [deleting, setDeleting] = React.useState(false)
   const [vaultSidebarCollapsed, setVaultSidebarCollapsed] = React.useState(false)
   const vaultSidebarLayout = getVaultSidebarLayout(vaultSidebarCollapsed, embedded)
   const [skillDetail, setSkillDetail] = React.useState<{ skill: SkillMeta; isBuiltin: boolean; skillsDir: string } | null>(null)
@@ -680,6 +702,37 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
     }
   }
 
+  const deleteNote = async (): Promise<void> => {
+    if (!deleteTarget || deleting) return
+    setDeleting(true)
+    try {
+      const deletingCurrentFile = selectedFileRef.current === deleteTarget.relativePath
+      const expectedSha256 = deletingCurrentFile && readResult?.relativePath === deleteTarget.relativePath
+        ? readResult.sha256
+        : undefined
+      await window.electronAPI.deleteVaultFile({
+        relativePath: deleteTarget.relativePath,
+        expectedSha256,
+      })
+
+      if (deletingCurrentFile) {
+        ++readRequestRef.current
+        selectedFileRef.current = null
+        setSelectedFile(null)
+        setReadResult(null)
+        setFileLoading(false)
+        if (sessionId) await window.electronAPI.setVaultUserContext(sessionId, null, true)
+      }
+      setDeleteTarget(null)
+      setRefreshToken((value) => value + 1)
+      toast.success('已删除 Vault 笔记')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '无法删除笔记')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   if (loading) {
     return <div className="flex h-full items-center justify-center text-muted-foreground"><Loader2 className="size-5 animate-spin" /></div>
   }
@@ -771,7 +824,12 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
                   </Tooltip>
                 </div>
               </header>
-              <VaultFileList files={files} selectedPath={selectedFile} onSelect={(path) => { void openFile(path) }} />
+              <VaultFileList
+                files={files}
+                selectedPath={selectedFile}
+                onSelect={(path) => { void openFile(path) }}
+                onDelete={setDeleteTarget}
+              />
               <div className="titlebar-no-drag flex shrink-0 items-center gap-1 border-t border-border/50 px-2 py-2">
                 <button
                   type="button"
@@ -805,6 +863,16 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
           />
         </div>
       </main>
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
+        title="删除 Vault 笔记？"
+        description={deleteTarget ? `“${deleteTarget.relativePath}”将从 Vault 中永久删除，此操作无法撤销。` : undefined}
+        confirmLabel="删除"
+        loadingLabel="删除中"
+        loading={deleting}
+        onConfirm={deleteNote}
+      />
       <Dialog
         open={quoteDialogOpen}
         onOpenChange={(open) => {

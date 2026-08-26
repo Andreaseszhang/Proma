@@ -156,6 +156,71 @@ describe('Vault file system', () => {
     expect(existsSync(join(root, 'Ideas', 'draft.md'))).toBe(false)
   })
 
+  test('Given a Markdown note When it is deleted with the current version Then it is removed from the Vault', () => {
+    const root = makeTempRoot()
+    writeFile(join(root, 'Ideas', 'draft.md'), '# Draft')
+    const vault = createVaultFileSystem(root)
+    const original = vault.readFile('Ideas/draft.md')
+
+    vault.deleteFile({ relativePath: original.relativePath, expectedSha256: original.sha256 })
+
+    expect(existsSync(join(root, 'Ideas', 'draft.md'))).toBe(false)
+    expect(vault.listFiles()).toEqual([])
+  })
+
+  test('Given an externally changed note When a stale delete is requested Then the note is preserved', () => {
+    const root = makeTempRoot()
+    writeFile(join(root, 'idea.md'), '# Before')
+    const vault = createVaultFileSystem(root)
+    const original = vault.readFile('idea.md')
+    writeFile(join(root, 'idea.md'), '# External')
+
+    expect(() => vault.deleteFile({
+      relativePath: original.relativePath,
+      expectedSha256: original.sha256,
+    })).toThrow('外部修改')
+    expect(vault.readFile('idea.md').content).toBe('# External')
+  })
+
+  test('Given a large Markdown note When deletion has no version precondition Then the note is still removed', () => {
+    const root = makeTempRoot()
+    writeFileSync(join(root, 'large.md'), 'x'.repeat(2 * 1024 * 1024 + 1), 'utf-8')
+    const vault = createVaultFileSystem(root)
+
+    vault.deleteFile({ relativePath: 'large.md' })
+
+    expect(existsSync(join(root, 'large.md'))).toBe(false)
+  })
+
+  test('Given hidden or escaping paths When deletion is requested Then no file outside the visible Vault is removed', () => {
+    const root = makeTempRoot()
+    const outside = join(root, '..', 'outside-delete.md')
+    writeFile(join(root, '.hidden', 'private.md'), '# Private')
+    writeFile(outside, '# Outside')
+    const vault = createVaultFileSystem(root)
+
+    expect(() => vault.deleteFile({ relativePath: '.hidden/private.md' })).toThrow('隐藏目录')
+    expect(() => vault.deleteFile({ relativePath: '../outside-delete.md' })).toThrow('上级目录')
+    expect(existsSync(join(root, '.hidden', 'private.md'))).toBe(true)
+    expect(existsSync(outside)).toBe(true)
+    rmSync(outside, { force: true })
+  })
+
+  test('Given symlinked files or ancestors When deletion is requested Then the links and targets are preserved', () => {
+    const root = makeTempRoot()
+    const outsideRoot = makeTempRoot()
+    const outsideFile = join(outsideRoot, 'outside.md')
+    writeFile(outsideFile, '# Outside')
+    symlinkSync(outsideFile, join(root, 'linked.md'))
+    symlinkSync(outsideRoot, join(root, 'linked-folder'))
+    const vault = createVaultFileSystem(root)
+
+    expect(() => vault.deleteFile({ relativePath: 'linked.md' })).toThrow('软链接')
+    expect(() => vault.deleteFile({ relativePath: 'linked-folder/outside.md' })).toThrow('软链接')
+    expect(existsSync(join(root, 'linked.md'))).toBe(true)
+    expect(existsSync(outsideFile)).toBe(true)
+  })
+
   test('Given a session snapshot When it is formatted Then the Vault contains a portable quote and source URI', () => {
     const markdown = formatVaultSourceBlock({
       type: 'agent-history',

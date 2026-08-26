@@ -5943,6 +5943,16 @@ export function registerIpcHandlers(): void {
     })
   })
 
+  ipcMain.handle(VAULT_IPC_CHANNELS.DELETE_FILE, async (_, input: unknown): Promise<void> => {
+    if (!input || typeof input !== 'object') throw new Error('Vault 删除参数非法')
+    const value = input as Record<string, unknown>
+    if (typeof value.relativePath !== 'string') throw new Error('Vault relativePath 必填')
+    getConfiguredVaultFileSystem().deleteFile({
+      relativePath: value.relativePath,
+      expectedSha256: typeof value.expectedSha256 === 'string' ? value.expectedSha256 : undefined,
+    })
+  })
+
   ipcMain.handle(VAULT_IPC_CHANNELS.SEARCH, async (_, query: unknown, limit?: unknown) => {
     if (typeof query !== 'string') throw new Error('Obsidian 搜索关键词必填')
     return getConfiguredVaultFileSystem().search(query, typeof limit === 'number' ? limit : undefined)

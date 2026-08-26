@@ -96,6 +96,7 @@ import {
   recordRightPanelTabVisit,
   removeRightPanelTabFromHistory,
 } from '@/lib/right-panel-tab-history'
+import { rememberStopGenerationTarget } from '@/lib/stop-generation-target'
 import { TerminalTabContent } from '@/components/tabs/TerminalTabContent'
 import { shouldShowBothFileSources } from './file-panel-layout'
 
@@ -883,6 +884,20 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
   }, [publishBrowserState, sessionId])
 
   const handleWorkspaceTabChange = React.useCallback((tab: AgentSidePanelTab) => {
+    // 点击会话类右侧 Tab 本身即代表用户将停止目标切换到其可见会话；
+    // 否则父会话的旧交互记录会抢在当前右侧会话之前被快捷键使用。
+    const delegatedSessionId = getDelegationSessionIdFromSidePanelTab(tab)
+    if (delegatedSessionId && sideDelegationSessionIds.includes(delegatedSessionId)) {
+      rememberStopGenerationTarget({ kind: 'agent', sessionId: delegatedSessionId })
+    } else {
+      const explorationSessionId = getExplorationSessionIdFromSidePanelTab(tab)
+      if (explorationSessionId && sideTemporaryAgents.some((branch) => branch.sessionId === explorationSessionId)) {
+        rememberStopGenerationTarget({ kind: 'agent', sessionId: explorationSessionId })
+      } else if (tab === 'chat' && sideChatConversationId) {
+        rememberStopGenerationTarget({ kind: 'chat', sessionId: sideChatConversationId })
+      }
+    }
+
     // 记忆编辑器采用防抖自动保存，并在组件卸载时 flush；切换组件不丢草稿。
     const previewId = getPreviewIdFromSidePanelTab(tab)
     if (previewId) {
@@ -900,7 +915,7 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
     if (!browserTabId) return
     desiredBrowserTabIdRef.current = browserTabId
     flushBrowserTabSelection()
-  }, [flushBrowserTabSelection, onTabChange, previewFiles, sessionId, setPreviewFileMap])
+  }, [flushBrowserTabSelection, onTabChange, previewFiles, sessionId, setPreviewFileMap, sideChatConversationId, sideDelegationSessionIds, sideTemporaryAgents])
 
   const handleOpenBrowserTab = React.useCallback(async () => {
     try {

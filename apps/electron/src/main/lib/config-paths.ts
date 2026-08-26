@@ -6,7 +6,7 @@
  */
 
 import { join, basename } from 'node:path'
-import { mkdirSync, existsSync, cpSync, rmSync, readdirSync, readFileSync, renameSync } from 'node:fs'
+import { mkdirSync, existsSync, cpSync, rmSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { rmSyncWithRetry } from './fs-retry'
 
@@ -729,25 +729,54 @@ export function getSdkConfigDir(): string {
   return dir
 }
 
+function nextScratchPadImportPath(vaultDir: string): string {
+  const firstPath = join(vaultDir, 'scratch-pad-imported.md')
+  if (!existsSync(firstPath)) return firstPath
+  let suffix = 2
+  while (existsSync(join(vaultDir, `scratch-pad-imported-${suffix}.md`))) suffix += 1
+  return join(vaultDir, `scratch-pad-imported-${suffix}.md`)
+}
+
+function replaceEmptyScratchPadTarget(legacyPath: string, vaultPath: string, vaultDir: string): void {
+  const emptyBackupPath = join(vaultDir, `.scratch-pad-empty-${process.pid}-${Date.now()}.md`)
+  renameSync(vaultPath, emptyBackupPath)
+  try {
+    renameSync(legacyPath, vaultPath)
+    unlinkSync(emptyBackupPath)
+  } catch (error) {
+    if (existsSync(emptyBackupPath) && !existsSync(vaultPath)) renameSync(emptyBackupPath, vaultPath)
+    throw error
+  }
+}
+
 /**
  * 获取 Scratch Pad 文件路径。
  *
  * 首次访问时将旧版配置根目录下的文件原子移动到 Proma 管理的默认 Vault。
- * 如果目标文件已存在或移动失败，则继续使用旧路径，绝不覆盖任一份内容。
+ * 空目标由旧草稿接管；非空目标保留，旧草稿移动为唯一的 imported Markdown 文件。
+ * 迁移失败时继续使用旧路径，绝不覆盖已有内容。
  *
  * @returns 正式版本 ~/.proma/vault/scratch-pad.md，开发模式 ~/.proma-dev/vault/scratch-pad.md
  */
 export function getScratchPadPath(configDir = getConfigDir()): string {
   const legacyPath = join(configDir, 'scratch-pad.md')
-  const vaultPath = join(getDefaultVaultDir(configDir), 'scratch-pad.md')
+  const vaultDir = getDefaultVaultDir(configDir)
+  const vaultPath = join(vaultDir, 'scratch-pad.md')
   if (!existsSync(legacyPath)) return vaultPath
-  if (existsSync(vaultPath)) {
-    console.warn(`[配置] Scratch Pad 迁移目标已存在，继续使用旧文件: ${legacyPath}`)
-    return legacyPath
-  }
   try {
-    renameSync(legacyPath, vaultPath)
-    console.log(`[配置] 已迁移 Scratch Pad 到默认 Vault: ${vaultPath}`)
+    if (!existsSync(vaultPath)) {
+      renameSync(legacyPath, vaultPath)
+      console.log(`[配置] 已迁移 Scratch Pad 到默认 Vault: ${vaultPath}`)
+      return vaultPath
+    }
+    if (statSync(vaultPath).size === 0) {
+      replaceEmptyScratchPadTarget(legacyPath, vaultPath, vaultDir)
+      console.log(`[配置] 已用旧草稿接管默认 Vault Scratch Pad: ${vaultPath}`)
+      return vaultPath
+    }
+    const importedPath = nextScratchPadImportPath(vaultDir)
+    renameSync(legacyPath, importedPath)
+    console.log(`[配置] 默认 Vault 已有 Scratch Pad，旧草稿已导入: ${importedPath}`)
     return vaultPath
   } catch (error) {
     console.error(`[配置] Scratch Pad 迁移失败，继续使用旧文件: ${legacyPath}`, error)

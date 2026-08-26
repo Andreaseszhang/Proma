@@ -2433,9 +2433,17 @@
   color: hsl(var(--foreground));
 }
 .vault-ink-mde .ink-mde-editor {
+  min-height: 0;
+  overflow: hidden !important;
   padding: 0 !important;
 }
+.vault-ink-mde .cm-editor {
+  min-height: 0;
+  flex: 1 1 auto;
+}
 .vault-ink-mde .cm-scroller {
+  height: 100% !important;
+  overflow: auto !important;
   font-family: inherit !important;
 }
 

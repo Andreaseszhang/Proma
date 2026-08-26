@@ -1001,9 +1001,15 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
     }
     host.addEventListener('keydown', onKeyDown)
 
+    const resizeObserver = new ResizeObserver(() => {
+      viewRef.current?.requestMeasure()
+    })
+    resizeObserver.observe(host)
+
     return () => {
       disposed = true
       ready = false
+      resizeObserver.disconnect()
       host.removeEventListener('keydown', onKeyDown)
       setSuggestion(null)
       if (localInstance) localInstance.destroy()
@@ -1021,7 +1027,7 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
   }, [value])
 
   return (
-    <div ref={hostRef} className="vault-ink-mde relative h-full min-h-0 [&_.ink-mde]:h-full [&_.ink-mde-editor]:min-h-0 [&_.ink-mde-editor]:overflow-auto">
+    <div ref={hostRef} className="vault-ink-mde relative h-full min-h-0 [&_.ink-mde]:h-full [&_.ink-mde-editor]:min-h-0">
       {chipTooltip && createPortal(
         <div
           role="tooltip"

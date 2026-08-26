@@ -43,6 +43,8 @@ import {
   workspaceComponentTabsAtomFamily,
   isWorkspaceComponentTab,
   isUserPriorityWorkspaceComponentTab,
+  sanitizeWorkspaceComponentTabs,
+  getDelegationTabLabel,
   agentSessionStreamingStateAtomFamily,
   fileBrowserAutoRevealAtom,
   agentSelectedWorktreeAtom,
@@ -636,6 +638,13 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
   // Todo / 日程 / 能力 / 记忆是工作区组件，而不是会话附件；同一项目下切换会话仍保留打开状态。
   const [workspaceComponentTabs, setWorkspaceComponentTabs] = useAtom(workspaceComponentTabsAtomFamily(currentWorkspaceId ?? ''))
   const automationFormOpen = useAtomValue(automationFormAtom).open
+
+  React.useEffect(() => {
+    const validTabs = sanitizeWorkspaceComponentTabs(workspaceComponentTabs)
+    if (validTabs === workspaceComponentTabs) return
+    setWorkspaceComponentTabs(validTabs)
+  }, [setWorkspaceComponentTabs, workspaceComponentTabs])
+
   const agentStreamState = useAtomValue(agentSessionStreamingStateAtomFamily(sessionId))
   const memoryChangesMap = useAtomValue(workspaceMemoryChangesAtom)
   const setMemoryNavigationRequest = useSetAtom(memoryFileNavigationAtom)
@@ -961,7 +970,7 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
       ))
       return child ? [{
         id: getDelegationSidePanelTab(child.id),
-        label: child.title,
+        label: getDelegationTabLabel(child.title),
         icon: <GitBranch className="size-3.5" />,
         closable: true,
       }] : []

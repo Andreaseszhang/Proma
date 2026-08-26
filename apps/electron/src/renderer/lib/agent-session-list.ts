@@ -197,7 +197,9 @@ export function isAgentSessionVisibleInTrees(
 
 /**
  * Resolve a delegated child's current sidebar status. A live status takes
- * precedence over the persisted delegation status after the child is rerun.
+ * precedence over persisted state after the child is rerun. Completion is
+ * intentionally supplied only by the ephemeral "unviewed" indicator map,
+ * so historical delegated sessions never retain a permanent green marker.
  */
 export function getDelegatedChildSessionStatus(
   session: AgentSessionMeta,

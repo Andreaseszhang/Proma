@@ -1054,8 +1054,10 @@ export const agentRunningSessionIdsAtom = atom<Set<string>>((get) => {
 /** 侧边栏会话指示点状态 */
 export type SessionIndicatorStatus = 'idle' | 'running' | 'blocked' | 'completed'
 
-/** 已完成但用户尚未查看的会话 ID 集合 */
+/** 顶层会话已完成但用户尚未查看的会话 ID 集合。 */
 export const unviewedCompletedSessionIdsAtom = atom<Set<string>>(new Set<string>())
+/** 委派子会话已完成但用户尚未查看的会话 ID 集合；不计入 Dock/Launcher 角标。 */
+export const unviewedCompletedDelegationSessionIdsAtom = atom<Set<string>>(new Set<string>())
 
 let lastIndicatorSignature = ''
 let lastIndicatorMap = new Map<string, SessionIndicatorStatus>()
@@ -1089,6 +1091,7 @@ export const agentSessionIndicatorMapAtom = atom<Map<string, SessionIndicatorSta
   const pendingAskUser = get(allPendingAskUserRequestsAtom)
   const pendingExitPlan = get(allPendingExitPlanRequestsAtom)
   const unviewedCompleted = get(unviewedCompletedSessionIdsAtom)
+  const unviewedCompletedDelegations = get(unviewedCompletedDelegationSessionIdsAtom)
 
   const map = new Map<string, SessionIndicatorStatus>()
 
@@ -1110,7 +1113,7 @@ export const agentSessionIndicatorMapAtom = atom<Map<string, SessionIndicatorSta
     }
   }
 
-  for (const id of unviewedCompleted) {
+  for (const id of [...unviewedCompleted, ...unviewedCompletedDelegations]) {
     if (!map.has(id)) {
       map.set(id, 'completed')
     }

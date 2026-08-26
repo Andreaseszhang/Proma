@@ -44,6 +44,7 @@ import {
   workspaceAttachedDirectoriesMapAtom,
   workspaceAttachedFilesMapAtom,
   unviewedCompletedSessionIdsAtom,
+  unviewedCompletedDelegationSessionIdsAtom,
   agentSessionPathMapAtom,
   agentDiffRefreshVersionAtom,
   agentDiffPanelTabAtom,
@@ -701,6 +702,12 @@ export function useGlobalAgentListeners(): void {
           next.delete(event.sessionId)
           return next
         })
+        store.set(unviewedCompletedDelegationSessionIdsAtom, (prev) => {
+          if (!prev.has(event.sessionId)) return prev
+          const next = new Set(prev)
+          next.delete(event.sessionId)
+          return next
+        })
         store.set(agentStreamingStatesAtom, (prev) => {
           const map = new Map(prev)
           map.set(event.sessionId, activation.streamState)
@@ -1023,6 +1030,12 @@ export function useGlobalAgentListeners(): void {
             next.delete(sessionId)
             return next
           })
+          store.set(unviewedCompletedDelegationSessionIdsAtom, (prev) => {
+            if (!prev.has(sessionId)) return prev
+            const next = new Set(prev)
+            next.delete(sessionId)
+            return next
+          })
         }
 
         // 自动任务会话被用户接管（毕业）：向用户提示，后续定时运行将新建独立会话
@@ -1209,6 +1222,12 @@ export function useGlobalAgentListeners(): void {
             const prevState = store.get(agentSessionStreamingStateAtomFamily(sessionId))
             if (!prevState || !prevState.running) {
               store.set(unviewedCompletedSessionIdsAtom, (prev: Set<string>) => {
+                if (!prev.has(sessionId)) return prev
+                const next = new Set(prev)
+                next.delete(sessionId)
+                return next
+              })
+              store.set(unviewedCompletedDelegationSessionIdsAtom, (prev: Set<string>) => {
                 if (!prev.has(sessionId)) return prev
                 const next = new Set(prev)
                 next.delete(sessionId)
@@ -1567,7 +1586,14 @@ export function useGlobalAgentListeners(): void {
           session: completionSession,
           documentHasFocus: document.hasFocus(),
         })
-        if (completionMarkers.markUnviewedCompleted && !backgroundTasksPending) {
+        if (completionSession?.sourceDelegationId && !backgroundTasksPending) {
+          // 子会话也需要短暂的绿色完成提示，但不属于用户级 Dock/通知未读。
+          store.set(unviewedCompletedDelegationSessionIdsAtom, (prev: Set<string>) => {
+            const next = new Set(prev)
+            next.add(data.sessionId)
+            return next
+          })
+        } else if (completionMarkers.markUnviewedCompleted && !backgroundTasksPending) {
           store.set(unviewedCompletedSessionIdsAtom, (prev: Set<string>) => {
             const next = new Set(prev)
             next.add(data.sessionId)

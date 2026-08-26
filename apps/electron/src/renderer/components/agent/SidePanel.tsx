@@ -32,6 +32,8 @@ import {
   currentAgentWorkspaceIdAtom,
   agentWorkspacesAtom,
   agentSessionsAtom,
+  agentSessionIndicatorMapAtom,
+  unviewedCompletedDelegationSessionIdsAtom,
   agentAttachedDirectoriesMapAtom,
   agentAttachedFilesMapAtom,
   workspaceAttachedDirectoriesMapAtom,
@@ -96,6 +98,7 @@ import {
   recordRightPanelTabVisit,
   removeRightPanelTabFromHistory,
 } from '@/lib/right-panel-tab-history'
+import { getDelegatedChildSessionStatus } from '@/lib/agent-session-list'
 import { TerminalTabContent } from '@/components/tabs/TerminalTabContent'
 import { shouldShowBothFileSources } from './file-panel-layout'
 
@@ -350,6 +353,9 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
   const selectedWorkspaceId = useAtomValue(currentAgentWorkspaceIdAtom)
   const workspaces = useAtomValue(agentWorkspacesAtom)
   const sessions = useAtomValue(agentSessionsAtom)
+  const sessionIndicatorMap = useAtomValue(agentSessionIndicatorMapAtom)
+  const unviewedCompletedDelegations = useAtomValue(unviewedCompletedDelegationSessionIdsAtom)
+  const setUnviewedCompletedDelegations = useSetAtom(unviewedCompletedDelegationSessionIdsAtom)
   const currentWorkspaceId = sessions.find((session) => session.id === sessionId)?.workspaceId ?? selectedWorkspaceId
   const currentWorkspace = workspaces.find((workspace) => workspace.id === currentWorkspaceId)
   const workspaceSlug = currentWorkspace?.slug ?? null
@@ -698,6 +704,16 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
         ? 'files'
         : activeTab
 
+  // 右栏正在展示子会话即表示用户已经查看，清除其临时绿色完成提示。
+  React.useEffect(() => {
+    if (!activeDelegationSessionId || !unviewedCompletedDelegations.has(activeDelegationSessionId)) return
+    setUnviewedCompletedDelegations((previous) => {
+      const next = new Set(previous)
+      next.delete(activeDelegationSessionId)
+      return next
+    })
+  }, [activeDelegationSessionId, setUnviewedCompletedDelegations, unviewedCompletedDelegations])
+
   // Agent 对当前项目记忆写入后，默认展开并激活完整编辑器这个独立工作区 Tab。
   // 记忆 watcher 按 workspace 缓存最新事件，必须排除本轮开始前的陈旧事件。
   // 用户正在查看 Skills 或项目记忆时，变更只在后台保留为可见的 Memory Tab，
@@ -895,12 +911,21 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
         })
       }
     }
+    const delegationSessionId = getDelegationSessionIdFromSidePanelTab(tab)
+    if (delegationSessionId) {
+      setUnviewedCompletedDelegations((previous) => {
+        if (!previous.has(delegationSessionId)) return previous
+        const next = new Set(previous)
+        next.delete(delegationSessionId)
+        return next
+      })
+    }
     const browserTabId = getBrowserTabIdFromSidePanelTab(tab)
     onTabChange(tab)
     if (!browserTabId) return
     desiredBrowserTabIdRef.current = browserTabId
     flushBrowserTabSelection()
-  }, [flushBrowserTabSelection, onTabChange, previewFiles, sessionId, setPreviewFileMap])
+  }, [flushBrowserTabSelection, onTabChange, previewFiles, sessionId, setPreviewFileMap, setUnviewedCompletedDelegations])
 
   const handleOpenBrowserTab = React.useCallback(async () => {
     try {
@@ -1020,6 +1045,8 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
         label: getDelegationTabLabel(child.title),
         icon: <GitBranch className="size-3.5" />,
         closable: true,
+        // 与左侧子会话行共用状态解析：实时状态优先，重新运行后不受旧 delegationStatus 影响。
+        status: getDelegatedChildSessionStatus(child, sessionIndicatorMap),
       }] : []
     }),
     ...(browserState?.tabs.map((tab) => ({
@@ -1030,7 +1057,7 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
       closable: tab.tabId !== browserState.agentTabId,
       activity: showBrowserActivity && activeBrowserTabId !== tab.tabId && browserState.activeTabId === tab.tabId,
     })) ?? []),
-  ], [activeBrowserTabId, browserState, previewFiles, sessions, sessionId, showBrowserActivity, sideChatConversationId, sideDelegationSessionIds, sideTemporaryAgents, terminalTabs, workspaceComponentTabs])
+  ], [activeBrowserTabId, browserState, previewFiles, sessionIndicatorMap, sessions, sessionId, showBrowserActivity, sideChatConversationId, sideDelegationSessionIds, sideTemporaryAgents, terminalTabs, workspaceComponentTabs])
   workspaceTabsRef.current = workspaceTabs
 
   const handleCloseWorkspaceTab = React.useCallback((tab: AgentSidePanelTab) => {

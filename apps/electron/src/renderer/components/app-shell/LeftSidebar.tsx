@@ -38,6 +38,7 @@ import {
   currentAgentSessionIdAtom,
   agentSessionIndicatorMapAtom,
   unviewedCompletedSessionIdsAtom,
+  unviewedCompletedDelegationSessionIdsAtom,
   agentChannelIdAtom,
   agentModelIdAtom,
   agentSessionChannelMapAtom,
@@ -768,6 +769,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   const agentIndicatorMap = useAtomValue(agentSessionIndicatorMapAtom)
   const unviewedCompletedSessionIds = useAtomValue(unviewedCompletedSessionIdsAtom)
   const setUnviewedCompleted = useSetAtom(unviewedCompletedSessionIdsAtom)
+  const setUnviewedCompletedDelegations = useSetAtom(unviewedCompletedDelegationSessionIdsAtom)
   const agentChannelId = useAtomValue(agentChannelIdAtom)
   const agentModelId = useAtomValue(agentModelIdAtom)
   const setSessionChannelMap = useSetAtom(agentSessionChannelMapAtom)
@@ -1786,6 +1788,13 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
           next.delete(id)
           return next
         })
+        // 左侧树点击同样是查看子会话，必须清除其临时绿色完成提示。
+        setUnviewedCompletedDelegations((prev: Set<string>) => {
+          if (!prev.has(id)) return prev
+          const next = new Set(prev)
+          next.delete(id)
+          return next
+        })
         return
       }
     }
@@ -1799,7 +1808,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       next.delete(id)
       return next
     })
-  }, [agentSessions, openSession, setActiveView, setUnviewedCompleted, store])
+  }, [agentSessions, openSession, setActiveView, setUnviewedCompleted, setUnviewedCompletedDelegations, store])
 
   const clearQuickSwitchHints = React.useCallback((): void => {
     for (const row of quickSwitchHintRowsRef.current) {

@@ -18,7 +18,13 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { agentDiffUnseenChangesAtom, currentAgentSessionIdAtom } from '@/atoms/agent-atoms'
-import type { AgentSidePanelTab, WorkspaceComponentTab } from '@/atoms/agent-atoms'
+import type { AgentSidePanelTab, SessionIndicatorStatus, WorkspaceComponentTab } from '@/atoms/agent-atoms'
+
+const TAB_STATUS_ICON_CLASS: Partial<Record<SessionIndicatorStatus, string>> = {
+  running: 'text-blue-500 animate-pulse',
+  blocked: 'text-orange-500',
+  completed: 'text-green-500',
+}
 
 export interface WorkspacePanelTab {
   id: AgentSidePanelTab
@@ -26,6 +32,8 @@ export interface WorkspacePanelTab {
   icon: React.ReactNode
   closable?: boolean
   activity?: boolean
+  /** 会话状态色；委派子会话与左侧会话列表共用同一状态源。 */
+  status?: SessionIndicatorStatus
 }
 
 interface DiffPanelTabBarProps {
@@ -132,7 +140,14 @@ export function DiffPanelTabBar({
                   {tab.activity || (isChangesTab && unseenChanges && !selected) ? (
                     <span className="size-1.5 shrink-0 rounded-full bg-primary" aria-label="有未查看更新" />
                   ) : (
-                    <span className={cn('shrink-0', selected ? 'text-foreground' : 'text-muted-foreground/80')}>{tab.icon}</span>
+                    <span
+                      className={cn(
+                        'shrink-0',
+                        TAB_STATUS_ICON_CLASS[tab.status ?? 'idle'] ?? (selected ? 'text-foreground' : 'text-muted-foreground/80'),
+                      )}
+                    >
+                      {tab.icon}
+                    </span>
                   )}
                   <span className="truncate">{tab.label}</span>
                 </button>

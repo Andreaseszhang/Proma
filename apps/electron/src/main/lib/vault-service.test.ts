@@ -219,6 +219,8 @@ describe('Vault file system', () => {
     expect(() => vault.deleteFile({ relativePath: 'linked-folder/outside.md' })).toThrow('软链接')
     expect(existsSync(join(root, 'linked.md'))).toBe(true)
     expect(existsSync(outsideFile)).toBe(true)
+  })
+
   test('Given no note for today When an untitled note is created Then the readable base filename is used', () => {
     const root = makeTempRoot()
     const vault = createVaultFileSystem(root)

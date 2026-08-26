@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
-import { BookOpen, ChevronDown, ChevronRight, CircleHelp, Folder, FolderOpen, Loader2, PanelLeftClose, PanelLeftOpen, Plus, RefreshCw, Save } from 'lucide-react'
+import { ChevronDown, ChevronRight, CircleHelp, Folder, FolderOpen, Loader2, PanelLeftClose, PanelLeftOpen, Plus, RefreshCw, Save } from 'lucide-react'
 import { toast } from 'sonner'
 import type { VaultCandidate, VaultFileEntry, VaultReadResult, VaultSummary, SkillMeta } from '@proma/shared'
 import { Button } from '@/components/ui/button'
@@ -29,6 +29,7 @@ import {
   type VaultReferenceType,
 } from './vault-reference-utils'
 import { getVaultSidebarLayout } from './vault-sidebar-layout'
+import { OBSIDIAN_NAME, ObsidianIcon, PROMA_MANAGED_VAULT_LABEL } from '@/components/obsidian/obsidian-brand'
 
 function displayDocumentTitle(filename: string): string {
   return filename.replace(/\.md$/i, '')
@@ -277,14 +278,14 @@ function VaultMarkdownEditor({
             <TooltipTrigger asChild>
               <button
                 type="button"
-                aria-label="Vault 使用帮助"
+                aria-label={`${OBSIDIAN_NAME} 使用帮助`}
                 onClick={onOpenTutorial}
                 className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
                 <CircleHelp size={16} />
               </button>
             </TooltipTrigger>
-            <TooltipContent>Vault 使用帮助（Cmd/Ctrl + S 保存）</TooltipContent>
+            <TooltipContent>{OBSIDIAN_NAME} 使用帮助（Cmd/Ctrl + S 保存）</TooltipContent>
           </Tooltip>
         </div>
         <div className="min-h-0 flex-1">
@@ -442,7 +443,7 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
         }
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '无法读取 Vault')
+      toast.error(error instanceof Error ? error.message : `无法读取 ${OBSIDIAN_NAME}`)
     } finally {
       setLoading(false)
     }
@@ -531,7 +532,7 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
   const openWikiLink = React.useCallback((target: string): void => {
     const relativePath = resolveVaultWikiLink(target, files)
     if (!relativePath) {
-      toast.message(`未找到唯一的 Vault 笔记：${target}`)
+      toast.message(`未找到唯一的 ${OBSIDIAN_NAME} 笔记：${target}`)
       return
     }
     void openFile(relativePath)
@@ -561,7 +562,7 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
         await selectVaultManually()
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '无法扫描 Obsidian Vault')
+      toast.error(error instanceof Error ? error.message : `无法扫描 ${OBSIDIAN_NAME}`)
     } finally {
       setVaultDiscoveryComplete(true)
     }
@@ -576,7 +577,7 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
       setRefreshToken((value) => value + 1)
       toast.success(`已连接 ${selected.displayName}`)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : '无法连接检测到的 Vault')
+      toast.error(error instanceof Error ? error.message : `无法连接检测到的 ${OBSIDIAN_NAME}`)
     }
   }
 
@@ -634,7 +635,7 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
       setQuoteDialogOpen(false)
       setRefreshToken((value) => value + 1)
       await openFile(result.relativePath)
-      toast.success('已引用到 Vault')
+      toast.success(`已引用到 ${OBSIDIAN_NAME}`)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '写入引用失败')
     } finally {
@@ -656,7 +657,7 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
       }
       setReadResult(await window.electronAPI.readVaultFile(result.relativePath))
       setRefreshToken((value) => value + 1)
-      toast.success('已保存到 Vault')
+      toast.success(`已保存到 ${OBSIDIAN_NAME}`)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '保存失败')
     }
@@ -688,15 +689,15 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
       <main className="flex h-full items-center justify-center px-6">
         <div className="w-full max-w-md text-center">
           <div className="mx-auto flex size-12 items-center justify-center rounded-lg bg-muted text-muted-foreground shadow-sm">
-            <BookOpen size={22} />
+            <ObsidianIcon size={22} />
           </div>
-          <h1 className="mt-5 text-lg font-semibold text-foreground">连接你的 Vault</h1>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">Proma 只保存你授权的 Vault 路径。笔记正文始终保留在自己的 Markdown 文件中。</p>
+          <h1 className="mt-5 text-lg font-semibold text-foreground">连接 {OBSIDIAN_NAME}</h1>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">Proma 只保存你授权的 {OBSIDIAN_NAME} 路径。笔记正文始终保留在自己的 Markdown 文件中。</p>
           {!vaultDiscoveryComplete ? (
             <div className="mt-6 flex justify-center text-muted-foreground"><Loader2 className="size-5 animate-spin" /></div>
           ) : candidates.length > 0 ? (
             <div className="mt-7 text-left">
-              <p className="mb-2 text-xs font-medium text-muted-foreground">检测到 Obsidian Vault</p>
+              <p className="mb-2 text-xs font-medium text-muted-foreground">检测到 {OBSIDIAN_NAME}</p>
               <div className="space-y-1">
                 {candidates.map((candidate) => (
                   <button
@@ -705,9 +706,9 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
                     onClick={() => { void connectDiscoveredVault(candidate) }}
                     className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-muted"
                   >
-                    <BookOpen size={15} className="shrink-0 text-primary" />
+                    <ObsidianIcon size={15} className="shrink-0 text-primary" />
                     <span className="truncate">{candidate.displayName}</span>
-                    {candidate.isPromaManaged && <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">Proma Vault</span>}
+                    {candidate.isPromaManaged && <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">{PROMA_MANAGED_VAULT_LABEL}</span>}
                   </button>
                 ))}
               </div>
@@ -715,7 +716,7 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
           ) : (
             <Button className="mt-6 gap-2" onClick={() => { void selectVaultManually() }}>
               <FolderOpen size={16} />
-              选择 Vault 文件夹
+              选择 {OBSIDIAN_NAME} 文件夹
             </Button>
           )}
         </div>
@@ -733,20 +734,20 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
               <TooltipTrigger asChild>
                 <button
                   type="button"
-                  aria-label="展开 Vault 文件树"
+                  aria-label={`展开 ${OBSIDIAN_NAME} 文件树`}
                   onClick={() => setVaultSidebarCollapsed(false)}
                   className="titlebar-no-drag absolute left-2 top-2 z-20 flex size-7 items-center justify-center rounded-md bg-background/90 text-muted-foreground shadow-sm hover:bg-muted hover:text-foreground"
                 >
                   <PanelLeftOpen size={15} />
                 </button>
               </TooltipTrigger>
-              <TooltipContent side="right">展开 Vault 文件树</TooltipContent>
+              <TooltipContent side="right">展开 {OBSIDIAN_NAME} 文件树</TooltipContent>
             </Tooltip>
           )}
           {vaultSidebarLayout.renderSidebar && (
             <aside className={cn('flex shrink-0 flex-col bg-muted/25 shadow-[1px_0_0_hsl(var(--border)/0.45)]', vaultSidebarLayout.widthClass)}>
               <header className={cn('flex h-14 items-center gap-2 px-3', embedded ? 'titlebar-no-drag' : 'titlebar-drag-region')}>
-                <BookOpen size={17} className="shrink-0 text-primary" />
+                <ObsidianIcon size={17} className="shrink-0 text-primary" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[13px] font-medium text-foreground">{config.displayName}</p>
                   <p className="truncate text-[11px] text-muted-foreground">{files.length} 篇 Markdown 笔记</p>
@@ -754,11 +755,11 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
                 <div className="flex items-center gap-0.5 titlebar-no-drag">
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <button type="button" aria-label="折叠 Vault 文件树" onClick={() => setVaultSidebarCollapsed(true)} className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
+                      <button type="button" aria-label={`折叠 ${OBSIDIAN_NAME} 文件树`} onClick={() => setVaultSidebarCollapsed(true)} className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
                         <PanelLeftClose size={15} />
                       </button>
                     </TooltipTrigger>
-                    <TooltipContent>折叠 Vault 文件树</TooltipContent>
+                    <TooltipContent>折叠 {OBSIDIAN_NAME} 文件树</TooltipContent>
                   </Tooltip>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -778,15 +779,15 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
                   className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 >
                   <FolderOpen size={14} className="shrink-0" />
-                  <span className="truncate">切换 Vault</span>
+                  <span className="truncate">切换 {OBSIDIAN_NAME}</span>
                 </button>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <button type="button" aria-label="刷新 Vault" onClick={() => { void refresh() }} className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
+                    <button type="button" aria-label={`刷新 ${OBSIDIAN_NAME}`} onClick={() => { void refresh() }} className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
                       <RefreshCw size={14} />
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent>刷新 Vault</TooltipContent>
+                  <TooltipContent>刷新 {OBSIDIAN_NAME}</TooltipContent>
                 </Tooltip>
               </div>
             </aside>
@@ -813,7 +814,7 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>引用到 Vault</DialogTitle>
+            <DialogTitle>引用到 {OBSIDIAN_NAME}</DialogTitle>
             <DialogDescription>将会话快照与可回跳来源写入你选择的 Markdown 笔记。</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -843,17 +844,17 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
       <Dialog open={vaultHelpOpen} onOpenChange={setVaultHelpOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>在 Proma 中使用 Obsidian Vault</DialogTitle>
-            <DialogDescription>Proma 直接读写你已授权 Vault 里的 Markdown 文件，笔记仍可在 Obsidian 中继续使用。</DialogDescription>
+            <DialogTitle>在 Proma 中使用 {OBSIDIAN_NAME}</DialogTitle>
+            <DialogDescription>Proma 直接读写你已授权给 {OBSIDIAN_NAME} 的 Markdown 文件，笔记仍可在 {OBSIDIAN_NAME} 中继续使用。</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 text-sm leading-6 text-muted-foreground">
             <section>
               <p className="font-medium text-foreground">编辑与保存</p>
-              <p>点击笔记开始编辑；按 Cmd/Ctrl + S 保存。左下角可以切换 Vault 或刷新文件列表。</p>
+              <p>点击笔记开始编辑；按 Cmd/Ctrl + S 保存。左下角可以切换 {OBSIDIAN_NAME} 或刷新文件列表。</p>
             </section>
             <section>
               <p className="font-medium text-foreground">双向链接</p>
-              <p>输入 <code className="rounded bg-muted px-1 py-0.5 text-foreground">[[笔记名]]</code>，点击链接文字可在当前 Vault 中打开对应笔记。</p>
+              <p>输入 <code className="rounded bg-muted px-1 py-0.5 text-foreground">[[笔记名]]</code>，点击链接文字可在当前 {OBSIDIAN_NAME} 中打开对应笔记。</p>
             </section>
             <section>
               <p className="font-medium text-foreground">Proma 引用</p>

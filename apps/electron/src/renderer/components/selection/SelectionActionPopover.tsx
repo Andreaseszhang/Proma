@@ -1,5 +1,6 @@
 import * as React from 'react'
-import { BookOpen, Bot, MessageSquarePlus } from 'lucide-react'
+import { Bot, MessageSquarePlus } from 'lucide-react'
+import { OBSIDIAN_NAME, ObsidianIcon } from '@/components/obsidian/obsidian-brand'
 
 interface SelectionActionPopoverProps {
   x: number
@@ -58,8 +59,8 @@ export function SelectionActionPopover({
             className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium transition-colors hover:bg-muted"
             onClick={onQuoteToVault}
           >
-            <BookOpen className="size-4" />
-            引用到 Vault
+            <ObsidianIcon className="size-4" />
+            引用到 {OBSIDIAN_NAME}
           </button>
         )}
       </div>

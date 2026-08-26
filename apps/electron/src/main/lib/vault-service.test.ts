@@ -46,7 +46,7 @@ describe('Vault file system', () => {
     expect(existsSync(vaultRoot)).toBe(true)
     expect(existsSync(configPath)).toBe(true)
     expect(first).toEqual(second)
-    expect(first).toMatchObject({ displayName: 'vault', inboxPath: 'Proma Inbox', allowAgentWrites: false })
+    expect(first).toMatchObject({ displayName: 'Proma Vault', inboxPath: 'Proma Inbox', allowAgentWrites: false })
   })
 
   test('Given an initialized Proma Vault When candidates are listed Then it appears as a managed candidate', () => {

@@ -48,6 +48,7 @@ import {
   agentSelectedWorktreeAtom,
   agentSideTemporaryAgentMapAtom,
   agentSideDelegationMapAtom,
+  agentSessionIndicatorMapAtom,
   unviewedCompletedDelegationSessionIdsAtom,
   agentSDKMessagesCacheAtom,
   agentLiveMessagesAtomFamily,
@@ -617,6 +618,7 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
   const setSideTemporaryAgentMap = useSetAtom(agentSideTemporaryAgentMapAtom)
   const sideTemporaryAgents = sideTemporaryAgentMap.get(sessionId) ?? []
   const sideDelegationMap = useAtomValue(agentSideDelegationMapAtom)
+  const agentIndicatorMap = useAtomValue(agentSessionIndicatorMapAtom)
   const setSideDelegationMap = useSetAtom(agentSideDelegationMapAtom)
   const sideDelegationSessionIds = sideDelegationMap.get(sessionId) ?? []
   const setUnviewedCompletedDelegations = useSetAtom(unviewedCompletedDelegationSessionIdsAtom)
@@ -939,6 +941,7 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
         id: getDelegationSidePanelTab(child.id),
         label: child.title,
         icon: <GitBranch className="size-3.5" />,
+        status: agentIndicatorMap.get(child.id),
         closable: true,
       }] : []
     }),
@@ -950,7 +953,7 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
       closable: tab.tabId !== browserState.agentTabId,
       activity: showBrowserActivity && activeBrowserTabId !== tab.tabId && browserState.activeTabId === tab.tabId,
     })) ?? []),
-  ], [activeBrowserTabId, browserState, previewFiles, sessions, sessionId, showBrowserActivity, sideChatConversationId, sideDelegationSessionIds, sideTemporaryAgents, workspaceComponentTabs])
+  ], [activeBrowserTabId, agentIndicatorMap, browserState, previewFiles, sessions, sessionId, showBrowserActivity, sideChatConversationId, sideDelegationSessionIds, sideTemporaryAgents, workspaceComponentTabs])
 
   const handleCloseWorkspaceTab = React.useCallback((tab: AgentSidePanelTab) => {
     if (isWorkspaceComponentTab(tab)) {

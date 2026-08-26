@@ -15,6 +15,7 @@ import {
   agentRunningSessionIdsAtom,
   agentSessionIndicatorMapAtom,
   unviewedCompletedSessionIdsAtom,
+  unviewedCompletedDelegationSessionIdsAtom,
 } from './agent-atoms'
 import type { SessionIndicatorStatus } from './agent-atoms'
 import type { PreviewFile } from './preview-atoms'
@@ -207,6 +208,7 @@ export const tabIndicatorMapAtom = atom<Map<string, SessionIndicatorStatus>>((ge
   const chatStreaming = get(streamingConversationIdsAtom)
   const agentIndicator = get(agentSessionIndicatorMapAtom)
   const unviewedCompletedIds = get(unviewedCompletedSessionIdsAtom)
+  const unviewedCompletedDelegationIds = get(unviewedCompletedDelegationSessionIdsAtom)
   const map = new Map<string, SessionIndicatorStatus>()
   for (const tab of tabs) {
     if (tab.type === 'scratch') continue
@@ -214,7 +216,7 @@ export const tabIndicatorMapAtom = atom<Map<string, SessionIndicatorStatus>>((ge
       map.set(tab.id, chatStreaming.has(tab.sessionId) ? 'running' : 'idle')
     } else if (tab.type === 'agent') {
       const status = agentIndicator.get(tab.sessionId)
-        ?? (unviewedCompletedIds.has(tab.sessionId) ? 'completed' : 'idle')
+        ?? (unviewedCompletedIds.has(tab.sessionId) || unviewedCompletedDelegationIds.has(tab.sessionId) ? 'completed' : 'idle')
       map.set(tab.id, status)
     }
   }

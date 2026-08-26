@@ -1,9 +1,13 @@
 import { describe, expect, test } from 'bun:test'
+import { createStore } from 'jotai/vanilla'
 import {
   focusScratchPadTab,
   SCRATCH_PAD_ID,
+  tabIndicatorMapAtom,
+  tabsAtom,
   type TabItem,
 } from './tab-atoms'
+import { unviewedCompletedDelegationSessionIdsAtom } from './agent-atoms'
 
 function createAgentTab(id = 'agent-1'): TabItem {
   return {
@@ -14,6 +18,15 @@ function createAgentTab(id = 'agent-1'): TabItem {
   }
 }
 
+describe('委派子会话右侧 Tab 完成状态', () => {
+  test('Given 委派子会话完成且未查看 When 计算右侧 Tab 指示状态 Then 显示 completed', () => {
+    const store = createStore()
+    store.set(tabsAtom, [createAgentTab('child')])
+    store.set(unviewedCompletedDelegationSessionIdsAtom, new Set(['child']))
+
+    expect(store.get(tabIndicatorMapAtom).get('child')).toBe('completed')
+  })
+})
 describe('Scratch Pad Tab 恢复', () => {
   test('given 草稿已拖到右侧分屏 when Ctrl+Tab 聚焦草稿 then 恢复完整草稿并关闭分屏', () => {
     const result = focusScratchPadTab([

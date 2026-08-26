@@ -2775,6 +2775,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                     session={childSession}
                     activeSessionId={activeSessionId}
                     agentIndicatorMap={agentIndicatorMap}
+                    isFirstChild={childSession.id === item.childSessions[0]?.id}
                     relativeTimeNow={relativeTimeNow}
                     workspaceName={childSession.workspaceId ? workspaceNameMap.get(childSession.workspaceId) : undefined}
                     onSelect={handleSelectAgentSession}
@@ -2868,6 +2869,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                   session={childSession}
                   activeSessionId={activeSessionId}
                   agentIndicatorMap={agentIndicatorMap}
+                  isFirstChild={childSession.id === item.childSessions[0]?.id}
                   relativeTimeNow={relativeTimeNow}
                   workspaceName={isAutomationGroup && childSession.workspaceId ? workspaceNameMapForRow?.get(childSession.workspaceId) : undefined}
                   onSelect={handleSelectAgentSession}
@@ -4385,6 +4387,7 @@ interface DelegatedChildSessionItemProps {
   session: AgentSessionMeta
   activeSessionId: string | null
   agentIndicatorMap: Map<string, SessionIndicatorStatus>
+  isFirstChild: boolean
   relativeTimeNow: number
   workspaceName?: string
   onSelect: (id: string, title: string) => void
@@ -4400,6 +4403,7 @@ const DelegatedChildSessionItem = React.memo(function DelegatedChildSessionItem(
   session,
   activeSessionId,
   agentIndicatorMap,
+  isFirstChild,
   relativeTimeNow,
   workspaceName,
   onSelect,
@@ -4421,21 +4425,25 @@ const DelegatedChildSessionItem = React.memo(function DelegatedChildSessionItem(
   )
 
   return (
-    <AgentSessionItem
-      session={session}
-      active={openInSidePanel}
-      indicatorStatus={status}
-      disableMiniMap={!sessionHoverPreviewEnabled}
-      relativeTimeNow={relativeTimeNow}
-      workspaceName={workspaceName}
-      onSelect={onSelect}
-      onRequestDelete={onRequestDelete}
-      onRequestMove={onRequestMove}
-      onRename={onRename}
-      onTogglePin={onTogglePin}
-      onToggleStar={onToggleStar}
-      onToggleArchive={onToggleArchive}
-    />
+    <div className={cn(
+      isFirstChild && openInSidePanel && activeSessionId === session.parentSessionId && 'mt-0.5',
+    )}>
+      <AgentSessionItem
+        session={session}
+        active={openInSidePanel}
+        indicatorStatus={status}
+        disableMiniMap={!sessionHoverPreviewEnabled}
+        relativeTimeNow={relativeTimeNow}
+        workspaceName={workspaceName}
+        onSelect={onSelect}
+        onRequestDelete={onRequestDelete}
+        onRequestMove={onRequestMove}
+        onRename={onRename}
+        onTogglePin={onTogglePin}
+        onToggleStar={onToggleStar}
+        onToggleArchive={onToggleArchive}
+      />
+    </div>
   )
 })
 
@@ -4882,6 +4890,7 @@ const AgentProjectGroupItem = React.memo(function AgentProjectGroupItem({
                             session={childSession}
                             activeSessionId={activeSessionId}
                             agentIndicatorMap={agentIndicatorMap}
+                            isFirstChild={childSession.id === item.childSessions[0]?.id}
                             relativeTimeNow={relativeTimeNow}
                             workspaceName={isAutomationGroup && childSession.workspaceId ? workspaceNameMap?.get(childSession.workspaceId) : undefined}
                             onSelect={onSelectSession}

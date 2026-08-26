@@ -1195,7 +1195,6 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
   const workspaceTabs = React.useMemo<WorkspacePanelTab[]>(() => [
     { id: 'files', label: '文件', icon: <FolderOpen className="size-3.5" /> },
     { id: 'changes', label: '改动', icon: <FileDiff className="size-3.5" /> },
-    { id: 'vault', label: 'Vault', icon: <BookOpen className="size-3.5" /> },
     ...workspaceComponentTabs.map((component) => {
       const meta: Record<WorkspaceComponentTab, { label: string; icon: React.ReactNode }> = {
         todos: { label: 'Todo', icon: <ListTodo className="size-3.5" /> },
@@ -1204,6 +1203,7 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
         skills: { label: 'Skills', icon: <Blocks className="size-3.5" /> },
         mcp: { label: 'MCP', icon: <ServerCog className="size-3.5" /> },
         memory: { label: '项目记忆', icon: <Brain className="size-3.5" /> },
+        vault: { label: 'Vault', icon: <BookOpen className="size-3.5" /> },
       }
       return { id: component, ...meta[component], closable: true }
     }),

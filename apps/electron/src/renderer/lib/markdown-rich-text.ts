@@ -329,6 +329,16 @@ function normalizeMarkdownLinePrefixes(markdown: string): string {
     .replace(/^\u00a0{1,3}(?=#{1,6}\s)/gm, (spaces) => ' '.repeat(spaces.length))
 }
 
+/** 判断剪贴板纯文本是否包含足够明确的 Markdown 语法。 */
+export function looksLikeMarkdownText(value: string): boolean {
+  return /(?:^|\n)\s{0,3}(?:#{1,6}\s|[-+*]\s|>\s|```|~~~|\d+[.)]\s|---\s*$)|(?:\*\*|__|~~|`[^`\n]+`|\[[^\]\n]+\]\([^)]+\)|\|[^|\n]+\|)|(?:^|\s)(?:\*[^*\n]+\*|_[^_\n]+_)/m.test(value)
+}
+
+/** 判断剪贴板 HTML 是否已经携带可直接交给 TipTap 的富文本语义。 */
+export function hasRichClipboardMarkup(value: string): boolean {
+  return /<(?:strong|b|em|i|u|s|del|h[1-6]|ul|ol|li|blockquote|pre|code|hr|table|thead|tbody|tr|th|td|a|img|video)\b/i.test(value)
+}
+
 function preprocessMarkdown(markdown: string): string {
   return splitMarkdownCodeRegions(wrapLeadingFrontmatterBlock(markdown))
     .map((chunk) => chunk.code

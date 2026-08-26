@@ -20,6 +20,7 @@ export interface VaultCandidate {
   path: string
   displayName: string
   isObsidianVault: boolean
+  isPromaManaged?: boolean
 }
 
 export interface VaultFileEntry {
@@ -72,7 +73,9 @@ export interface VaultSourceSnapshot {
 export const VAULT_IPC_CHANNELS = {
   GET_CONFIG: 'vault:get-config',
   ENSURE_DEFAULT: 'vault:ensure-default',
+  SELECT_DEFAULT: 'vault:select-default',
   DISCOVER: 'vault:discover',
+  LIST_CANDIDATES: 'vault:list-candidates',
   SELECT: 'vault:select',
   AUTHORIZE_CANDIDATE: 'vault:authorize-candidate',
   UPDATE_CONFIG: 'vault:update-config',

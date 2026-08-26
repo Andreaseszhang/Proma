@@ -386,11 +386,16 @@ export function ensureDefaultVaultAt(configPath: string, rootPath: string): Vaul
   return configureVaultAt(rootPath, configPath, { inboxPath: 'Proma Inbox', allowAgentWrites: false })
 }
 
+export function selectDefaultVault(): VaultSummary {
+  return configureVault(getDefaultVaultDir(), { inboxPath: 'Proma Inbox', allowAgentWrites: false })
+}
+
 /** 确保 Vault 页面可直接使用 Proma 管理的本地 Markdown 目录，且不改变已有选择。 */
 export function ensureDefaultVault(): VaultSummary {
+  const managedRoot = getDefaultVaultDir()
   const current = getVaultConfig()
   if (current) return vaultSummary(current)
-  return ensureDefaultVaultAt(getVaultConfigPath(), getDefaultVaultDir())
+  return ensureDefaultVaultAt(getVaultConfigPath(), managedRoot)
 }
 
 export function authorizeDiscoveredVault(rootPath: string, options: { inboxPath?: string; allowAgentWrites?: boolean } = {}): VaultSummary {
@@ -431,6 +436,20 @@ export function getConfiguredVaultFileSystem(): VaultFileSystem {
   return createVaultFileSystem(config.rootPath)
 }
 
+export function discoverVaultCandidates(): VaultCandidate[] {
+  const managedRootPath = resolveDefaultVaultDir(dirname(getVaultConfigPath()))
+  let managedRoot: string | null = null
+  try {
+    managedRoot = existsSync(managedRootPath) ? assertVaultRoot(managedRootPath) : null
+  } catch {
+    managedRoot = null
+  }
+  const candidates: VaultCandidate[] = managedRoot
+    ? [{ path: managedRoot, displayName: 'Proma Vault', isObsidianVault: existsSync(join(managedRoot, '.obsidian')), isPromaManaged: true }]
+    : []
+  return [...candidates, ...discoverObsidianVaultCandidates()]
+}
+
 export function discoverObsidianVaultCandidates(): VaultCandidate[] {
   const configPaths = platform() === 'darwin'
     ? [join(homedir(), 'Library', 'Application Support', 'obsidian', 'obsidian.json')]
@@ -458,6 +477,7 @@ export function discoverObsidianVaultCandidates(): VaultCandidate[] {
             path: root,
             displayName: basename(root) || 'Vault',
             isObsidianVault: existsSync(join(root, '.obsidian')),
+            isPromaManaged: false,
           })
         } catch {
           // A stale Obsidian registry entry is only a suggestion and can be ignored.

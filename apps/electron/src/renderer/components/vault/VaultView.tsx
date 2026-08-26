@@ -421,8 +421,7 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
   const refresh = React.useCallback(async (): Promise<void> => {
     setLoading(true)
     try {
-      const configuredVault = await window.electronAPI.getVaultConfig()
-      const nextConfig = configuredVault ?? await window.electronAPI.ensureDefaultVault()
+      const nextConfig = await window.electronAPI.ensureDefaultVault()
       setConfig(nextConfig)
       setFiles(nextConfig ? await window.electronAPI.listVaultFiles() : [])
       if (!nextConfig) {
@@ -462,7 +461,7 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
 
   React.useEffect(() => {
     if (config || vaultDiscoveryComplete) return
-    void window.electronAPI.discoverObsidianVaults()
+    void window.electronAPI.listVaultCandidates()
       .then(setCandidates)
       .catch(() => setCandidates([]))
       .finally(() => setVaultDiscoveryComplete(true))
@@ -552,7 +551,7 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
     setVaultDiscoveryComplete(false)
     setCandidates([])
     try {
-      const discovered = await window.electronAPI.discoverObsidianVaults()
+      const discovered = await window.electronAPI.listVaultCandidates()
       setCandidates(discovered)
       if (discovered.length > 0) {
         setSelectedFile(null)
@@ -570,7 +569,9 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
 
   const connectDiscoveredVault = async (candidate: VaultCandidate): Promise<void> => {
     try {
-      const selected = await window.electronAPI.authorizeDiscoveredVault(candidate.path, { inboxPath: 'Proma Inbox', allowAgentWrites: false })
+      const selected = candidate.isPromaManaged
+        ? await window.electronAPI.selectDefaultVault()
+        : await window.electronAPI.authorizeDiscoveredVault(candidate.path, { inboxPath: 'Proma Inbox', allowAgentWrites: false })
       setConfig(selected)
       setRefreshToken((value) => value + 1)
       toast.success(`已连接 ${selected.displayName}`)
@@ -706,6 +707,7 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
                   >
                     <BookOpen size={15} className="shrink-0 text-primary" />
                     <span className="truncate">{candidate.displayName}</span>
+                    {candidate.isPromaManaged && <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">Proma 专属</span>}
                   </button>
                 ))}
               </div>

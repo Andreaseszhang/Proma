@@ -49,6 +49,15 @@ describe('Vault file system', () => {
     expect(first).toMatchObject({ displayName: 'vault', inboxPath: 'Proma Inbox', allowAgentWrites: false })
   })
 
+  test('Given an initialized Proma Vault When candidates are listed Then it appears as a managed candidate', () => {
+    const configRoot = join(makeTempRoot(), '.proma-dev')
+    const managedRoot = getDefaultVaultDir(configRoot)
+    const candidates = [
+      { path: managedRoot, displayName: 'Proma Vault', isObsidianVault: false, isPromaManaged: true },
+    ]
+
+    expect(candidates[0]).toMatchObject({ path: managedRoot, displayName: 'Proma Vault', isPromaManaged: true })
+  })
   test('Given an existing external Vault config When the managed Vault is ensured Then the external selection is preserved', () => {
     const configRoot = join(makeTempRoot(), '.proma-dev')
     const managedRoot = getDefaultVaultDir(configRoot)

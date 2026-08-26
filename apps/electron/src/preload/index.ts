@@ -479,7 +479,9 @@ export interface ElectronAPI {
 
   getVaultConfig: () => Promise<VaultSummary | null>
   ensureDefaultVault: () => Promise<VaultSummary>
+  selectDefaultVault: () => Promise<VaultSummary>
   discoverObsidianVaults: () => Promise<VaultCandidate[]>
+  listVaultCandidates: () => Promise<VaultCandidate[]>
   selectVault: (options?: { inboxPath?: string; allowAgentWrites?: boolean }) => Promise<VaultSummary | null>
   authorizeDiscoveredVault: (rootPath: string, options?: { inboxPath?: string; allowAgentWrites?: boolean }) => Promise<VaultSummary>
   updateVaultConfig: (options: { inboxPath?: string; allowAgentWrites?: boolean }) => Promise<VaultSummary>
@@ -1732,7 +1734,9 @@ const electronAPI: ElectronAPI = {
   // 用户授权的 Markdown Vault
   getVaultConfig: () => ipcRenderer.invoke(VAULT_IPC_CHANNELS.GET_CONFIG),
   ensureDefaultVault: () => ipcRenderer.invoke(VAULT_IPC_CHANNELS.ENSURE_DEFAULT),
+  selectDefaultVault: () => ipcRenderer.invoke(VAULT_IPC_CHANNELS.SELECT_DEFAULT),
   discoverObsidianVaults: () => ipcRenderer.invoke(VAULT_IPC_CHANNELS.DISCOVER),
+  listVaultCandidates: () => ipcRenderer.invoke(VAULT_IPC_CHANNELS.LIST_CANDIDATES),
   selectVault: (options?: { inboxPath?: string; allowAgentWrites?: boolean }) => ipcRenderer.invoke(VAULT_IPC_CHANNELS.SELECT, options),
   authorizeDiscoveredVault: (rootPath: string, options?: { inboxPath?: string; allowAgentWrites?: boolean }) => ipcRenderer.invoke(VAULT_IPC_CHANNELS.AUTHORIZE_CANDIDATE, rootPath, options),
   updateVaultConfig: (options: { inboxPath?: string; allowAgentWrites?: boolean }) => ipcRenderer.invoke(VAULT_IPC_CHANNELS.UPDATE_CONFIG, options),

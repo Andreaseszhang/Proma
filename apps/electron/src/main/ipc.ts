@@ -167,6 +167,8 @@ import {
   clearVaultConfig,
   configureVault,
   discoverObsidianVaultCandidates,
+  discoverVaultCandidates,
+  selectDefaultVault,
   ensureDefaultVault,
   formatVaultSourceBlock,
   getConfiguredVaultFileSystem,
@@ -5860,7 +5862,11 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(VAULT_IPC_CHANNELS.ENSURE_DEFAULT, async () => ensureDefaultVault())
 
+  ipcMain.handle(VAULT_IPC_CHANNELS.SELECT_DEFAULT, async () => selectDefaultVault())
+
   ipcMain.handle(VAULT_IPC_CHANNELS.DISCOVER, async () => discoverObsidianVaultCandidates())
+
+  ipcMain.handle(VAULT_IPC_CHANNELS.LIST_CANDIDATES, async () => discoverVaultCandidates())
 
   ipcMain.handle(VAULT_IPC_CHANNELS.SELECT, async (_, options: unknown) => {
     const input = options && typeof options === 'object' ? options as Record<string, unknown> : {}

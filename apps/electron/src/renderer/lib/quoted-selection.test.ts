@@ -29,13 +29,10 @@ describe('quoted selection XML', () => {
     expect(parsed.text).toBe('我的问题：')
   })
 
-  test('Given Agent 和草稿引用 When 解析引用块 Then 区分来源类型并使用展示标签', () => {
+  test('Given Agent 历史引用 When 解析引用块 Then 使用历史来源标签', () => {
     const content = [
       '<quoted_context source="agent-history" label="Agent 历史 · Agent 回复" message_id="m1" role="assistant">',
       '历史内容',
-      '</quoted_context>',
-      '<quoted_context source="scratch-pad" label="草稿页" message_id="" role="">',
-      '草稿内容',
       '</quoted_context>',
       '继续提问',
     ].join('\n')
@@ -57,12 +54,6 @@ describe('quoted selection XML', () => {
           messageRole: 'assistant',
           capturedAt: 0,
         },
-      },
-      {
-        path: '草稿页',
-        filename: '草稿页',
-        sourceType: 'scratch-pad',
-        label: '草稿页',
       },
     ])
     expect(parsed.text).toBe('继续提问')

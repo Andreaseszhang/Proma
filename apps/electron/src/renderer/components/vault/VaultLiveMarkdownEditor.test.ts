@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
-import { createVaultEditorMeasureScheduler, detectVaultBlockKinds } from './VaultLiveMarkdownEditor'
+import { readFileSync } from 'node:fs'
+import { createVaultEditorMeasureScheduler, detectVaultBlockKinds, shouldRebuildVaultDocumentIndex, shouldReuseVaultDecorations } from './VaultLiveMarkdownEditor'
 
 describe('Vault CodeMirror layout measurement', () => {
   test('coalesces side-panel resize and transition invalidations until after layout', () => {
@@ -48,6 +49,35 @@ describe('Vault CodeMirror layout measurement', () => {
   })
 })
 
+describe('Vault semantic decoration invalidation', () => {
+  test('does not rebuild decorations when document and active cursor line are unchanged', () => {
+    expect(shouldReuseVaultDecorations(false, new Set([3]), new Set([3]))).toBe(true)
+    expect(shouldReuseVaultDecorations(false, new Set([3]), new Set([4]))).toBe(false)
+    expect(shouldReuseVaultDecorations(true, new Set([3]), new Set([3]))).toBe(false)
+  })
+
+  test('maps a plain body edit instead of reparsing the complete document', () => {
+    const protectedRanges = [{ from: 1_000_000, to: 1_000_040 }]
+    expect(shouldRebuildVaultDocumentIndex([{ from: 42, to: 42, inserted: 'typing' }], protectedRanges)).toBe(false)
+    expect(shouldRebuildVaultDocumentIndex([{ from: 42, to: 42, inserted: '[[' }], protectedRanges)).toBe(true)
+    expect(shouldRebuildVaultDocumentIndex([{ from: 1_000_010, to: 1_000_010, inserted: 'x' }], protectedRanges)).toBe(true)
+  })
+})
+
+describe('Vault CodeMirror block-widget layout', () => {
+  test('keeps each rendered block’s vertical gap in its measurable border box', () => {
+    const stylesheet = readFileSync(new URL('../../styles/globals.css', import.meta.url), 'utf8')
+    const standardBlocks = stylesheet.match(/\.vault-ink-mde \.vault-markdown-table,[\s\S]*?\.vault-ink-mde \.vault-horizontal-rule \{([\s\S]*?)\n\}/)
+    const propertiesBlock = stylesheet.match(/\.vault-ink-mde \.vault-properties \{([\s\S]*?)\n\}/)
+
+    expect(standardBlocks?.[1]).toContain('padding-block: 0.9rem')
+    expect(standardBlocks?.[1]).not.toMatch(/\bmargin(?:-block|-top|-bottom)?\s*:/)
+    expect(stylesheet).toMatch(/\.vault-ink-mde \.vault-horizontal-rule \{\n  width: 100%;\n  padding-block: 1\.35rem;/)
+    expect(propertiesBlock?.[1]).toContain('padding: 1.5rem 0 1.95rem')
+    expect(propertiesBlock?.[1]).not.toMatch(/\bmargin(?:-block|-top|-bottom)?\s*:/)
+  })
+})
+
 describe('Vault live Markdown block detection', () => {
   test('recognizes leading YAML frontmatter without treating its delimiters as thematic breaks', () => {
     expect(detectVaultBlockKinds('---\ntags: [vault]\n---\n\n正文\n---')).toEqual([
@@ -57,6 +87,15 @@ describe('Vault live Markdown block detection', () => {
     expect(detectVaultBlockKinds('正文\n---\n内容\n---')).toEqual([
       { kind: 'thematic_break', startLine: 2, endLine: 2 },
       { kind: 'thematic_break', startLine: 4, endLine: 4 },
+    ])
+  })
+
+  test('indexes frontmatter and later block widgets independently for the CodeMirror decoration layer', () => {
+    expect(detectVaultBlockKinds('---\ntags: [vault]\n---\n\n正文\n---\n\n| Name | Value |\n| --- | --- |\n| A | B |\n\n```mermaid\nflowchart TD\n  A --> B\n```')).toEqual([
+      { kind: 'frontmatter', startLine: 1, endLine: 3 },
+      { kind: 'thematic_break', startLine: 6, endLine: 6 },
+      { kind: 'table', startLine: 8, endLine: 10 },
+      { kind: 'mermaid', startLine: 12, endLine: 15 },
     ])
   })
 

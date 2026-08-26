@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { getDefaultVaultDir, resolveDefaultVaultDir } from './config-paths'
@@ -10,6 +10,8 @@ import {
 } from './vault-service'
 
 const tempRoots: string[] = []
+const canEnforceUnreadableFilePermissions = process.platform !== 'win32' && process.getuid?.() !== 0
+const testWithEnforcedFilePermissions = canEnforceUnreadableFilePermissions ? test : test.skip
 
 function makeTempRoot(): string {
   const root = mkdtempSync(join(tmpdir(), 'proma-vault-'))
@@ -92,6 +94,45 @@ describe('Vault file system', () => {
     const vault = createVaultFileSystem(root)
 
     expect(vault.listFiles().map((entry) => entry.relativePath)).toEqual(['Inbox/idea.md'])
+  })
+
+  test('Given searchable Markdown notes When searched Then matching results retain the normal relative-path order', () => {
+    const root = makeTempRoot()
+    writeFile(join(root, 'z-last.md'), '# Z last\nNeedle in the final note')
+    writeFile(join(root, 'A', 'first.md'), '# A first\nNeedle in the first note')
+    const vault = createVaultFileSystem(root)
+
+    expect(vault.search('needle').map((result) => result.relativePath)).toEqual(['A/first.md', 'z-last.md'])
+  })
+
+  test('Given an oversized Markdown note before a matching note When searched Then the oversized note is skipped and later matches are returned', () => {
+    const root = makeTempRoot()
+    writeFileSync(join(root, 'a-oversized.md'), `needle ${'x'.repeat(2 * 1024 * 1024)}`, 'utf-8')
+    writeFile(join(root, 'z-matching.md'), '# Matching\nneedle remains searchable')
+    const vault = createVaultFileSystem(root)
+
+    expect(() => vault.readFile('a-oversized.md')).toThrow('超过 2 MB')
+    expect(vault.search('needle').map((result) => result.relativePath)).toEqual(['z-matching.md'])
+  })
+
+  testWithEnforcedFilePermissions('Given unreadable and symlinked Markdown files beside a matching note When searched Then unsafe files are skipped without blocking the match', () => {
+    const root = makeTempRoot()
+    const outsideRoot = makeTempRoot()
+    const unreadablePath = join(root, 'a-unreadable.md')
+    writeFile(unreadablePath, '# Unreadable\nneedle must be skipped')
+    writeFile(join(root, 'z-matching.md'), '# Matching\nneedle remains searchable')
+    writeFile(join(outsideRoot, 'outside.md'), '# Outside\nneedle must not be searched')
+    symlinkSync(join(outsideRoot, 'outside.md'), join(root, 'linked.md'))
+    chmodSync(unreadablePath, 0o000)
+    const vault = createVaultFileSystem(root)
+
+    try {
+      expect(() => vault.readFile('a-unreadable.md')).toThrow()
+      expect(() => vault.readFile('linked.md')).toThrow('软链接')
+      expect(vault.search('needle').map((result) => result.relativePath)).toEqual(['z-matching.md'])
+    } finally {
+      chmodSync(unreadablePath, 0o644)
+    }
   })
 
   test('Given a symlink to content outside the Vault When it is read Then access is rejected', () => {

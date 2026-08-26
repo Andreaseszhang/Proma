@@ -11,6 +11,7 @@ import {
 } from '@/components/agent/planning-reference-state'
 import { cn } from '@/lib/utils'
 import type { VaultReference, VaultReferenceType } from './vault-reference-utils'
+import { createLatestDebouncedRequest } from './vault-reference-query'
 
 interface VaultReferencePickerProps {
   open: boolean
@@ -26,6 +27,53 @@ export interface VaultReferenceChoice {
   description: string
 }
 
+const workspaceCapabilitiesRequests = new Map<string, ReturnType<typeof window.electronAPI.getWorkspaceCapabilities>>()
+let emptySessionChoicesRequest: Promise<VaultReferenceChoice[]> | null = null
+type PlanningReferenceItem = ReturnType<typeof buildPlanningReferenceItems>[number]
+let planningReferenceItemsRequest: Promise<PlanningReferenceItem[]> | null = null
+
+function loadWorkspaceCapabilities(workspaceSlug: string): ReturnType<typeof window.electronAPI.getWorkspaceCapabilities> {
+  const existing = workspaceCapabilitiesRequests.get(workspaceSlug)
+  if (existing) return existing
+  const request = window.electronAPI.getWorkspaceCapabilities(workspaceSlug)
+  workspaceCapabilitiesRequests.set(workspaceSlug, request)
+  void request.catch(() => {
+    if (workspaceCapabilitiesRequests.get(workspaceSlug) === request) workspaceCapabilitiesRequests.delete(workspaceSlug)
+  })
+  return request
+}
+
+async function loadPlanningReferenceItems(): Promise<PlanningReferenceItem[]> {
+  if (planningReferenceItemsRequest) return planningReferenceItemsRequest
+  const { from, toExclusive } = getPlanningReferenceRange()
+  const request = Promise.all([
+    window.electronAPI.listTodos({ status: 'open', limit: 100 }),
+    window.electronAPI.listCalendarEvents({ from, to: toExclusive, limit: 100 }),
+  ]).then(([todos, events]) => buildPlanningReferenceItems(todos, events))
+  planningReferenceItemsRequest = request
+  void request.then(
+    () => { if (planningReferenceItemsRequest === request) planningReferenceItemsRequest = null },
+    () => { if (planningReferenceItemsRequest === request) planningReferenceItemsRequest = null },
+  )
+  return request
+}
+
+async function loadSessionChoices(query: string): Promise<VaultReferenceChoice[]> {
+  if (!query && emptySessionChoicesRequest) return emptySessionChoicesRequest
+  const request = window.electronAPI.searchAgentSessionReferences({ query, limit: query ? 20 : 100 })
+    .then((results: AgentSessionReferenceSearchResult[]) => results.map((session) => ({
+      reference: { type: 'session' as const, id: session.sessionId, label: session.title },
+      description: session.workspaceName ?? session.workspaceSlug ?? 'Proma 会话',
+    })))
+  if (!query) {
+    emptySessionChoicesRequest = request
+    void request.catch(() => {
+      if (emptySessionChoicesRequest === request) emptySessionChoicesRequest = null
+    })
+  }
+  return request
+}
+
 export async function loadVaultReferenceChoices(type: VaultReferenceType | 'all', query: string, workspaceSlug: string | null): Promise<VaultReferenceChoice[]> {
   if (type === 'all') {
     const types: VaultReferenceType[] = ['session', 'skill', 'mcp', 'todo', 'calendar_event']
@@ -33,17 +81,11 @@ export async function loadVaultReferenceChoices(type: VaultReferenceType | 'all'
     return choices.flat()
   }
 
-  if (type === 'session') {
-    const results: AgentSessionReferenceSearchResult[] = await window.electronAPI.searchAgentSessionReferences({ query, limit: query ? 20 : 100 })
-    return results.map((session) => ({
-      reference: { type, id: session.sessionId, label: session.title },
-      description: session.workspaceName ?? session.workspaceSlug ?? 'Proma 会话',
-    }))
-  }
+  if (type === 'session') return loadSessionChoices(query)
 
   if (type === 'skill' || type === 'mcp') {
     if (!workspaceSlug) return []
-    const capabilities = await window.electronAPI.getWorkspaceCapabilities(workspaceSlug)
+    const capabilities = await loadWorkspaceCapabilities(workspaceSlug)
     if (type === 'skill') {
       return capabilities.skills
         .filter((skill) => skill.enabled && matchesQuery(`${skill.name} ${skill.slug ?? ''}`, query))
@@ -60,12 +102,7 @@ export async function loadVaultReferenceChoices(type: VaultReferenceType | 'all'
       }))
   }
 
-  const { from, toExclusive } = getPlanningReferenceRange()
-  const [todos, events] = await Promise.all([
-    window.electronAPI.listTodos({ status: 'open', limit: 100 }),
-    window.electronAPI.listCalendarEvents({ from, to: toExclusive, limit: 100 }),
-  ])
-  return filterPlanningReferenceItems(buildPlanningReferenceItems(todos, events), query)
+  return filterPlanningReferenceItems(await loadPlanningReferenceItems(), query)
     .filter((item) => item.referenceType === type)
     .map((item) => ({
       reference: { type, id: item.id, label: item.label },
@@ -87,7 +124,7 @@ export function matchesQuery(value: string, query: string): boolean {
 }
 
 
-async function loadChoices(type: VaultReferenceType, query: string, workspaceSlug: string | null): Promise<VaultReferenceChoice[]> {
+async function loadChoices([type, query, workspaceSlug]: readonly [VaultReferenceType, string, string | null]): Promise<VaultReferenceChoice[]> {
   return loadVaultReferenceChoices(type, query, workspaceSlug)
 }
 
@@ -104,6 +141,7 @@ export function VaultReferencePicker({
   const [query, setQuery] = React.useState(initialReference?.label ?? '')
   const [choices, setChoices] = React.useState<VaultReferenceChoice[]>([])
   const [loading, setLoading] = React.useState(false)
+  const requestRef = React.useRef(createLatestDebouncedRequest(loadChoices))
 
   React.useEffect(() => {
     if (!open) return
@@ -112,22 +150,23 @@ export function VaultReferencePicker({
   }, [initialReference, initialType, open])
 
   React.useEffect(() => {
-    if (!open) return
-    let cancelled = false
-    setLoading(true)
-    void loadChoices(type, query, workspaceSlug)
-      .then((nextChoices) => {
-        if (!cancelled) setChoices(nextChoices)
-      })
-      .catch(() => {
-        if (!cancelled) setChoices([])
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-    return () => {
-      cancelled = true
+    if (!open) {
+      requestRef.current.cancel()
+      return
     }
+    setLoading(true)
+    requestRef.current.request(
+      [type, query, workspaceSlug] as const,
+      (nextChoices) => {
+        setChoices(nextChoices)
+        setLoading(false)
+      },
+      () => {
+        setChoices([])
+        setLoading(false)
+      },
+    )
+    return () => requestRef.current.cancel()
   }, [open, query, type, workspaceSlug])
 
   const selectType = (nextType: VaultReferenceType): void => {

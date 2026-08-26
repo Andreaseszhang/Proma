@@ -16,10 +16,11 @@ import ink, { type Instance } from 'ink-mde'
 import { MermaidBlock } from '@proma/ui'
 import { shouldRenderMermaidCodeBlock } from '../../lib/mermaid-detection'
 import { loadVaultReferenceChoices, type VaultReferenceChoice } from './VaultReferencePicker'
+import { createLatestDebouncedRequest } from './vault-reference-query'
+import { createVaultWikiLinkResolver, type VaultWikiLinkResolver } from './vault-wiki-resolver'
 import {
   findVaultWikiLinkAt,
   parseVaultReferences,
-  resolveVaultWikiLink,
   serializeVaultReference,
   vaultReferenceTypeForTrigger,
   type VaultReference,
@@ -150,7 +151,33 @@ class VaultReferenceWidget extends WidgetType {
   }
 }
 
-class VaultTableWidget extends WidgetType {
+/**
+ * CodeMirror's height map measures block-widget DOM rectangles, which exclude
+ * CSS margins. Watch intrinsic widget resizes (notably async Mermaid renders)
+ * and schedule a fresh measure after layout has settled.
+ */
+abstract class VaultBlockWidget extends WidgetType {
+  private sizeObserver: ResizeObserver | null = null
+  private measureScheduler: ReturnType<typeof createVaultEditorMeasureScheduler> | null = null
+
+  protected watchSize(element: HTMLElement, view: EditorView): void {
+    this.measureScheduler = createVaultEditorMeasureScheduler(() => view)
+    if (typeof ResizeObserver === 'function') {
+      this.sizeObserver = new ResizeObserver(this.measureScheduler.request)
+      this.sizeObserver.observe(element)
+    }
+    this.measureScheduler.request()
+  }
+
+  override destroy(_dom: HTMLElement): void {
+    this.sizeObserver?.disconnect()
+    this.sizeObserver = null
+    this.measureScheduler?.dispose()
+    this.measureScheduler = null
+  }
+}
+
+class VaultTableWidget extends VaultBlockWidget {
   constructor(private readonly rows: string[][], private readonly from: number) {
     super()
   }
@@ -159,7 +186,7 @@ class VaultTableWidget extends WidgetType {
     return this.from === other.from && JSON.stringify(this.rows) === JSON.stringify(other.rows)
   }
 
-  override toDOM(): HTMLElement {
+  override toDOM(view: EditorView): HTMLElement {
     const wrapper = document.createElement('div')
     wrapper.className = 'vault-markdown-table'
     wrapper.dataset.vaultBlockFrom = String(this.from)
@@ -175,6 +202,7 @@ class VaultTableWidget extends WidgetType {
       table.appendChild(tr)
     })
     wrapper.appendChild(table)
+    this.watchSize(wrapper, view)
     return wrapper
   }
 
@@ -199,7 +227,7 @@ function parseVaultListValue(value: string): string[] | null {
   return content.split(',').map((item) => item.trim().replace(/^['"]|['"]$/g, '')).filter(Boolean)
 }
 
-class VaultHorizontalRuleWidget extends WidgetType {
+class VaultHorizontalRuleWidget extends VaultBlockWidget {
   constructor(private readonly from: number) {
     super()
   }
@@ -208,12 +236,13 @@ class VaultHorizontalRuleWidget extends WidgetType {
     return this.from === other.from
   }
 
-  override toDOM(): HTMLElement {
+  override toDOM(view: EditorView): HTMLElement {
     const wrapper = document.createElement('div')
     wrapper.className = 'vault-horizontal-rule'
     wrapper.dataset.vaultBlockFrom = String(this.from)
     const rule = document.createElement('hr')
     wrapper.appendChild(rule)
+    this.watchSize(wrapper, view)
     return wrapper
   }
 
@@ -222,7 +251,7 @@ class VaultHorizontalRuleWidget extends WidgetType {
   }
 }
 
-class VaultPropertiesWidget extends WidgetType {
+class VaultPropertiesWidget extends VaultBlockWidget {
   constructor(
     private readonly entries: VaultPropertyEntry[],
     private readonly from: number,
@@ -235,7 +264,7 @@ class VaultPropertiesWidget extends WidgetType {
     return this.from === other.from && JSON.stringify(this.entries) === JSON.stringify(other.entries)
   }
 
-  override toDOM(): HTMLElement {
+  override toDOM(view: EditorView): HTMLElement {
     const wrapper = document.createElement('section')
     wrapper.className = 'vault-properties'
     wrapper.dataset.vaultBlockFrom = String(this.from)
@@ -301,6 +330,7 @@ class VaultPropertiesWidget extends WidgetType {
       list.appendChild(row)
     })
     wrapper.appendChild(list)
+    this.watchSize(wrapper, view)
     return wrapper
   }
 
@@ -309,7 +339,7 @@ class VaultPropertiesWidget extends WidgetType {
   }
 }
 
-class VaultMermaidWidget extends WidgetType {
+class VaultMermaidWidget extends VaultBlockWidget {
   private root: Root | null = null
 
   constructor(private readonly code: string, private readonly from: number) {
@@ -320,16 +350,18 @@ class VaultMermaidWidget extends WidgetType {
     return this.from === other.from && this.code === other.code
   }
 
-  override toDOM(): HTMLElement {
+  override toDOM(view: EditorView): HTMLElement {
     const wrapper = document.createElement('div')
     wrapper.className = 'vault-mermaid-block'
     wrapper.dataset.vaultBlockFrom = String(this.from)
     this.root = createRoot(wrapper)
     this.root.render(<MermaidBlock code={this.code} />)
+    this.watchSize(wrapper, view)
     return wrapper
   }
 
-  override destroy(): void {
+  override destroy(dom: HTMLElement): void {
+    super.destroy(dom)
     this.root?.unmount()
     this.root = null
   }
@@ -450,9 +482,9 @@ interface VaultBlock {
   decoration: Decoration
 }
 
-function buildVaultBlocks(state: EditorState, onChangeProperties: (entries: VaultPropertyEntry[]) => void): VaultBlock[] {
+function buildVaultBlocks(state: EditorState, document: string, onChangeProperties: (entries: VaultPropertyEntry[]) => void): VaultBlock[] {
   const lineTexts = Array.from({ length: state.doc.lines }, (_, index) => state.doc.line(index + 1).text)
-  return detectVaultBlockKinds(state.doc.toString()).flatMap((match): VaultBlock[] => {
+  return detectVaultBlockKinds(document).flatMap((match): VaultBlock[] => {
     const from = state.doc.line(match.startLine).from
     const to = state.doc.line(match.endLine).to
 
@@ -504,47 +536,114 @@ export function isCaretInsideReference(caretPositions: number[], from: number, t
   return caretPositions.some((position) => position > from && position <= to)
 }
 
+interface VaultWikiLinkRange {
+  target: string
+  from: number
+  to: number
+}
+
+interface VaultDocumentIndex {
+  blocks: VaultBlock[]
+  references: VaultReferenceRange[]
+  wikiLinks: VaultWikiLinkRange[]
+}
+
+interface VaultDocumentIndexState {
+  activeLines: Set<number>
+  index: VaultDocumentIndex
+  decorations: DecorationSet
+}
+
+interface VaultIndexChange {
+  from: number
+  to: number
+  inserted: string
+}
+
+/** A plain edit outside Markdown constructs can safely reuse mapped decorations. */
+export function shouldRebuildVaultDocumentIndex(
+  changes: readonly VaultIndexChange[],
+  protectedRanges: readonly { from: number; to: number }[],
+): boolean {
+  return changes.some(({ from, to, inserted }) => (
+    /[\r\n\[\]|`~*_#\\-]/.test(inserted)
+    || protectedRanges.some((range) => from <= range.to && to >= range.from)
+  ))
+}
+
+function activeCursorLineSet(state: EditorState): Set<number> {
+  return new Set(state.selection.ranges.map((range) => state.doc.lineAt(range.head).number))
+}
+
+function sameLineSet(left: Set<number>, right: Set<number>): boolean {
+  return left.size === right.size && Array.from(left).every((line) => right.has(line))
+}
+
+/** Selection movements within the same line do not affect visible Markdown widgets. */
+export function shouldReuseVaultDecorations(docChanged: boolean, activeLines: Set<number>, previousActiveLines: Set<number>): boolean {
+  return !docChanged && sameLineSet(activeLines, previousActiveLines)
+}
+
+function buildVaultDocumentIndex(state: EditorState, onChangeProperties: (entries: VaultPropertyEntry[]) => void): VaultDocumentIndex {
+  // CodeMirror keeps the document as a rope. Materialize it once only when a
+  // semantic Markdown edit requires reparsing, never for a pure selection move.
+  const document = state.doc.toString()
+  const wikiLinks: VaultWikiLinkRange[] = []
+  const wikiPattern = /\[\[([^\]\n]+)\]\]/g
+  let match: RegExpExecArray | null
+  while ((match = wikiPattern.exec(document)) !== null) {
+    const target = match[1]?.trim() ?? ''
+    if (target) wikiLinks.push({ target, from: match.index, to: match.index + match[0].length })
+  }
+  return {
+    blocks: buildVaultBlocks(state, document, onChangeProperties),
+    references: parseVaultReferences(document),
+    wikiLinks,
+  }
+}
+
+function mapVaultDocumentIndex(index: VaultDocumentIndex, transaction: { changes: { mapPos: (position: number, association?: number) => number } }): VaultDocumentIndex {
+  const mapRange = <T extends { from: number; to: number }>(range: T): T => ({
+    ...range,
+    from: transaction.changes.mapPos(range.from, -1),
+    to: transaction.changes.mapPos(range.to, 1),
+  })
+  return {
+    blocks: index.blocks.map(mapRange),
+    references: index.references.map(mapRange),
+    wikiLinks: index.wikiLinks.map(mapRange),
+  }
+}
+
 function createVaultReferenceExtension({
   onOpenWikiLink,
   onEditReference,
   onChangeProperties,
   onActivateReference,
-  filesRef,
+  wikiResolverRef,
 }: {
   onOpenWikiLink: (target: string) => void
   onEditReference: (reference: VaultReferenceRange) => void
   onChangeProperties: (entries: VaultPropertyEntry[]) => void
   onActivateReference: (reference: VaultReferenceRange) => void
-  filesRef: { current: VaultFileEntry[] }
+  wikiResolverRef: { current: VaultWikiLinkResolver | null }
 }) {
-  const referenceField = StateField.define<DecorationSet>({
-    create: (state) => buildReferenceDecorations(state),
-    update: (value, transaction) => {
-      if (!transaction.docChanged && transaction.selection === undefined) return value
-      return buildReferenceDecorations(transaction.state)
-    },
-    provide: (field) => EditorView.decorations.from(field),
-  })
-
-  function buildReferenceDecorations(state: EditorState): DecorationSet {
-    const activeLines = new Set(state.selection.ranges.map((range) => state.doc.lineAt(range.head).number))
-    const doc = state.doc.toString()
-    const allBlocks = buildVaultBlocks(state, onChangeProperties)
+  const buildReferenceDecorations = (state: EditorState, index: VaultDocumentIndex, activeLines: Set<number>): DecorationSet => {
     const hasActiveCursor = (block: VaultBlock): boolean => {
       const startLine = state.doc.lineAt(block.from).number
       const endLine = state.doc.lineAt(block.to).number
       return Array.from(activeLines).some((line) => line >= startLine && line <= endLine)
     }
-    const blockRanges = allBlocks.filter((block) => block.kind === 'frontmatter' || !hasActiveCursor(block))
+    const blockRanges = index.blocks.filter((block) => block.kind === 'frontmatter' || !hasActiveCursor(block))
     const decorations: Array<{ from: number; to: number; decoration: Decoration }> = blockRanges.map((block) => ({
       from: block.from,
       to: block.to,
       decoration: block.decoration,
     }))
-    const isInsideBlock = (from: number, to: number): boolean => allBlocks.some((block) => from >= block.from && to <= block.to)
+    const isInsideBlock = (from: number, to: number): boolean => index.blocks.some((block) => from >= block.from && to <= block.to)
 
     const caretPositions = state.selection.ranges.map((range) => range.head)
-    for (const reference of parseVaultReferences(doc)) {
+    for (const reference of index.references) {
       if (isCaretInsideReference(caretPositions, reference.from, reference.to) || isInsideBlock(reference.from, reference.to)) continue
       decorations.push({
         from: reference.from,
@@ -553,16 +652,12 @@ function createVaultReferenceExtension({
       })
     }
 
-    const wikiPattern = /\[\[([^\]\n]+)\]\]/g
-    let match: RegExpExecArray | null
-    while ((match = wikiPattern.exec(doc)) !== null) {
-      const target = match[1]?.trim() ?? ''
-      const from = match.index
-      const to = from + match[0].length
-      if (!target || activeLines.has(state.doc.lineAt(from).number) || isInsideBlock(from, to)) continue
-      const resolved = resolveVaultWikiLink(target, filesRef.current)
-      const className = resolved ? 'vault-wiki-link' : 'vault-wiki-link vault-wiki-link-unresolved'
-      decorations.push({ from: from + 2, to: to - 2, decoration: Decoration.mark({ class: className }) })
+    for (const wikiLink of index.wikiLinks) {
+      if (activeLines.has(state.doc.lineAt(wikiLink.from).number) || isInsideBlock(wikiLink.from, wikiLink.to)) continue
+      const className = wikiResolverRef.current?.resolve(wikiLink.target)
+        ? 'vault-wiki-link'
+        : 'vault-wiki-link vault-wiki-link-unresolved'
+      decorations.push({ from: wikiLink.from + 2, to: wikiLink.to - 2, decoration: Decoration.mark({ class: className }) })
     }
 
     decorations.sort((left, right) => left.from - right.from || left.to - right.to)
@@ -570,6 +665,34 @@ function createVaultReferenceExtension({
     for (const item of decorations) builder.add(item.from, item.to, item.decoration)
     return builder.finish()
   }
+
+  const referenceField = StateField.define<VaultDocumentIndexState>({
+    create: (state) => {
+      const activeLines = activeCursorLineSet(state)
+      const index = buildVaultDocumentIndex(state, onChangeProperties)
+      return { activeLines, index, decorations: buildReferenceDecorations(state, index, activeLines) }
+    },
+    update: (value, transaction) => {
+      const activeLines = activeCursorLineSet(transaction.state)
+      if (shouldReuseVaultDecorations(transaction.docChanged, activeLines, value.activeLines)) return value
+
+      const index = transaction.docChanged && shouldRebuildVaultDocumentIndex(
+        (() => {
+          const changes: VaultIndexChange[] = []
+          transaction.changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => changes.push({ from: fromA, to: toA, inserted: inserted.toString() }))
+          return changes
+        })(),
+        [...value.index.blocks, ...value.index.references, ...value.index.wikiLinks],
+      )
+        ? buildVaultDocumentIndex(transaction.state, onChangeProperties)
+        : transaction.docChanged
+          ? mapVaultDocumentIndex(value.index, transaction)
+          : value.index
+
+      return { activeLines, index, decorations: buildReferenceDecorations(transaction.state, index, activeLines) }
+    },
+    provide: (field) => EditorView.decorations.from(field, (value) => value.decorations),
+  })
 
   return [
     referenceField,
@@ -598,7 +721,7 @@ function createVaultReferenceExtension({
         const wikiElement = pointTarget?.closest<HTMLElement>('.vault-wiki-link')
         if (!wikiElement || !view.dom.contains(wikiElement)) return false
         const wikiLink = findVaultWikiLinkAt(view.state.doc.toString(), position)
-        if (!wikiLink || !resolveVaultWikiLink(wikiLink.target, filesRef.current)) return false
+        if (!wikiLink || !wikiResolverRef.current?.resolve(wikiLink.target)) return false
         event.preventDefault()
         onOpenWikiLink(wikiLink.target)
         return true
@@ -770,6 +893,7 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
   suggestionItemsRef.current = suggestionItems
   suggestionIndexRef.current = suggestionIndex
   const filesRef = React.useRef(files)
+  const wikiResolverRef = React.useRef<VaultWikiLinkResolver | null>(null)
   valueRef.current = value
   onChangeRef.current = onChange
   onSaveRef.current = onSave
@@ -778,7 +902,10 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
   onChangePropertiesRef.current = onChangeProperties
   onActivateReferenceRef.current = onActivateReference
   workspaceSlugRef.current = workspaceSlug
-  filesRef.current = files
+  if (!wikiResolverRef.current || filesRef.current !== files) {
+    filesRef.current = files
+    wikiResolverRef.current = createVaultWikiLinkResolver(files)
+  }
 
   React.useEffect(() => {
     const host = hostRef.current
@@ -809,18 +936,24 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
     }
   }, [])
 
+  const suggestionRequestRef = React.useRef(createLatestDebouncedRequest(
+    ({ type, query, workspaceSlug }: { type: VaultReferenceType | 'all'; query: string; workspaceSlug: string | null }) => loadVaultReferenceChoices(type, query, workspaceSlug),
+  ))
+
   React.useEffect(() => {
     if (!suggestion) {
+      suggestionRequestRef.current.cancel()
       setSuggestionItems([])
       return
     }
-    let cancelled = false
     setSuggestionIndex(0)
-    void loadVaultReferenceChoices(suggestion.type, suggestion.query, workspaceSlugRef.current)
-      .then((items) => { if (!cancelled) setSuggestionItems(items) })
-      .catch(() => { if (!cancelled) setSuggestionItems([]) })
-    return () => { cancelled = true }
-  }, [suggestion])
+    suggestionRequestRef.current.request(
+      { type: suggestion.type, query: suggestion.query, workspaceSlug: workspaceSlugRef.current },
+      setSuggestionItems,
+      () => setSuggestionItems([]),
+    )
+    return () => suggestionRequestRef.current.cancel()
+  }, [suggestion?.type, suggestion?.query, suggestion?.from])
 
   React.useEffect(() => {
     if (!suggestion) return
@@ -992,7 +1125,7 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
           onOpenWikiLink: (target) => onOpenWikiLinkRef.current(target),
           onEditReference: (reference) => onEditReferenceRef.current(reference),
           onChangeProperties: (entries) => onChangePropertiesRef.current(entries),
-          filesRef,
+          wikiResolverRef,
         }),
       ].map((extension) => ({
         type: 'default' as const,

@@ -79,6 +79,7 @@ import { generateCodexTitle } from './adapters/pi-codex-title-generator'
 import { createFallbackTitle, sanitizeGeneratedTitle, TITLE_PROMPT } from './title-generation'
 import { claimWorkspaceMemoryRefreshOpportunity } from './agent-memory-refresh-service'
 import { browserController } from './browser-controller'
+import { resolveRuntimeAdditionalDirectories } from './agent-orchestrator-vault-access'
 
 // ===== 类型定义 =====
 
@@ -1009,13 +1010,15 @@ export class AgentOrchestrator {
 
       // 必须与 runtime 接收的附加目录保持一致；视觉助手据此限制允许外发的图片路径。
       const vaultUserContext = getVaultUserContext(sessionId)
-      const vaultRootPath = vaultUserContext?.rootPath
-      const allAdditionalDirectories = collectAttachedDirectories({
+      const attachedDirectories = collectAttachedDirectories({
         extraDirs: additionalDirectories,
         sessionMeta,
         workspaceSlug,
       })
-      if (vaultRootPath && !allAdditionalDirectories.includes(vaultRootPath)) allAdditionalDirectories.push(vaultRootPath)
+      const allAdditionalDirectories = resolveRuntimeAdditionalDirectories(
+        attachedDirectories,
+        vaultUserContext,
+      )
       const browserAllowedRoots = [...new Set([
         workspaceId ? agentCwd : undefined,
         workspaceSlug ? getProjectFilesPath(workspaceSlug) : undefined,

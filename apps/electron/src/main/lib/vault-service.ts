@@ -46,19 +46,19 @@ function isWindowsAbsolutePath(value: string): boolean {
 
 function normalizeRelativeMarkdownPath(value: string): string {
   if (typeof value !== 'string' || value.trim().length === 0 || value.includes('\0')) {
-    throw new Error('Obsidian 相对路径不能为空')
+    throw new Error('Vault 相对路径不能为空')
   }
   if (isAbsolute(value) || isWindowsAbsolutePath(value)) {
-    throw new Error('Obsidian 不接受绝对路径')
+    throw new Error('Vault 不接受绝对路径')
   }
 
   const normalized = value.replace(/\\/g, '/').replace(/^\.\//, '')
   const parts = normalized.split('/')
   if (parts.some((part) => !part || part === '.' || part === '..' || part.startsWith(HIDDEN_DIRECTORY_PREFIX))) {
-    throw new Error('Obsidian 路径不能包含隐藏目录、空段或上级目录')
+    throw new Error('Vault 路径不能包含隐藏目录、空段或上级目录')
   }
   if (!normalized.toLowerCase().endsWith('.md')) {
-    throw new Error('Obsidian 仅支持 Markdown (.md) 文件')
+    throw new Error('Vault 仅支持 Markdown (.md) 文件')
   }
   return parts.join('/')
 }
@@ -71,7 +71,7 @@ function isWithinRoot(rootPath: string, targetPath: string): boolean {
 function assertVaultRoot(rootPath: string): string {
   const resolved = realpathSync(resolve(rootPath))
   if (!statSync(resolved).isDirectory()) {
-    throw new Error('Obsidian 根路径不是目录')
+    throw new Error('Vault 根路径不是目录')
   }
   return resolved
 }
@@ -80,7 +80,7 @@ function getSafeVaultTarget(rootPath: string, relativePath: string): { absoluteP
   const normalizedRelativePath = normalizeRelativeMarkdownPath(relativePath)
   const absolutePath = resolve(rootPath, normalizedRelativePath)
   if (!isWithinRoot(rootPath, absolutePath)) {
-    throw new Error('Obsidian 路径超出授权根目录')
+    throw new Error('Vault 路径超出授权根目录')
   }
 
   let current = rootPath
@@ -89,7 +89,7 @@ function getSafeVaultTarget(rootPath: string, relativePath: string): { absoluteP
     if (!existsSync(current)) continue
     const stats = lstatSync(current)
     if (stats.isSymbolicLink()) {
-      throw new Error('Obsidian 不允许通过软链接访问文件')
+      throw new Error('Vault 不允许通过软链接访问文件')
     }
   }
 
@@ -220,13 +220,17 @@ export function createVaultFileSystem(rootPath: string): VaultFileSystem {
           continue
         }
         if (!entry.isFile() || !entry.name.toLowerCase().endsWith('.md')) continue
-        const stats = statSync(absolutePath)
-        entries.push({
-          relativePath: toRelativePath(root, absolutePath),
-          name: entry.name,
-          size: stats.size,
-          modifiedAt: stats.mtimeMs,
-        })
+        try {
+          const stats = statSync(absolutePath)
+          entries.push({
+            relativePath: toRelativePath(root, absolutePath),
+            name: entry.name,
+            size: stats.size,
+            modifiedAt: stats.mtimeMs,
+          })
+        } catch {
+          // 遍历期间文件可能消失或暂时不可访问，跳过后继续处理其他条目。
+        }
       }
     }
 
@@ -236,10 +240,10 @@ export function createVaultFileSystem(rootPath: string): VaultFileSystem {
 
   const readFile = (relativePath: string): VaultReadResult => {
     const target = getSafeVaultTarget(root, relativePath)
-    if (!existsSync(target.absolutePath)) throw new Error(`Obsidian 文件不存在: ${target.relativePath}`)
+    if (!existsSync(target.absolutePath)) throw new Error(`Vault 文件不存在: ${target.relativePath}`)
     const stats = lstatSync(target.absolutePath)
-    if (!stats.isFile()) throw new Error('Obsidian 目标不是普通文件')
-    if (stats.size > MAX_VAULT_FILE_BYTES) throw new Error('Obsidian 文件超过 2 MB 读取上限')
+    if (!stats.isFile()) throw new Error('Vault 目标不是普通文件')
+    if (stats.size > MAX_VAULT_FILE_BYTES) throw new Error('Vault 文件超过 2 MB 读取上限')
     const content = readFileSync(target.absolutePath, 'utf-8')
     return {
       relativePath: target.relativePath,
@@ -251,18 +255,18 @@ export function createVaultFileSystem(rootPath: string): VaultFileSystem {
 
   const writeFile = (input: VaultWriteInput): VaultWriteResult => {
     if (Buffer.byteLength(input.content, 'utf-8') > MAX_VAULT_FILE_BYTES) {
-      throw new Error('Obsidian 写入内容超过 2 MB 限制')
+      throw new Error('Vault 写入内容超过 2 MB 限制')
     }
     const target = getSafeVaultTarget(root, input.relativePath)
     const exists = existsSync(target.absolutePath)
     if (exists) {
       const current = readFile(target.relativePath)
-      if (input.createOnly) throw new Error(`Obsidian 文件已存在: ${target.relativePath}`)
+      if (input.createOnly) throw new Error(`Vault 文件已存在: ${target.relativePath}`)
       if (input.expectedSha256 && input.expectedSha256 !== current.sha256) {
         return { ok: false, reason: 'conflict', currentSha256: current.sha256, currentModifiedAt: current.modifiedAt }
       }
     } else if (input.expectedSha256) {
-      throw new Error('Obsidian 文件已不存在，无法按预期版本写入')
+      throw new Error('Vault 文件已不存在，无法按预期版本写入')
     }
 
     mkdirSync(dirname(target.absolutePath), { recursive: true })
@@ -342,7 +346,13 @@ export function createVaultFileSystem(rootPath: string): VaultFileSystem {
     const results: VaultSearchResult[] = []
     for (const entry of listFiles()) {
       if (results.length >= boundedLimit) break
-      const content = readFile(entry.relativePath).content
+      let content: string
+      try {
+        content = readFile(entry.relativePath).content
+      } catch {
+        // 单个超限、不可访问或暂时变化的文件不得阻断后续搜索。
+        continue
+      }
       const match = readableSnippet(content, normalizedQuery)
       const nameMatch = entry.name.toLowerCase().includes(normalizedQuery)
       if (!match && !nameMatch) continue
@@ -473,13 +483,13 @@ export function ensureDefaultVault(): VaultSummary {
 
 export function authorizeDiscoveredVault(rootPath: string, options: { inboxPath?: string; allowAgentWrites?: boolean } = {}): VaultSummary {
   const candidate = discoverObsidianVaultCandidates().find((item) => item.path === rootPath)
-  if (!candidate) throw new Error('Obsidian 候选已失效，请通过系统文件夹选择器重新授权')
+  if (!candidate) throw new Error('Vault 候选已失效，请通过系统文件夹选择器重新授权')
   return configureVault(candidate.path, options)
 }
 
 export function updateVaultConfig(options: { inboxPath?: string; allowAgentWrites?: boolean }): VaultSummary {
   const current = getVaultConfig()
-  if (!current) throw new Error('尚未选择 Obsidian')
+  if (!current) throw new Error('尚未选择 Vault')
   const inboxPath = options.inboxPath === undefined
     ? current.inboxPath
     : normalizeRelativeMarkdownPath(join(options.inboxPath, 'placeholder.md')).replace(/\/placeholder\.md$/, '')
@@ -505,7 +515,7 @@ export function clearVaultConfig(): void {
 
 export function getConfiguredVaultFileSystem(): VaultFileSystem {
   const config = getVaultConfig()
-  if (!config) throw new Error('尚未选择 Obsidian')
+  if (!config) throw new Error('尚未选择 Vault')
   return createVaultFileSystem(config.rootPath)
 }
 

@@ -5877,14 +5877,14 @@ export function registerIpcHandlers(): void {
     if (!win) return null
     const result = await dialog.showOpenDialog(win, {
       properties: ['openDirectory'],
-      title: '选择 Obsidian Vault',
+      title: '选择 Vault 文件夹',
     })
     if (result.canceled || result.filePaths.length === 0) return null
     return configureVault(result.filePaths[0]!, { inboxPath, allowAgentWrites })
   })
 
   ipcMain.handle(VAULT_IPC_CHANNELS.AUTHORIZE_CANDIDATE, async (_, rootPath: unknown, options: unknown) => {
-    if (typeof rootPath !== 'string') throw new Error('Obsidian 候选路径非法')
+    if (typeof rootPath !== 'string') throw new Error('Vault 候选路径非法')
     const input = options && typeof options === 'object' ? options as Record<string, unknown> : {}
     return authorizeDiscoveredVault(rootPath, {
       inboxPath: typeof input.inboxPath === 'string' ? input.inboxPath : undefined,
@@ -5893,10 +5893,10 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(VAULT_IPC_CHANNELS.UPDATE_CONFIG, async (_, options: unknown) => {
-    if (!options || typeof options !== 'object') throw new Error('Obsidian 设置参数非法')
+    if (!options || typeof options !== 'object') throw new Error('Vault 设置参数非法')
     const input = options as Record<string, unknown>
-    if (input.inboxPath !== undefined && typeof input.inboxPath !== 'string') throw new Error('Obsidian inboxPath 非法')
-    if (input.allowAgentWrites !== undefined && typeof input.allowAgentWrites !== 'boolean') throw new Error('Obsidian allowAgentWrites 非法')
+    if (input.inboxPath !== undefined && typeof input.inboxPath !== 'string') throw new Error('Vault inboxPath 非法')
+    if (input.allowAgentWrites !== undefined && typeof input.allowAgentWrites !== 'boolean') throw new Error('Vault allowAgentWrites 非法')
     return updateVaultConfig({
       inboxPath: typeof input.inboxPath === 'string' ? input.inboxPath : undefined,
       allowAgentWrites: typeof input.allowAgentWrites === 'boolean' ? input.allowAgentWrites : undefined,
@@ -5908,15 +5908,15 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(VAULT_IPC_CHANNELS.LIST_FILES, async () => getConfiguredVaultFileSystem().listFiles())
 
   ipcMain.handle(VAULT_IPC_CHANNELS.READ_FILE, async (_, relativePath: unknown) => {
-    if (typeof relativePath !== 'string') throw new Error('Obsidian relativePath 必填')
+    if (typeof relativePath !== 'string') throw new Error('Vault relativePath 必填')
     return getConfiguredVaultFileSystem().readFile(relativePath)
   })
 
   ipcMain.handle(VAULT_IPC_CHANNELS.WRITE_FILE, async (_, input: unknown) => {
-    if (!input || typeof input !== 'object') throw new Error('Obsidian 写入参数非法')
+    if (!input || typeof input !== 'object') throw new Error('Vault 写入参数非法')
     const value = input as Record<string, unknown>
     if (typeof value.relativePath !== 'string' || typeof value.content !== 'string') {
-      throw new Error('Obsidian relativePath 和 content 必填')
+      throw new Error('Vault relativePath 和 content 必填')
     }
     return getConfiguredVaultFileSystem().writeFile({
       relativePath: value.relativePath,
@@ -5927,17 +5927,17 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(VAULT_IPC_CHANNELS.CREATE_FILE, async (_, relativePath: unknown, content: unknown) => {
-    if (typeof relativePath !== 'string' || typeof content !== 'string') throw new Error('Obsidian 新建笔记参数非法')
+    if (typeof relativePath !== 'string' || typeof content !== 'string') throw new Error('Vault 新建笔记参数非法')
     return getConfiguredVaultFileSystem().writeFile({ relativePath, content, createOnly: true })
   })
 
   ipcMain.handle(VAULT_IPC_CHANNELS.CREATE_UNTITLED_FILE, async () => createUntitledVaultFile())
 
   ipcMain.handle(VAULT_IPC_CHANNELS.RENAME_FILE, async (_, input: unknown) => {
-    if (!input || typeof input !== 'object') throw new Error('Obsidian 重命名参数非法')
+    if (!input || typeof input !== 'object') throw new Error('Vault 重命名参数非法')
     const value = input as Record<string, unknown>
     if (typeof value.relativePath !== 'string' || typeof value.name !== 'string') {
-      throw new Error('Obsidian relativePath 和 name 必填')
+      throw new Error('Vault relativePath 和 name 必填')
     }
     return getConfiguredVaultFileSystem().renameFile({
       relativePath: value.relativePath,
@@ -5957,16 +5957,16 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(VAULT_IPC_CHANNELS.SEARCH, async (_, query: unknown, limit?: unknown) => {
-    if (typeof query !== 'string') throw new Error('Obsidian 搜索关键词必填')
+    if (typeof query !== 'string') throw new Error('Vault 搜索关键词必填')
     return getConfiguredVaultFileSystem().search(query, typeof limit === 'number' ? limit : undefined)
   })
 
   ipcMain.handle(VAULT_IPC_CHANNELS.APPEND_SOURCE, async (_, input: unknown) => {
-    if (!input || typeof input !== 'object') throw new Error('Obsidian 引用参数非法')
+    if (!input || typeof input !== 'object') throw new Error('Vault 引用参数非法')
     const value = input as Record<string, unknown>
     const source = value.source
     if (!source || typeof source !== 'object' || typeof value.relativePath !== 'string') {
-      throw new Error('Obsidian 引用目标或来源缺失')
+      throw new Error('Vault 引用目标或来源缺失')
     }
     const sourceValue = source as Record<string, unknown>
     if (
@@ -5976,7 +5976,7 @@ export function registerIpcHandlers(): void {
       || typeof sourceValue.sourceUri !== 'string'
       || typeof sourceValue.capturedAt !== 'number'
     ) {
-      throw new Error('Obsidian 引用来源非法')
+      throw new Error('Vault 引用来源非法')
     }
     const vault = getConfiguredVaultFileSystem()
     const current = vault.readFile(value.relativePath)
@@ -5990,13 +5990,13 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(VAULT_IPC_CHANNELS.SET_USER_CONTEXT, async (_, sessionId: unknown, relativePath: unknown, open: unknown): Promise<void> => {
-    if (typeof sessionId !== 'string' || sessionId.trim().length === 0) throw new Error('Obsidian 会话 ID 非法')
+    if (typeof sessionId !== 'string' || sessionId.trim().length === 0) throw new Error('Vault 会话 ID 非法')
     if (open === false) {
       clearVaultUserContext(sessionId)
       return
     }
     if (relativePath !== null && relativePath !== undefined && typeof relativePath !== 'string') {
-      throw new Error('Obsidian relativePath 非法')
+      throw new Error('Vault relativePath 非法')
     }
     setVaultUserContext(sessionId, typeof relativePath === 'string' ? relativePath : null)
   })

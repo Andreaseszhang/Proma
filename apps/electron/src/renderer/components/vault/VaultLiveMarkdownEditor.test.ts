@@ -1,5 +1,52 @@
 import { describe, expect, test } from 'bun:test'
-import { detectVaultBlockKinds } from './VaultLiveMarkdownEditor'
+import { createVaultEditorMeasureScheduler, detectVaultBlockKinds } from './VaultLiveMarkdownEditor'
+
+describe('Vault CodeMirror layout measurement', () => {
+  test('coalesces side-panel resize and transition invalidations until after layout', () => {
+    let frame: FrameRequestCallback | null = null
+    const cancelled = { value: null as number | null }
+    const requestMeasure = () => { calls += 1 }
+    let calls = 0
+    const scheduler = createVaultEditorMeasureScheduler(
+      () => ({ requestMeasure }),
+      (callback) => {
+        frame = callback
+        return 7
+      },
+      (handle) => { cancelled.value = handle },
+    )
+
+    scheduler.request()
+    scheduler.request()
+    expect(calls).toBe(0)
+    expect(frame).not.toBeNull()
+    frame!(0)
+    expect(calls).toBe(1)
+
+    scheduler.request()
+    scheduler.dispose()
+    expect(cancelled.value).toBe(7)
+  })
+
+  test('uses the latest editor view when an initial hidden render resolves', () => {
+    let frame: FrameRequestCallback | null = null
+    let view: { requestMeasure: () => void } | null = null
+    let calls = 0
+    const scheduler = createVaultEditorMeasureScheduler(
+      () => view,
+      (callback) => {
+        frame = callback
+        return 1
+      },
+      () => {},
+    )
+
+    scheduler.request()
+    view = { requestMeasure: () => { calls += 1 } }
+    frame!(0)
+    expect(calls).toBe(1)
+  })
+})
 
 describe('Vault live Markdown block detection', () => {
   test('recognizes leading YAML frontmatter without treating its delimiters as thematic breaks', () => {

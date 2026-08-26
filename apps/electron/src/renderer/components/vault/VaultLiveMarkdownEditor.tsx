@@ -705,6 +705,38 @@ export function clampSuggestionPosition(anchor: VaultCaretAnchor): { left: numbe
   }
 }
 
+interface VaultMeasureView {
+  requestMeasure: () => void
+}
+
+/**
+ * Coalesces layout invalidations into the next animation frame. This lets
+ * CodeMirror read the final flex/transition geometry rather than a transient
+ * zero-width side-panel layout, without introducing a coordinate offset.
+ */
+export function createVaultEditorMeasureScheduler(
+  getView: () => VaultMeasureView | null,
+  scheduleFrame: (callback: FrameRequestCallback) => number = requestAnimationFrame,
+  cancelFrame: (handle: number) => void = cancelAnimationFrame,
+): { request: () => void; dispose: () => void } {
+  let frame: number | null = null
+
+  return {
+    request: () => {
+      if (frame !== null) return
+      frame = scheduleFrame(() => {
+        frame = null
+        getView()?.requestMeasure()
+      })
+    },
+    dispose: () => {
+      if (frame === null) return
+      cancelFrame(frame)
+      frame = null
+    },
+  }
+}
+
 export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorHandle, VaultLiveMarkdownEditorProps>(function VaultLiveMarkdownEditor({
   value,
   files,
@@ -1001,15 +1033,31 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
     }
     host.addEventListener('keydown', onKeyDown)
 
-    const resizeObserver = new ResizeObserver(() => {
-      viewRef.current?.requestMeasure()
-    })
+    // A right SidePanel can mount the editor at zero width and then reveal it through
+    // a width transition. ResizeObserver alone can fire while flex layout is still
+    // settling, leaving CodeMirror's wrapped-line height map stale for hit testing.
+    const measureScheduler = createVaultEditorMeasureScheduler(() => viewRef.current)
+    const resizeObserver = new ResizeObserver(measureScheduler.request)
+    const onTransitionEnd = (event: TransitionEvent): void => {
+      const target = event.target
+      if (
+        (event.propertyName === 'width' || event.propertyName === 'height')
+        && target instanceof Element
+        && target.contains(host)
+      ) measureScheduler.request()
+    }
     resizeObserver.observe(host)
+    // The width transition runs on SidePanel, an ancestor of the editor, so listen at
+    // window and accept only transitions whose target contains this host.
+    window.addEventListener('transitionend', onTransitionEnd)
+    measureScheduler.request()
 
     return () => {
       disposed = true
       ready = false
       resizeObserver.disconnect()
+      measureScheduler.dispose()
+      window.removeEventListener('transitionend', onTransitionEnd)
       host.removeEventListener('keydown', onKeyDown)
       setSuggestion(null)
       if (localInstance) localInstance.destroy()

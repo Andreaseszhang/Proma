@@ -72,6 +72,35 @@ export function isAgentSessionActiveForCompletion({
   return currentAgentSessionId === sessionId
 }
 
+/** 判断委派子会话完成时，用户是否正在其父会话右侧查看它。 */
+export function isDelegatedSessionActiveForCompletion({
+  activeSessionId,
+  activeDelegationSessionId,
+  parentSessionId,
+  sessionId,
+  documentHasFocus,
+}: {
+  activeSessionId: string | null
+  activeDelegationSessionId: string | null
+  parentSessionId: string | null
+  sessionId: string
+  documentHasFocus: boolean
+}): boolean {
+  return documentHasFocus
+    && activeSessionId === parentSessionId
+    && activeDelegationSessionId === sessionId
+}
+
+export function dismissCompletedDelegationSession(
+  sessionIds: ReadonlySet<string>,
+  sessionId: string,
+): Set<string> {
+  if (!sessionIds.has(sessionId)) return new Set(sessionIds)
+  const next = new Set(sessionIds)
+  next.delete(sessionId)
+  return next
+}
+
 /** 计算 Agent 完成后是否需要写入侧边栏完成提醒 */
 export function getAgentCompletionMarkers(input: AgentCompletionPresenceInput): AgentCompletionMarkers {
   const isActiveSession = isAgentSessionActiveForCompletion(input)

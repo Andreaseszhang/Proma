@@ -38,6 +38,7 @@ import {
   currentAgentSessionIdAtom,
   agentSessionIndicatorMapAtom,
   unviewedCompletedSessionIdsAtom,
+  unviewedCompletedDelegationSessionIdsAtom,
   agentChannelIdAtom,
   agentModelIdAtom,
   agentSessionChannelMapAtom,
@@ -75,6 +76,7 @@ import {
 import type { SessionIndicatorStatus, WorkspaceComponentTab } from '@/atoms/agent-atoms'
 import { previewPanelOpenMapAtom, previewFileMapAtom, previewFilesMapAtom } from '@/atoms/preview-atoms'
 import { clearPreviewCacheForSession } from '@/components/diff/DiffTabContent'
+import { dismissCompletedDelegationSession } from '@/lib/agent-completion-presence'
 import {
   tabsAtom,
   activeTabIdAtom,
@@ -113,7 +115,6 @@ import {
   groupArchivedAgentSessionsByProject,
   isAgentSessionVisibleInTrees,
   isDelegatedSessionHighlighted,
-  resolveDelegatedChildIndicatorStatus,
   replaceAgentSessionInFreshnessOrder,
   sortAgentSessionsByUpdatedAtDesc,
 } from '@/lib/agent-session-list'
@@ -502,10 +503,9 @@ function getDelegatedChildStatus(
   session: AgentSessionMeta,
   agentIndicatorMap: Map<string, SessionIndicatorStatus>,
 ): SessionIndicatorStatus {
-  return resolveDelegatedChildIndicatorStatus(
-    session.delegationStatus,
-    agentIndicatorMap.get(session.id),
-  )
+  const status = agentIndicatorMap.get(session.id)
+  if (status) return status
+  return session.delegationStatus === 'running' ? 'running' : 'idle'
 }
 
 function getSessionTreeStatus(
@@ -920,6 +920,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       }
       return changed ? next : prev
     })
+    store.set(unviewedCompletedDelegationSessionIdsAtom, (prev) => dismissCompletedDelegationSession(prev, id))
     setDiffPanelTab(deleteKey)
     setDiffRefreshVersion(deleteKey)
     setDiffUnseen(deleteKey)
@@ -1761,6 +1762,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
           next.delete(id)
           return next
         })
+        store.set(unviewedCompletedDelegationSessionIdsAtom, (prev) => dismissCompletedDelegationSession(prev, id))
         return
       }
     }

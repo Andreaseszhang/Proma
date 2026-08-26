@@ -48,12 +48,14 @@ import {
   agentSelectedWorktreeAtom,
   agentSideTemporaryAgentMapAtom,
   agentSideDelegationMapAtom,
+  unviewedCompletedDelegationSessionIdsAtom,
   agentSDKMessagesCacheAtom,
   agentLiveMessagesAtomFamily,
   agentSessionDraftsAtom,
   agentSessionDraftSyncVersionsAtom,
   agentSessionDraftHtmlAtom,
 } from '@/atoms/agent-atoms'
+import { dismissCompletedDelegationSession } from '@/lib/agent-completion-presence'
 import {
   getBrowserSidePanelTab,
   getBrowserTabIdFromSidePanelTab,
@@ -617,7 +619,12 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
   const sideDelegationMap = useAtomValue(agentSideDelegationMapAtom)
   const setSideDelegationMap = useSetAtom(agentSideDelegationMapAtom)
   const sideDelegationSessionIds = sideDelegationMap.get(sessionId) ?? []
+  const setUnviewedCompletedDelegations = useSetAtom(unviewedCompletedDelegationSessionIdsAtom)
   const activeDelegationSessionId = getDelegationSessionIdFromSidePanelTab(activeTab)
+  React.useEffect(() => {
+    if (!activeDelegationSessionId) return
+    setUnviewedCompletedDelegations((previous) => dismissCompletedDelegationSession(previous, activeDelegationSessionId))
+  }, [activeDelegationSessionId, setUnviewedCompletedDelegations])
   const activeDelegationSession = activeDelegationSessionId
     ? sessions.find((item) => item.id === activeDelegationSessionId && item.parentSessionId === sessionId && !!item.sourceDelegationId) ?? null
     : null

@@ -1,6 +1,52 @@
 import { describe, expect, test } from 'bun:test'
-import { getAgentCompletionMarkers, isAgentSessionActiveForCompletion } from './agent-completion-presence'
+import { dismissCompletedDelegationSession, getAgentCompletionMarkers, isAgentSessionActiveForCompletion, isDelegatedSessionActiveForCompletion } from './agent-completion-presence'
 import type { TabItem } from '@/atoms/tab-atoms'
+
+describe('委派子会话完成状态清除', () => {
+  test('Given 子会话存在未查看完成标记 When 用户打开该子会话 Then 只清除该子会话标记', () => {
+    const result = dismissCompletedDelegationSession(new Set(['child', 'other-child']), 'child')
+
+    expect([...result]).toEqual(['other-child'])
+  })
+
+  test('Given 子会话没有未查看完成标记 When 尝试清除 Then 集合内容保持不变', () => {
+    const result = dismissCompletedDelegationSession(new Set(['other-child']), 'child')
+
+    expect([...result]).toEqual(['other-child'])
+  })
+})
+
+describe('委派子会话完成归属判断', () => {
+  test('Given 当前父会话右侧正在查看该子会话 When 子会话完成 Then 不标记为未查看', () => {
+    expect(isDelegatedSessionActiveForCompletion({
+      activeSessionId: 'parent',
+      activeDelegationSessionId: 'child',
+      parentSessionId: 'parent',
+      sessionId: 'child',
+      documentHasFocus: true,
+    })).toBe(true)
+  })
+
+  test('Given 当前父会话右侧查看的是另一个子会话 When 子会话完成 Then 标记为未查看', () => {
+    expect(isDelegatedSessionActiveForCompletion({
+      activeSessionId: 'parent',
+      activeDelegationSessionId: 'other-child',
+      parentSessionId: 'parent',
+      sessionId: 'child',
+      documentHasFocus: true,
+    })).toBe(false)
+  })
+
+  test('Given 当前打开的是其他父会话 When 子会话完成 Then 不视为正在查看', () => {
+    expect(isDelegatedSessionActiveForCompletion({
+      activeSessionId: 'other-parent',
+      activeDelegationSessionId: 'child',
+      parentSessionId: 'parent',
+      sessionId: 'child',
+      documentHasFocus: true,
+    })).toBe(false)
+  })
+})
 
 describe('Agent 完成归属判断', () => {
   test('Given 当前激活的是同一个 Agent Tab When Agent 完成 Then 视为用户仍在查看', () => {

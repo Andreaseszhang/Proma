@@ -44,6 +44,7 @@ import {
   workspaceAttachedDirectoriesMapAtom,
   workspaceAttachedFilesMapAtom,
   unviewedCompletedSessionIdsAtom,
+  unviewedCompletedDelegationSessionIdsAtom,
   agentSessionPathMapAtom,
   agentDiffRefreshVersionAtom,
   agentDiffPanelTabAtom,
@@ -78,10 +79,7 @@ import {
   shouldRevealDelegatedSession,
 } from '@/lib/external-agent-run'
 import { upsertAgentSession, mergeFetchedAgentSessions } from '@/lib/agent-session-list'
-import {
-  getAgentCompletionMarkers,
-  notifyAgentCompletion,
-} from '@/lib/agent-completion-presence'
+import { getAgentCompletionMarkers, isDelegatedSessionActiveForCompletion, notifyAgentCompletion } from '@/lib/agent-completion-presence'
 import { getPlanModeChangeFromToolName, updatePlanModeSessionSet } from '@/lib/agent-plan-mode'
 import { detectIsWindows } from '@/lib/platform'
 import { getSessionFileChangeKind, getOwnedSessionWatcherPaths, upsertSessionFileChange } from '@/lib/session-file-changes'
@@ -700,6 +698,12 @@ export function useGlobalAgentListeners(): void {
           next.delete(event.sessionId)
           return next
         })
+        store.set(unviewedCompletedDelegationSessionIdsAtom, (prev) => {
+          if (!prev.has(event.sessionId)) return prev
+          const next = new Set(prev)
+          next.delete(event.sessionId)
+          return next
+        })
         store.set(agentStreamingStatesAtom, (prev) => {
           const map = new Map(prev)
           map.set(event.sessionId, activation.streamState)
@@ -1005,6 +1009,12 @@ export function useGlobalAgentListeners(): void {
             return map
           })
           store.set(unviewedCompletedSessionIdsAtom, (prev) => {
+            if (!prev.has(sessionId)) return prev
+            const next = new Set(prev)
+            next.delete(sessionId)
+            return next
+          })
+          store.set(unviewedCompletedDelegationSessionIdsAtom, (prev) => {
             if (!prev.has(sessionId)) return prev
             const next = new Set(prev)
             next.delete(sessionId)
@@ -1554,7 +1564,39 @@ export function useGlobalAgentListeners(): void {
           session: completionSession,
           documentHasFocus: document.hasFocus(),
         })
-        if (completionMarkers.markUnviewedCompleted && !backgroundTasksPending) {
+        const isDelegationCompletion = Boolean(completionSession?.sourceDelegationId) || data.triggeredBy === 'delegation'
+        const isCompletedDelegation = isDelegationCompletion
+          && completionSession?.delegationStatus === 'completed'
+          && !data.stoppedByUser
+          && !hasStreamError
+          && (!data.resultSubtype || data.resultSubtype === 'success')
+        const activeSidePanelTab = completionSession?.parentSessionId
+          ? store.get(agentDiffPanelTabAtom).get(completionSession.parentSessionId)
+          : undefined
+        const activeDelegationSessionId = activeSidePanelTab?.startsWith('delegation:')
+          ? activeSidePanelTab.slice('delegation:'.length)
+          : null
+        const isActiveDelegationCompletion = isCompletedDelegation && isDelegatedSessionActiveForCompletion({
+          activeSessionId: store.get(activeSessionIdAtom),
+          activeDelegationSessionId,
+          parentSessionId: completionSession?.parentSessionId ?? null,
+          sessionId: data.sessionId,
+          documentHasFocus: document.hasFocus(),
+        })
+        if (isCompletedDelegation && !backgroundTasksPending) {
+          store.set(unviewedCompletedDelegationSessionIdsAtom, (prev) => {
+            if (isActiveDelegationCompletion) {
+              if (!prev.has(data.sessionId)) return prev
+              const next = new Set(prev)
+              next.delete(data.sessionId)
+              return next
+            }
+            if (prev.has(data.sessionId)) return prev
+            const next = new Set(prev)
+            next.add(data.sessionId)
+            return next
+          })
+        } else if (completionMarkers.markUnviewedCompleted && !backgroundTasksPending) {
           store.set(unviewedCompletedSessionIdsAtom, (prev: Set<string>) => {
             const next = new Set(prev)
             next.add(data.sessionId)

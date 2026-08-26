@@ -822,7 +822,6 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
                 <ObsidianIcon size={17} className="shrink-0 text-primary" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[13px] font-medium text-foreground">{config.displayName}</p>
-                  <p className="truncate text-[11px] text-muted-foreground">{files.length} 篇 Markdown 笔记</p>
                 </div>
                 <div className="flex items-center gap-0.5 titlebar-no-drag">
                   <Tooltip>

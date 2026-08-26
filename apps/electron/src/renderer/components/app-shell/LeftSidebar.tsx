@@ -113,6 +113,7 @@ import {
   groupArchivedAgentSessionsByProject,
   isAgentSessionVisibleInTrees,
   isDelegatedSessionHighlighted,
+  resolveDelegatedChildIndicatorStatus,
   replaceAgentSessionInFreshnessOrder,
   sortAgentSessionsByUpdatedAtDesc,
 } from '@/lib/agent-session-list'
@@ -501,9 +502,10 @@ function getDelegatedChildStatus(
   session: AgentSessionMeta,
   agentIndicatorMap: Map<string, SessionIndicatorStatus>,
 ): SessionIndicatorStatus {
-  const status = agentIndicatorMap.get(session.id)
-  if (status) return status
-  return session.delegationStatus === 'running' ? 'running' : 'idle'
+  return resolveDelegatedChildIndicatorStatus(
+    session.delegationStatus,
+    agentIndicatorMap.get(session.id),
+  )
 }
 
 function getSessionTreeStatus(

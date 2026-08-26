@@ -6,6 +6,7 @@ import {
   upsertAgentSession,
   mergeFetchedAgentSessions,
   isDelegatedSessionHighlighted,
+  resolveDelegatedChildIndicatorStatus,
 } from './agent-session-list'
 
 function makeSession(
@@ -100,6 +101,25 @@ describe('isDelegatedSessionHighlighted', () => {
 
   test('Given 没有激活右侧子会话 When 判断 Then 子会话不标记为高亮态', () => {
     expect(isDelegatedSessionHighlighted('child', 'parent', 'parent', null)).toBe(false)
+  })
+})
+
+describe('resolveDelegatedChildIndicatorStatus', () => {
+  test('Given 子会话完成且流状态已结束 When 解析左侧状态 Then 返回 completed', () => {
+    expect(resolveDelegatedChildIndicatorStatus('completed', undefined)).toBe('completed')
+  })
+
+  test('Given 子会话仍在运行 When 解析左侧状态 Then 返回 running', () => {
+    expect(resolveDelegatedChildIndicatorStatus('running', undefined)).toBe('running')
+  })
+
+  test('Given 实时状态存在 When 解析左侧状态 Then 实时状态优先于持久化回退', () => {
+    expect(resolveDelegatedChildIndicatorStatus('completed', 'running')).toBe('running')
+  })
+
+  test('Given 子会话状态为失败或取消 When 解析左侧状态 Then 回退为 idle', () => {
+    expect(resolveDelegatedChildIndicatorStatus('failed', undefined)).toBe('idle')
+    expect(resolveDelegatedChildIndicatorStatus('cancelled', undefined)).toBe('idle')
   })
 })
 

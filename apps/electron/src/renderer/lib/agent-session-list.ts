@@ -184,6 +184,18 @@ export function isDelegatedSessionHighlighted(
   return parentSessionId === activeSessionId && sessionId === activeDelegationSessionId
 }
 
+export type DelegatedChildIndicatorStatus = 'idle' | 'running' | 'blocked' | 'completed'
+
+export function resolveDelegatedChildIndicatorStatus(
+  delegationStatus: AgentSessionMeta['delegationStatus'],
+  liveStatus: DelegatedChildIndicatorStatus | undefined,
+): DelegatedChildIndicatorStatus {
+  if (liveStatus) return liveStatus
+  if (delegationStatus === 'completed') return 'completed'
+  if (delegationStatus === 'running') return 'running'
+  return 'idle'
+}
+
 /** 收集可见会话树里的父/子会话 id，用于判断当前会话是否已显示在侧栏中。 */
 export function collectAgentSessionTreeIds(
   items: readonly AgentSessionTreeLike[],

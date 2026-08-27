@@ -38,7 +38,7 @@ import { WorkspaceMemoryTab } from './WorkspaceMemoryTab'
 import { groupSkills } from './skillGrouping'
 import { EMBEDDED_CATALOG_TWO_COLUMN_MIN_WIDTH, IntegrationCatalog } from './IntegrationCatalog'
 import { CredentialDialog } from './CredentialDialog'
-import { buildCatalogMcpGuidePrompt, MCP_CREDENTIAL_SETUP_INSTRUCTION, MCP_INTEGRATION_CATALOG, getCatalogServerNames, isCatalogIntegrationVisible, matchesCatalogSearch, type CatalogCliIntegration, type CatalogCliProbeState, type CatalogCredentialIntegration, type CatalogGuidedIntegration, type CatalogMcpIntegration } from './integration-catalog'
+import { buildCatalogMcpGuidePrompt, MCP_INTEGRATION_CATALOG, getCatalogServerNames, isCatalogIntegrationVisible, matchesCatalogSearch, type CatalogCliIntegration, type CatalogCliProbeState, type CatalogCredentialIntegration, type CatalogGuidedIntegration, type CatalogMcpIntegration } from './integration-catalog'
 
 const embeddedMcpSectionContainerQuery = `
   @container (min-width: ${EMBEDDED_CATALOG_TWO_COLUMN_MIN_WIDTH}) {
@@ -97,17 +97,12 @@ version: "1.0.0"
 }
 
 function buildManualMcpGuidePrompt(): string {
-  return `请帮我为当前 Proma 工作区添加并配置一个 MCP 服务器。
+  return `帮我为当前 Proma 工作区添加一个 MCP 服务器。
 
-开始前先询问我想接入的服务名称、官方文档或 MCP 地址；信息不足时不要猜测命令、URL、transport、认证方式或权限范围。
-
-执行要求：
-1. 基于官方文档核验 MCP transport（stdio / Streamable HTTP / SSE）、启动命令或 URL、所需依赖、认证方式和权限范围。
-2. 不要打开 Proma 的手动 MCP 编辑抽屉，也不要只给我网页链接；请逐步说明，并在可安全执行的步骤中直接操作。
-3. 写入前先读取当前工作区的 mcp.json。不得覆盖、删除或改写已有服务器；名称与 Proma 内置 MCP 保留名冲突时，改用安全且明确的名称。
-4. API Key、token、Cookie、OAuth code、密码和 secret 不得写入 mcp.json、AGENTS.md、日志或普通项目文件。需要我登录、授权、输入凭据、付费或授予高风险权限时，停下来明确说明。
-5. 仅在配置完整并完成可行的连接验证后启用服务器；失败时保留已有配置，并说明准确原因、已验证事实和下一步。
-6. 当前会话开始时已加载工具列表。若本轮新增或修改 MCP，不能假定它会即时注入本轮工具；配置完成后告诉我如何在下一条消息或新会话中验证。${MCP_CREDENTIAL_SETUP_INSTRUCTION}`
+1. 先确认服务名和官方文档或 MCP 地址；信息不足时先问，不要猜测配置。
+2. 依据官方文档核验 transport、地址/命令、依赖、认证与权限；安全步骤可直接完成，登录、授权、付费或敏感凭据由我确认或操作。
+3. 写入前读取当前 mcp.json，只新增或更新目标服务，绝不覆盖其他配置；敏感凭据不写入 mcp.json、日志或普通文件。
+4. 完成真实连接验证后再启用；说明结果及下一步。新 MCP 需要在下一条消息或新会话中验证工具可用性。`
 }
 
 export function AgentSkillsView({

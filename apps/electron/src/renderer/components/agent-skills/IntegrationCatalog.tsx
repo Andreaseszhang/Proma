@@ -198,8 +198,7 @@ function IntegrationCard({ name, description, capabilities, iconSlug, status, st
   }[iconSlug]
   return (
     <article className={cn(
-      'group relative flex min-h-[144px] flex-col gap-2 rounded-lg bg-card p-3 text-left shadow-md transition-[transform,box-shadow] duration-200',
-      'hover:-translate-y-0.5 hover:shadow-lg',
+      'group relative flex min-h-[144px] flex-col gap-2 rounded-lg bg-card p-3 text-left shadow-md',
     )}>
       <div className="flex items-start gap-2">
         <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">

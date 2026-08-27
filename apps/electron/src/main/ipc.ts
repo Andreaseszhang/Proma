@@ -815,7 +815,11 @@ export function mergeMcpRefreshResults(
   for (const validation of validations) {
     const currentEntry = servers[validation.name]
     if (currentEntry?.enabled && getMcpEntryFingerprint(currentEntry) === validation.fingerprint) {
-      servers[validation.name] = { ...currentEntry, lastTestResult: validation.lastTestResult }
+      servers[validation.name] = {
+        ...currentEntry,
+        enabled: validation.lastTestResult.success,
+        lastTestResult: validation.lastTestResult,
+      }
     }
   }
   return { servers }
@@ -2817,7 +2821,19 @@ export function registerIpcHandlers(): void {
     AGENT_IPC_CHANNELS.SAVE_MCP_CONFIG,
     async (_, workspaceSlug: string, config: WorkspaceMcpConfig): Promise<void> => {
       advanceWorkspaceMcpRefreshGeneration(workspaceSlug)
-      return saveWorkspaceMcpConfig(workspaceSlug, config)
+      const normalizedConfig: WorkspaceMcpConfig = {
+        servers: Object.fromEntries(
+          Object.entries(config.servers).map(([name, entry]) => [
+            name,
+            // A config write must not bypass the validated-enable contract. New
+            // or changed entries stay disabled until a successful test result.
+            entry.enabled && entry.lastTestResult?.success !== true
+              ? { ...entry, enabled: false }
+              : entry,
+          ]),
+        ),
+      }
+      return saveWorkspaceMcpConfig(workspaceSlug, normalizedConfig)
     }
   )
 

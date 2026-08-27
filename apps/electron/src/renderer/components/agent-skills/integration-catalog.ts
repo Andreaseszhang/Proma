@@ -273,13 +273,6 @@ export const MCP_INTEGRATION_CATALOG: CatalogIntegration[] = [
     entry: remoteMcp('https://mcp.stripe.com'),
   },
   {
-    id: 'playwright-mcp', name: 'Playwright', iconSlug: 'playwright', kind: 'mcp', authentication: 'none', serverName: 'playwright',
-    description: '通过浏览器自动化完成页面检查、表单操作、断言、截图和测试证据采集。',
-    capabilities: ['页面与标签操作', '可访问性定位', '断言、Trace 与截图'],
-    setupUrl: 'https://playwright.dev/mcp/introduction',
-    entry: { type: 'stdio', command: 'npx', args: ['-y', '@playwright/mcp@latest'], enabled: true },
-  },
-  {
     id: 'tongdaxin-mcp', name: '通达信 MCP', iconSlug: 'asset:tongdaxin', kind: 'guided', authType: 'provider-login', featured: true,
     description: '金融行情和投研能力需要先核验通达信的正式 MCP 契约与账户授权方式。',
     capabilities: ['行情与金融数据', '账户授权核验', '官方契约调研'],

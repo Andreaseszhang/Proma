@@ -2452,3 +2452,16 @@
 .ProseMirror-focused .ProseMirror-gapcursor {
   display: block;
 }
+
+/* 嵌入式 Skills 位于可拖拽的右侧工作区中，按容器实际宽度而非窗口宽度排版。 */
+.skills-embedded-container {
+  container-type: inline-size;
+}
+.skills-embedded-card-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+@container (min-width: 40rem) {
+  .skills-embedded-card-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

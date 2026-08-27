@@ -12,6 +12,7 @@ import { safeStorage, shell } from 'electron'
 import type { McpOAuthProvider, McpOAuthStartResult, StartMcpOAuthInput } from '@proma/shared'
 import { getMcpOAuthCredentialsPath } from './config-paths'
 import { writeJsonFileAtomic } from './safe-file'
+import { runWithOAuthProxyScope } from './oauth-proxy-scope'
 
 const CALLBACK_PATH = '/callback'
 const CALLBACK_TIMEOUT_MS = 5 * 60 * 1000
@@ -356,38 +357,41 @@ export async function startMcpOAuth(input: StartMcpOAuthInput): Promise<McpOAuth
   const callback = await startCallbackServer(state)
 
   try {
-    const configuration = await discoverAuthorizationConfiguration(input.serverUrl)
-    const clientId = await registerClient(configuration.registrationEndpoint, callback.redirectUri)
-    const authorizationUrl = new URL(configuration.authorizationEndpoint)
-    authorizationUrl.searchParams.set('response_type', 'code')
-    authorizationUrl.searchParams.set('client_id', clientId)
-    authorizationUrl.searchParams.set('redirect_uri', callback.redirectUri)
-    authorizationUrl.searchParams.set('code_challenge', challenge)
-    authorizationUrl.searchParams.set('code_challenge_method', 'S256')
-    authorizationUrl.searchParams.set('state', state)
-    const resource = normalizeMcpResource(input.serverUrl)
-    authorizationUrl.searchParams.set('resource', resource)
-    if (configuration.scopes.length > 0) authorizationUrl.searchParams.set('scope', configuration.scopes.join(' '))
+    const result = await runWithOAuthProxyScope(async () => {
+      const configuration = await discoverAuthorizationConfiguration(input.serverUrl)
+      const clientId = await registerClient(configuration.registrationEndpoint, callback.redirectUri)
+      const authorizationUrl = new URL(configuration.authorizationEndpoint)
+      authorizationUrl.searchParams.set('response_type', 'code')
+      authorizationUrl.searchParams.set('client_id', clientId)
+      authorizationUrl.searchParams.set('redirect_uri', callback.redirectUri)
+      authorizationUrl.searchParams.set('code_challenge', challenge)
+      authorizationUrl.searchParams.set('code_challenge_method', 'S256')
+      authorizationUrl.searchParams.set('state', state)
+      const resource = normalizeMcpResource(input.serverUrl)
+      authorizationUrl.searchParams.set('resource', resource)
+      if (configuration.scopes.length > 0) authorizationUrl.searchParams.set('scope', configuration.scopes.join(' '))
 
-    await shell.openExternal(authorizationUrl.toString())
-    const code = await callback.waitForCode
-    const token = await exchangeAuthorizationCode({
-      tokenEndpoint: configuration.tokenEndpoint,
-      clientId,
-      redirectUri: callback.redirectUri,
-      code,
-      verifier,
-      resource,
+      await shell.openExternal(authorizationUrl.toString())
+      const code = await callback.waitForCode
+      const token = await exchangeAuthorizationCode({
+        tokenEndpoint: configuration.tokenEndpoint,
+        clientId,
+        redirectUri: callback.redirectUri,
+        code,
+        verifier,
+        resource,
+      })
+      return { configuration, clientId, resource, token }
     })
     saveCredential(input.workspaceSlug, input.serverName, {
       provider: input.provider,
       serverUrl: input.serverUrl,
-      resource,
-      clientId,
-      tokenEndpoint: configuration.tokenEndpoint,
-      ...token,
+      resource: result.resource,
+      clientId: result.clientId,
+      tokenEndpoint: result.configuration.tokenEndpoint,
+      ...result.token,
     })
-    return { provider: input.provider, serverName: input.serverName, expiresAt: token.expiresAt }
+    return { provider: input.provider, serverName: input.serverName, expiresAt: result.token.expiresAt }
   } catch (error) {
     callback.cancel()
     throw error
@@ -414,9 +418,11 @@ export async function getMcpOAuthHeaders(workspaceSlug: string, serverName: stri
   let credential = readCredential(workspaceSlug, serverName)
   if (!credential) return undefined
   if (isMcpApiKeyCredential(credential)) return { [credential.headerName]: credential.value }
-  if (credential.expiresAt && credential.expiresAt <= Date.now() + EXPIRY_SKEW_MS) {
-    credential = await refreshCredential(credential)
-    saveCredential(workspaceSlug, serverName, credential)
+  const oauthCredential = credential
+  if (oauthCredential.expiresAt && oauthCredential.expiresAt <= Date.now() + EXPIRY_SKEW_MS) {
+    const refreshedCredential = await runWithOAuthProxyScope(() => refreshCredential(oauthCredential))
+    saveCredential(workspaceSlug, serverName, refreshedCredential)
+    return { Authorization: `Bearer ${refreshedCredential.accessToken}` }
   }
-  return { Authorization: `Bearer ${credential.accessToken}` }
+  return { Authorization: `Bearer ${oauthCredential.accessToken}` }
 }

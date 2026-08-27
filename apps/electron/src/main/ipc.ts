@@ -2823,7 +2823,6 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     AGENT_IPC_CHANNELS.SAVE_MCP_CONFIG,
     async (_, workspaceSlug: string, config: WorkspaceMcpConfig): Promise<void> => {
-      const current = getWorkspaceMcpConfig(workspaceSlug)
       const pendingValidations: Array<{ name: string; candidate: import('@proma/shared').McpServerEntry }> = []
       const servers: WorkspaceMcpConfig['servers'] = {}
 
@@ -2831,22 +2830,15 @@ export function registerIpcHandlers(): void {
         const entryWithoutTestResult = { ...entry }
         delete entryWithoutTestResult.lastTestResult
         const candidate = { ...entryWithoutTestResult, enabled: true }
-        const existing = current.servers[name]
-        const remainsVerified = Boolean(
-          entry.enabled &&
-          existing?.enabled &&
-          getMcpEntryFingerprint(existing) === getMcpEntryFingerprint(candidate),
-        )
-
-        if (remainsVerified) {
-          // Keep the authoritative existing result instead of accepting a
-          // renderer-supplied success flag.
-          if (existing) servers[name] = existing
-        } else if (entry.enabled) {
+        if (entry.enabled) {
+          // `lastTestResult` is renderer-visible display data, not proof that an
+          // MCP can be loaded. Re-validate every enabled entry, including
+          // configs created by earlier app versions or manually edited on disk.
           servers[name] = { ...entryWithoutTestResult, enabled: false }
           pendingValidations.push({ name, candidate })
         } else {
-          servers[name] = entry
+          // Do not persist renderer-provided verification data for disabled entries.
+          servers[name] = entryWithoutTestResult
         }
       }
 

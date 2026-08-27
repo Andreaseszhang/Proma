@@ -21,7 +21,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import { agentPendingPromptAtom, agentSessionDraftHtmlAtom, agentSessionDraftsAtom, currentAgentSessionIdAtom, skillDetailNavigationAtomFamily, workspaceCapabilitiesVersionAtom } from '@/atoms/agent-atoms'
+import { agentPendingPromptAtom, agentSessionDraftHtmlAtom, agentSessionDraftsAtom, agentSessionDraftSyncVersionsAtom, currentAgentSessionIdAtom, skillDetailNavigationAtomFamily, workspaceCapabilitiesVersionAtom } from '@/atoms/agent-atoms'
 import { agentSkillsTabAtom } from '@/atoms/active-view'
 import { useProjectActions } from '@/hooks/useProjectActions'
 import { useCreateSession } from '@/hooks/useCreateSession'
@@ -115,6 +115,7 @@ export function AgentSkillsView({
   const bumpCapabilities = useSetAtom(workspaceCapabilitiesVersionAtom)
   const setDrafts = useSetAtom(agentSessionDraftsAtom)
   const setDraftHtml = useSetAtom(agentSessionDraftHtmlAtom)
+  const setDraftSyncVersions = useSetAtom(agentSessionDraftSyncVersionsAtom)
   const setPendingPrompt = useSetAtom(agentPendingPromptAtom)
   const currentAgentSessionId = useAtomValue(currentAgentSessionIdAtom)
   const skillDetailNavigation = useAtomValue(skillDetailNavigationAtomFamily(sessionId ?? ''))
@@ -140,8 +141,13 @@ export function AgentSkillsView({
       next.delete(targetSessionId)
       return next
     })
+    setDraftSyncVersions((previous) => {
+      const next = new Map(previous)
+      next.set(targetSessionId, (next.get(targetSessionId) ?? 0) + 1)
+      return next
+    })
     return true
-  }, [currentAgentSessionId, sessionId, setDraftHtml, setDrafts])
+  }, [currentAgentSessionId, sessionId, setDraftHtml, setDraftSyncVersions, setDrafts])
 
   const [storedTab, setTab] = useAtom(agentSkillsTabAtom)
   // 右侧组件锁定能力域，避免其内部的总览 Tab 与右侧工作区标签产生两套导航。

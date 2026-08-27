@@ -20,6 +20,9 @@ export const richTextRenderingEnabledAtom = atom<boolean>(false)
 /** 左侧会话列表悬浮预览迷你地图（默认关闭，需手动开启） */
 export const sessionHoverPreviewEnabledAtom = atom<boolean>(false)
 
+/** Agent 写入文件时自动打开右侧「改动」页（默认开启） */
+export const autoRevealChangesTabAtom = atom<boolean>(true)
+
 // ===== 初始化 =====
 
 /**
@@ -29,7 +32,8 @@ export async function initializeUiPreferences(
   setStickyUserMessageEnabled: (enabled: boolean) => void,
   setLongTextPasteAsAttachmentEnabled?: (enabled: boolean) => void,
   setRichTextRenderingEnabled?: (enabled: boolean) => void,
-  setSessionHoverPreviewEnabled?: (enabled: boolean) => void
+  setSessionHoverPreviewEnabled?: (enabled: boolean) => void,
+  setAutoRevealChangesTab?: (enabled: boolean) => void
 ): Promise<void> {
   try {
     const settings = await window.electronAPI.getSettings()
@@ -37,6 +41,7 @@ export async function initializeUiPreferences(
     setLongTextPasteAsAttachmentEnabled?.(settings.longTextPasteAsAttachmentEnabled ?? false)
     setRichTextRenderingEnabled?.(settings.richTextRenderingEnabled ?? false)
     setSessionHoverPreviewEnabled?.(settings.sessionHoverPreviewEnabled ?? false)
+    setAutoRevealChangesTab?.(settings.autoRevealChangesTab ?? true)
   } catch (error) {
     console.error('[UI偏好] 初始化失败:', error)
   }
@@ -85,5 +90,16 @@ export async function updateSessionHoverPreviewEnabled(enabled: boolean): Promis
     await window.electronAPI.updateSettings({ sessionHoverPreviewEnabled: enabled })
   } catch (error) {
     console.error('[UI偏好] 更新会话悬浮预览设置失败:', error)
+  }
+}
+
+/**
+ * 更新自动跳转「改动」页开关并持久化
+ */
+export async function updateAutoRevealChangesTab(enabled: boolean): Promise<void> {
+  try {
+    await window.electronAPI.updateSettings({ autoRevealChangesTab: enabled })
+  } catch (error) {
+    console.error('[UI偏好] 更新自动跳转改动页设置失败:', error)
   }
 }

@@ -64,6 +64,7 @@ import {
   playNotificationSoundForType,
 } from '@/atoms/notifications'
 import { appModeAtom } from '@/atoms/app-mode'
+import { autoRevealChangesTabAtom } from '@/atoms/ui-preferences'
 import { tabsAtom, activeTabIdAtom, activeSessionIdAtom, openTab, updateTabTitle } from '@/atoms/tab-atoms'
 import type { AgentStreamState } from '@/atoms/agent-atoms'
 import { agentDiffUnseenChangesAtom, agentDiffUnseenFilesAtom } from '@/atoms/agent-atoms'
@@ -874,6 +875,7 @@ export function useGlobalAgentListeners(): void {
       if (
         store.get(currentAgentSessionIdAtom) !== sessionId
         || !isViewingSession
+        || !store.get(autoRevealChangesTabAtom)
         || autoActivatedChangeTurns.get(sessionId) === runId
       ) return
 

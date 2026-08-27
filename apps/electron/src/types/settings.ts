@@ -332,6 +332,8 @@ export interface AppSettings {
   stickyUserMessageEnabled?: boolean
   /** 左侧会话列表悬浮预览迷你地图（默认 false，需手动开启） */
   sessionHoverPreviewEnabled?: boolean
+  /** Agent 写入文件时是否自动打开右侧「改动」页（默认 true） */
+  autoRevealChangesTab?: boolean
   /** 粘贴超过阈值的长文本时是否自动转为附件（默认 false） */
   longTextPasteAsAttachmentEnabled?: boolean
   /** 输入框是否渲染 Markdown 富文本格式（默认 false，关闭后为纯文本模式，仍保留 Mention 引用） */

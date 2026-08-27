@@ -114,8 +114,8 @@ export function IntegrationCatalog({ mcps, clis, guided, credentials, embedded, 
       }
     }),
   ].sort((left, right) => compareCatalogConnectionCards(
-    { placement: left.integration.placement, featured: left.integration.featured, statusRank: left.statusRank },
-    { placement: right.integration.placement, featured: right.integration.featured, statusRank: right.statusRank },
+    { placement: left.integration.placement, featured: left.integration.featured, priority: left.integration.priority, statusRank: left.statusRank },
+    { placement: right.integration.placement, featured: right.integration.featured, priority: right.integration.priority, statusRank: right.statusRank },
   ))
 
   if (cards.length === 0) return <></>

@@ -13,6 +13,8 @@ interface CatalogIntegrationBase {
   kind: CatalogIntegrationKind
   /** Prefer this card within its existing connection-status group. */
   featured?: boolean
+  /** Explicit directory order. Lower values always appear first. */
+  priority?: number
   placement?: 'bottom'
 }
 
@@ -68,11 +70,15 @@ export function getCatalogMcpStatusRank(status: CatalogMcpConnectionStatus): num
   return 1
 }
 
-/** Connection state is global; featured and bottom placement only break ties within it. */
+/** Explicit directory priority wins; remaining cards retain connection-state ordering. */
 export function compareCatalogConnectionCards(
-  left: { placement?: 'bottom'; featured?: boolean; statusRank: number },
-  right: { placement?: 'bottom'; featured?: boolean; statusRank: number },
+  left: { placement?: 'bottom'; featured?: boolean; priority?: number; statusRank: number },
+  right: { placement?: 'bottom'; featured?: boolean; priority?: number; statusRank: number },
 ): number {
+  const leftPriority = left.priority ?? Number.POSITIVE_INFINITY
+  const rightPriority = right.priority ?? Number.POSITIVE_INFINITY
+  if (leftPriority !== rightPriority) return leftPriority - rightPriority
+
   if (left.statusRank !== right.statusRank) return right.statusRank - left.statusRank
 
   const leftFeatured = Number(Boolean(left.featured))
@@ -280,21 +286,21 @@ export const MCP_INTEGRATION_CATALOG: CatalogIntegration[] = [
     agentPrompt: tongdaxinVipPrompt,
   },
   {
-    id: 'wecom-cli', name: '企业微信 CLI', iconSlug: 'asset:wecom', kind: 'cli', featured: true,
+    id: 'wecom-cli', name: '企业微信 CLI', iconSlug: 'asset:wecom', kind: 'cli', featured: true, priority: 3,
     description: '使用企业微信官方 CLI 配置组织协作、通讯录与消息相关的开发能力。',
     capabilities: ['企业协作与通讯录', '消息与会话', '官方 CLI 配置'],
     setupUrl: 'https://open.work.weixin.qq.com/help2/pc/21676',
     agentPrompt: cliSetupPrompt('企业微信 CLI', 'https://open.work.weixin.qq.com/help2/pc/21676', '设置 → 远程连接 → 配置企业微信 CLI'),
   },
   {
-    id: 'dingtalk-cli', name: '钉钉 CLI', iconSlug: 'asset:dingtalk', kind: 'cli', featured: true,
+    id: 'dingtalk-cli', name: '钉钉 CLI', iconSlug: 'asset:dingtalk', kind: 'cli', featured: true, priority: 2,
     description: '使用钉钉官方 CLI 调用 AI 开发助手，完成问答、代码生成与开发辅助。',
     capabilities: ['AI 开发助手', '代码生成与解释', '钉钉开发工具'],
     setupUrl: 'https://open.dingtalk.com/document/development/dingtalk-cli-performing-tasks-within',
     agentPrompt: cliSetupPrompt('钉钉 CLI', 'https://open.dingtalk.com/document/development/dingtalk-cli-performing-tasks-within', '设置 → 远程连接 → 配置钉钉 CLI'),
   },
   {
-    id: 'tencent-docs-mcp', name: '腾讯文档', iconSlug: 'asset:tencent-docs', kind: 'credential', placement: 'bottom',
+    id: 'tencent-docs-mcp', name: '腾讯文档', iconSlug: 'asset:tencent-docs', kind: 'credential', priority: 4, placement: 'bottom',
     description: '使用当前腾讯文档空间的 MCP Token，安全连接文档、表格和空间工具。',
     capabilities: ['文档与表格', '空间 MCP Token', '真实连接验证'],
     setupUrl: 'https://docs.qq.com/open/document/mcp/get-token',
@@ -310,7 +316,7 @@ export const MCP_INTEGRATION_CATALOG: CatalogIntegration[] = [
     },
   },
   {
-    id: 'ctrip-wendao', name: '携程问道', iconSlug: 'asset:ctrip', kind: 'guided', authType: 'api-key',
+    id: 'ctrip-wendao', name: '携程问道', iconSlug: 'asset:ctrip', kind: 'guided', authType: 'api-key', priority: 5,
     description: '携程问道 Token 可提供机酒火车、景点推荐和行程规划；官方当前以 Skill 封装接入。',
     capabilities: ['机酒火车查询', '景点与行程规划', 'API Token + Skill'],
     setupUrl: 'https://ctrip.com/wendao/openclaw',
@@ -350,7 +356,7 @@ export const MCP_INTEGRATION_CATALOG: CatalogIntegration[] = [
     agentPrompt: cliSetupPrompt('GitHub CLI', 'https://cli.github.com/', '设置 → 远程连接 → 配置 GitHub CLI'),
   },
   {
-    id: 'feishu-cli', name: '飞书 CLI', iconSlug: 'asset:feishu', kind: 'cli',
+    id: 'feishu-cli', name: '飞书 CLI', iconSlug: 'asset:feishu', kind: 'cli', priority: 1,
     description: '飞书官方命令行与 Agent 工具集，可操作消息、日历、文档、多维表格和任务。',
     capabilities: ['消息、日历与文档', '多维表格与任务', '多 Profile 授权'],
     setupUrl: 'https://www.feishu.cn/feishu-cli',

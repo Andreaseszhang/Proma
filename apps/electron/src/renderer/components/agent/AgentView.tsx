@@ -509,11 +509,12 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
   const setModelSelectorOpen = useSetAtom(modelSelectorOpenAtom)
   const setDraftSessionIds = useSetAtom(draftSessionIdsAtom)
   const globalWorkspaceId = useAtomValue(currentAgentWorkspaceIdAtom)
-  // 从会话元数据派生 workspaceId：会话数据已加载时以自身为准，未加载时回退全局 atom
+  // 会话已归属工作区时始终以其自身为准；缺少 workspaceId 的旧会话则回退当前项目。
+  // 否则 AgentView 会把 workspaceSlug 传成 null，导致 # MCP（以及 / Skill、@ 文件）在
+  // 已选中的工作区中仍拿不到能力摘要。
   const currentWorkspaceId = React.useMemo(() => {
-    if (!sessionMeta) return globalWorkspaceId // 数据未加载，回退全局
-    return sessionMeta.workspaceId ?? null     // 数据已加载，以会话自身为准
-  }, [sessionMeta, globalWorkspaceId])
+    return sessionMeta?.workspaceId ?? globalWorkspaceId
+  }, [sessionMeta?.workspaceId, globalWorkspaceId])
   const [pendingPrompt, setPendingPrompt] = useAtom(agentPendingPromptAtom)
   const [pendingFiles, setPendingFiles] = useAtom(agentPendingFilesAtomFamily(sessionId))
   const [queuedMessages, setQueuedMessages] = useAtom(agentMessageQueueAtomFamily(sessionId))

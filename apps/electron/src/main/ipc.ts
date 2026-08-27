@@ -9,6 +9,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'nod
 import { existsSync, realpathSync, readFileSync, writeFileSync, mkdirSync, statSync } from 'node:fs'
 import { writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
+import { createHash } from 'node:crypto'
 import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, AGENT_ISLAND_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, PLANNING_CONFLICT_ERROR, MAX_ATTACHMENT_SIZE, isPromaPermissionMode, normalizePathForCompare, TERMINAL_IPC_CHANNELS } from '@proma/shared'
 import { USER_PROFILE_IPC_CHANNELS, SETTINGS_IPC_CHANNELS, SCRATCH_PAD_IPC_CHANNELS, QUICK_TASK_IPC_CHANNELS, VOICE_DICTATION_IPC_CHANNELS, APP_ICON_IPC_CHANNELS, DOCK_BADGE_IPC_CHANNELS, STORAGE_IPC_CHANNELS, WINDOWS_AGENT_ISLAND_IPC_CHANNELS, TRAY_IPC_CHANNELS } from '../types'
 import type {
@@ -300,6 +301,8 @@ import {
   ensureDefaultWorkspace,
   getWorkspaceMcpConfig,
   saveWorkspaceMcpConfig,
+  getDisabledCliIntegrationIds,
+  setCliIntegrationEnabled,
   getAllWorkspaceSkills,
   getOtherWorkspaceSkills,
   getDefaultSkillSlugs,
@@ -340,11 +343,27 @@ import {
 import { movePathSafely } from './lib/file-move-service'
 import { subscribeWorkspaceMemoryChanges } from './lib/workspace-memory-change-watcher'
 import { confirmWorkspaceMemoryWindowClose, markWorkspaceMemoryWindowReady } from './lib/workspace-memory-window'
-import { startMcpOAuth, saveMcpApiKey } from './lib/mcp-oauth-service'
+import { deleteMcpCredential, startMcpOAuth, saveMcpApiKey } from './lib/mcp-oauth-service'
 
 /** Renderer-scoped subscriptions; disposed on explicit tab cleanup or renderer destruction. */
 const workspaceMemoryWatchSubscriptions = new Map<number, Map<string, () => void>>()
 const workspaceMemoryWatchDestroyedListeners = new Set<number>()
+
+/**
+ * 每次保存或刷新都会推进工作区代数，使较早的异步 MCP 刷新不能回写较新的配置。
+ * 该代数仅用于进程内竞态保护，不写入用户的 mcp.json。
+ */
+const workspaceMcpRefreshGenerations = new Map<string, number>()
+
+function advanceWorkspaceMcpRefreshGeneration(workspaceSlug: string): number {
+  const generation = (workspaceMcpRefreshGenerations.get(workspaceSlug) ?? 0) + 1
+  workspaceMcpRefreshGenerations.set(workspaceSlug, generation)
+  return generation
+}
+
+function isWorkspaceMcpRefreshCurrent(workspaceSlug: string, generation: number): boolean {
+  return workspaceMcpRefreshGenerations.get(workspaceSlug) === generation
+}
 
 function stopWorkspaceMemoryWatch(webContentsId: number, workspaceSlug: string): void {
   const subscriptions = workspaceMemoryWatchSubscriptions.get(webContentsId)
@@ -707,6 +726,183 @@ async function runCmd(
       child.stdin.end(stdin)
     }
   })
+}
+
+type CliCommandResult = { status: number | null; stdout: string }
+type CliCommandRunner = (bin: string, args: string[], opts: { timeoutMs?: number }) => Promise<CliCommandResult>
+
+/**
+ * npm-installed CLIs are commonly exposed as .cmd shims on Windows. Keep the
+ * cmd.exe path isolated to fixed catalog commands instead of enabling a shell
+ * for the general-purpose runCmd helper.
+ */
+export function getCliProbeInvocation(
+  bin: string,
+  args: string[],
+  platform = process.platform,
+  comSpec = process.env.ComSpec,
+): { bin: string; args: string[] } {
+  if (platform !== 'win32') return { bin, args }
+  return {
+    bin: comSpec || 'cmd.exe',
+    args: ['/d', '/s', '/c', [bin, ...args].join(' ')],
+  }
+}
+
+async function runCliCommand(bin: string, args: string[], opts: { timeoutMs?: number }): Promise<CliCommandResult> {
+  const invocation = getCliProbeInvocation(bin, args)
+  return runCmd(invocation.bin, invocation.args, opts)
+}
+
+interface McpRefreshValidation {
+  name: string
+  fingerprint: string
+  lastTestResult: NonNullable<import('@proma/shared').McpServerEntry['lastTestResult']>
+}
+
+/**
+ * 生成 MCP 可运行配置的稳定摘要。摘要只用于内存中比较，绝不记录或返回，避免暴露 headers/env 中的敏感值。
+ */
+export function getMcpEntryFingerprint(entry: import('@proma/shared').McpServerEntry): string {
+  const sortedEntries = (record: Record<string, string> | undefined): Array<[string, string]> =>
+    Object.entries(record ?? {}).sort(([left], [right]) => left.localeCompare(right))
+
+  const canonical = {
+    type: entry.type,
+    command: entry.command ?? null,
+    args: entry.args ? [...entry.args] : null,
+    url: entry.url ?? null,
+    headers: sortedEntries(entry.headers),
+    env: sortedEntries(entry.env),
+    timeout: entry.timeout ?? null,
+    enabled: entry.enabled,
+    isBuiltin: entry.isBuiltin ?? false,
+  }
+  return createHash('sha256').update(JSON.stringify(canonical)).digest('hex')
+}
+
+/** 在固定上限内并发执行任务，保留输入顺序，避免同时启动过多 MCP 进程或网络连接。 */
+export async function mapWithConcurrency<T, R>(
+  values: readonly T[],
+  maxConcurrency: number,
+  mapper: (value: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  if (!Number.isInteger(maxConcurrency) || maxConcurrency < 1) {
+    throw new Error('maxConcurrency 必须是正整数')
+  }
+
+  const results = new Array<R>(values.length)
+  let nextIndex = 0
+  const worker = async (): Promise<void> => {
+    while (nextIndex < values.length) {
+      const index = nextIndex++
+      results[index] = await mapper(values[index]!, index)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(maxConcurrency, values.length) }, worker))
+  return results
+}
+
+/**
+ * 只合并仍与验证开始时完全一致的条目。调用方还必须检查 refresh generation，
+ * 因而同名服务器被编辑、禁用、删除或被后一次刷新取代时，旧结果不会落盘。
+ */
+export function mergeMcpRefreshResults(
+  currentConfig: import('@proma/shared').WorkspaceMcpConfig,
+  validations: readonly McpRefreshValidation[],
+): import('@proma/shared').WorkspaceMcpConfig {
+  const servers = { ...currentConfig.servers }
+  for (const validation of validations) {
+    const currentEntry = servers[validation.name]
+    if (currentEntry?.enabled && getMcpEntryFingerprint(currentEntry) === validation.fingerprint) {
+      servers[validation.name] = { ...currentEntry, lastTestResult: validation.lastTestResult }
+    }
+  }
+  return { servers }
+}
+
+/**
+ * Runs the real MCP validation after the enabled entry is safely persisted. Its
+ * result is conditionally merged into a fresh config snapshot, so a later edit,
+ * disable, deletion, or unrelated MCP change is never overwritten by the
+ * renderer's old snapshot.
+ */
+async function validateAndConditionallyPersistMcp(
+  workspaceSlug: string,
+  name: string,
+  entry: import('@proma/shared').McpServerEntry,
+): Promise<import('@proma/shared').McpConnectionMutationResult> {
+  const fingerprint = getMcpEntryFingerprint(entry)
+  const { validateMcpServer } = await import('./lib/mcp-validator')
+  const result = await validateMcpServer(name, entry, workspaceSlug)
+  const verification = {
+    success: result.valid,
+    message: result.valid ? (result.message ?? 'MCP 连接成功') : (result.reason ?? 'MCP 连接失败'),
+  }
+  const current = getWorkspaceMcpConfig(workspaceSlug)
+  const merged = mergeMcpRefreshResults(current, [{
+    name,
+    fingerprint,
+    lastTestResult: { ...verification, timestamp: Date.now() },
+  }])
+
+  // mergeMcpRefreshResults only changes a still-enabled, fingerprint-identical
+  // entry. Persist only then; otherwise return the intervening latest snapshot.
+  if (merged.servers[name] !== current.servers[name]) saveWorkspaceMcpConfig(workspaceSlug, merged)
+  return { config: merged, verification }
+}
+
+async function runCliProbe(
+  runner: CliCommandRunner,
+  bin: string,
+  args: string[],
+): Promise<CliCommandResult> {
+  try {
+    return await runner(bin, args, { timeoutMs: 2_000 })
+  } catch {
+    return { status: null, stdout: '' }
+  }
+}
+
+/**
+ * `dws auth status --format json` 是官方的非交互认证探测。只接受其完整、成功且 token 有效的结果；
+ * 不读取、返回或持久化 CLI 输出中的任何身份字段。
+ */
+function isDingTalkCliAuthenticated(result: CliCommandResult): boolean {
+  if (result.status !== 0) return false
+
+  try {
+    const status = JSON.parse(result.stdout) as {
+      success?: unknown
+      authenticated?: unknown
+      token_valid?: unknown
+    }
+    return status.success === true && status.authenticated === true && status.token_valid === true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * 仅将可由 CLI 本身的认证探测确认的集成标记为已连接；命令不存在、超时、未认证和未知探测均保守为 false。
+ */
+export async function getCliIntegrationStatuses(
+  runner: CliCommandRunner = runCliCommand,
+  disabledIds: ReadonlySet<string> = new Set(),
+): Promise<import('@proma/shared').CliIntegrationStatus[]> {
+  const [wecom, dingtalk, github, feishu] = await Promise.all([
+    runCliProbe(runner, 'wecom-cli', ['auth', 'show', '--status']),
+    runCliProbe(runner, 'dws', ['auth', 'status', '--format', 'json']),
+    runCliProbe(runner, 'gh', ['auth', 'status', '--active']),
+    runCliProbe(runner, 'lark-cli', ['auth', 'status', '--verify']),
+  ])
+
+  return [
+    { id: 'wecom-cli', connected: wecom.status === 0 && wecom.stdout.trim().toLowerCase() === 'authorized', enabled: !disabledIds.has('wecom-cli') },
+    { id: 'dingtalk-cli', connected: isDingTalkCliAuthenticated(dingtalk), enabled: !disabledIds.has('dingtalk-cli') },
+    { id: 'github-cli', connected: github.status === 0, enabled: !disabledIds.has('github-cli') },
+    { id: 'feishu-cli', connected: feishu.status === 0, enabled: !disabledIds.has('feishu-cli') },
+  ]
 }
 
 function parseWindowsRegistryValue(stdout: string): string {
@@ -2612,11 +2808,86 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     AGENT_IPC_CHANNELS.SAVE_MCP_CONFIG,
     async (_, workspaceSlug: string, config: WorkspaceMcpConfig): Promise<void> => {
+      advanceWorkspaceMcpRefreshGeneration(workspaceSlug)
       return saveWorkspaceMcpConfig(workspaceSlug, config)
     }
   )
 
-  // 启动远程 MCP OAuth。令牌仅保存在主进程的加密凭据文件中，不回传 renderer。
+  // Atomically toggle one MCP. Any later save advances the workspace refresh
+  // generation, while fingerprint matching protects this entry's validation writeback.
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.SET_MCP_ENABLED_AND_VALIDATE,
+    async (_, workspaceSlug: string, name: string, enabled: boolean): Promise<import('@proma/shared').McpConnectionMutationResult> => {
+      const current = getWorkspaceMcpConfig(workspaceSlug)
+      const entry = current.servers[name]
+      if (!entry) throw new Error('找不到 MCP 配置')
+
+      const entryWithoutTestResult = { ...entry }
+      delete entryWithoutTestResult.lastTestResult
+      const nextEntry = enabled ? { ...entryWithoutTestResult, enabled: true } : { ...entry, enabled: false }
+      const config = { servers: { ...current.servers, [name]: nextEntry } }
+      advanceWorkspaceMcpRefreshGeneration(workspaceSlug)
+      saveWorkspaceMcpConfig(workspaceSlug, config)
+      if (!enabled) return { config, verification: { success: true, message: 'MCP 已关闭' } }
+      return validateAndConditionallyPersistMcp(workspaceSlug, name, nextEntry)
+    },
+  )
+
+  // Atomically install a catalog MCP. Existing configs win instead of being
+  // replaced by a stale renderer snapshot.
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.INSTALL_MCP_AND_VALIDATE,
+    async (_, workspaceSlug: string, name: string, entry: import('@proma/shared').McpServerEntry): Promise<import('@proma/shared').McpInstallMutationResult> => {
+      const current = getWorkspaceMcpConfig(workspaceSlug)
+      if (current.servers[name]) {
+        return {
+          installed: false,
+          config: current,
+          verification: { success: Boolean(current.servers[name]?.lastTestResult?.success), message: 'MCP 已存在' },
+        }
+      }
+
+      const config = { servers: { ...current.servers, [name]: entry } }
+      advanceWorkspaceMcpRefreshGeneration(workspaceSlug)
+      saveWorkspaceMcpConfig(workspaceSlug, config)
+      if (!entry.enabled) return { installed: true, config, verification: { success: true, message: 'MCP 已添加，等待配置' } }
+      const result = await validateAndConditionallyPersistMcp(workspaceSlug, name, entry)
+      return { installed: true, ...result }
+    },
+  )
+
+  // 刷新并持久化工作区 MCP 真实连接状态
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.REFRESH_MCP_CONNECTIONS,
+    async (_, workspaceSlug: string): Promise<WorkspaceMcpConfig> => {
+      const refreshGeneration = advanceWorkspaceMcpRefreshGeneration(workspaceSlug)
+      const config = getWorkspaceMcpConfig(workspaceSlug)
+      const entries = Object.entries(config.servers).filter(([, entry]) => entry.enabled)
+      const { validateMcpServer } = await import('./lib/mcp-validator')
+      const validations = await mapWithConcurrency(entries, 4, async ([name, entry]) => {
+        const result = await validateMcpServer(name, entry, workspaceSlug)
+        return {
+          name,
+          fingerprint: getMcpEntryFingerprint(entry),
+          lastTestResult: {
+            success: result.valid,
+            message: result.valid ? (result.message ?? 'MCP 连接成功') : (result.reason ?? 'MCP 连接失败'),
+            timestamp: Date.now(),
+          },
+        }
+      })
+
+      // 保存或更晚发起的刷新会使本次 generation 过期；直接返回最新完整配置，不写任何旧验证结果。
+      if (!isWorkspaceMcpRefreshCurrent(workspaceSlug, refreshGeneration)) {
+        return getWorkspaceMcpConfig(workspaceSlug)
+      }
+
+      const refreshed = mergeMcpRefreshResults(getWorkspaceMcpConfig(workspaceSlug), validations)
+      saveWorkspaceMcpConfig(workspaceSlug, refreshed)
+      return refreshed
+    },
+  )
+
   ipcMain.handle(
     AGENT_IPC_CHANNELS.START_MCP_OAUTH,
     async (_, input: import('@proma/shared').StartMcpOAuthInput): Promise<import('@proma/shared').McpOAuthStartResult> => {
@@ -2631,15 +2902,39 @@ export function registerIpcHandlers(): void {
     }
   )
 
+  // The renderer removes the transport config first, then calls this handler
+  // to remove only the matching encrypted Keychain payload.
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.DELETE_MCP_CREDENTIAL,
+    async (_, workspaceSlug: string, serverName: string): Promise<void> => {
+      return deleteMcpCredential(workspaceSlug, serverName)
+    }
+  )
+
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.GET_CLI_INTEGRATION_STATUSES,
+    async (_, workspaceSlug: string): Promise<import('@proma/shared').CliIntegrationStatus[]> => {
+      return getCliIntegrationStatuses(undefined, getDisabledCliIntegrationIds(workspaceSlug))
+    }
+  )
+
+  ipcMain.handle(
+    AGENT_IPC_CHANNELS.SET_CLI_INTEGRATION_ENABLED,
+    async (_, workspaceSlug: string, id: string, enabled: boolean): Promise<import('@proma/shared').CliIntegrationStatus[]> => {
+      setCliIntegrationEnabled(workspaceSlug, id, enabled)
+      return getCliIntegrationStatuses(undefined, getDisabledCliIntegrationIds(workspaceSlug))
+    },
+  )
+
   // 测试 MCP 服务器连接
   ipcMain.handle(
     AGENT_IPC_CHANNELS.TEST_MCP_SERVER,
-    async (_, name: string, entry: import('@proma/shared').McpServerEntry): Promise<{ success: boolean; message: string }> => {
+    async (_, workspaceSlug: string, name: string, entry: import('@proma/shared').McpServerEntry): Promise<{ success: boolean; message: string }> => {
       const { validateMcpServer } = await import('./lib/mcp-validator')
-      const result = await validateMcpServer(name, entry)
+      const result = await validateMcpServer(name, entry, workspaceSlug)
       return {
         success: result.valid,
-        message: result.valid ? '连接成功' : (result.reason || '连接失败'),
+        message: result.valid ? (result.message ?? '连接成功') : (result.reason || '连接失败'),
       }
     }
   )

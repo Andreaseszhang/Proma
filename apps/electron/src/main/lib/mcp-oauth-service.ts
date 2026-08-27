@@ -41,6 +41,8 @@ interface TokenResponse {
 interface McpOAuthCredential {
   provider: McpOAuthProvider
   serverUrl: string
+  /** RFC 8707 resource indicator, retained as non-secret credential metadata. */
+  resource?: string
   clientId: string
   tokenEndpoint: string
   accessToken: string
@@ -108,10 +110,21 @@ async function fetchJson<T>(url: string, message: string): Promise<T> {
   return response.json() as Promise<T>
 }
 
-function protectedResourceMetadataUrl(serverUrl: string): string {
+export function normalizeMcpResource(serverUrl: string): string {
+  return new URL(serverUrl).toString()
+}
+
+export function protectedResourceMetadataUrl(serverUrl: string): string {
   const resource = new URL(serverUrl)
   const resourcePath = resource.pathname.replace(/\/$/, '')
   return new URL(`/.well-known/oauth-protected-resource${resourcePath}`, resource.origin).toString()
+}
+
+/** RFC 8414 inserts the issuer path after the host-level well-known prefix. */
+export function authorizationServerMetadataUrl(authorizationServer: string): string {
+  const issuer = new URL(authorizationServer)
+  const issuerPath = issuer.pathname === '/' ? '' : issuer.pathname
+  return new URL(`/.well-known/oauth-authorization-server${issuerPath}`, issuer.origin).toString()
 }
 
 async function discoverAuthorizationConfiguration(serverUrl: string): Promise<AuthorizationConfiguration> {
@@ -123,9 +136,7 @@ async function discoverAuthorizationConfiguration(serverUrl: string): Promise<Au
     parseString(parseStringArray(protectedResource.authorization_servers)[0], 'authorization_servers'),
     'authorization server',
   )
-  const issuer = new URL(authorizationServer)
-  const metadataBase = issuer.pathname.endsWith('/') ? issuer : new URL(`${issuer.pathname}/`, issuer.origin)
-  const metadataUrl = new URL('.well-known/oauth-authorization-server', metadataBase).toString()
+  const metadataUrl = authorizationServerMetadataUrl(authorizationServer)
   const metadata = await fetchJson<OAuthAuthorizationServerMetadata>(metadataUrl, '无法读取 OAuth 授权服务器元数据')
 
   return {
@@ -223,12 +234,13 @@ async function startCallbackServer(state: string): Promise<{ redirectUri: string
   }
 }
 
-async function exchangeAuthorizationCode(input: {
+export async function exchangeAuthorizationCode(input: {
   tokenEndpoint: string
   clientId: string
   redirectUri: string
   code: string
   verifier: string
+  resource?: string
 }): Promise<Pick<McpOAuthCredential, 'accessToken' | 'refreshToken' | 'expiresAt'>> {
   const body = new URLSearchParams({
     grant_type: 'authorization_code',
@@ -237,6 +249,7 @@ async function exchangeAuthorizationCode(input: {
     code: input.code,
     code_verifier: input.verifier,
   })
+  if (input.resource) body.set('resource', input.resource)
   const response = await fetch(input.tokenEndpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
@@ -276,7 +289,16 @@ function decryptCredential(encrypted: string): McpCredential | undefined {
       return { kind: 'api-key', headerName: parsed.headerName, value: parsed.value }
     }
     if (typeof parsed.accessToken !== 'string' || typeof parsed.clientId !== 'string' || typeof parsed.tokenEndpoint !== 'string' || typeof parsed.serverUrl !== 'string' || typeof parsed.provider !== 'string') return undefined
-    return parsed as unknown as McpOAuthCredential
+    return {
+      provider: parsed.provider as McpOAuthProvider,
+      serverUrl: parsed.serverUrl,
+      clientId: parsed.clientId,
+      tokenEndpoint: parsed.tokenEndpoint,
+      accessToken: parsed.accessToken,
+      ...(typeof parsed.resource === 'string' && parsed.resource ? { resource: parsed.resource } : {}),
+      ...(typeof parsed.refreshToken === 'string' && parsed.refreshToken ? { refreshToken: parsed.refreshToken } : {}),
+      ...(typeof parsed.expiresAt === 'number' ? { expiresAt: parsed.expiresAt } : {}),
+    }
   } catch {
     return undefined
   }
@@ -297,12 +319,24 @@ function readCredential(workspaceSlug: string, serverName: string): McpCredentia
   return encrypted ? decryptCredential(encrypted) : undefined
 }
 
-async function refreshCredential(credential: McpOAuthCredential): Promise<McpOAuthCredential> {
+export function deleteMcpCredential(workspaceSlug: string, serverName: string): void {
+  const file = readCredentialFile()
+  const key = credentialKey(workspaceSlug, serverName)
+  if (!(key in file.credentials)) return
+  delete file.credentials[key]
+  writeJsonFileAtomic(getMcpOAuthCredentialsPath(), file)
+}
+
+export async function refreshCredential(credential: McpOAuthCredential): Promise<McpOAuthCredential> {
   if (!credential.refreshToken) throw new Error('MCP OAuth 凭据已过期，请重新授权')
   const response = await fetch(credential.tokenEndpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
-    body: new URLSearchParams({ grant_type: 'refresh_token', client_id: credential.clientId, refresh_token: credential.refreshToken }),
+    body: (() => {
+      const body = new URLSearchParams({ grant_type: 'refresh_token', client_id: credential.clientId, refresh_token: credential.refreshToken })
+      if (credential.resource) body.set('resource', credential.resource)
+      return body
+    })(),
   })
   if (!response.ok) throw new Error(`MCP OAuth 刷新失败（HTTP ${response.status}），请重新授权`)
   const token = await response.json() as TokenResponse
@@ -331,7 +365,8 @@ export async function startMcpOAuth(input: StartMcpOAuthInput): Promise<McpOAuth
     authorizationUrl.searchParams.set('code_challenge', challenge)
     authorizationUrl.searchParams.set('code_challenge_method', 'S256')
     authorizationUrl.searchParams.set('state', state)
-    authorizationUrl.searchParams.set('resource', input.serverUrl)
+    const resource = normalizeMcpResource(input.serverUrl)
+    authorizationUrl.searchParams.set('resource', resource)
     if (configuration.scopes.length > 0) authorizationUrl.searchParams.set('scope', configuration.scopes.join(' '))
 
     await shell.openExternal(authorizationUrl.toString())
@@ -342,10 +377,12 @@ export async function startMcpOAuth(input: StartMcpOAuthInput): Promise<McpOAuth
       redirectUri: callback.redirectUri,
       code,
       verifier,
+      resource,
     })
     saveCredential(input.workspaceSlug, input.serverName, {
       provider: input.provider,
       serverUrl: input.serverUrl,
+      resource,
       clientId,
       tokenEndpoint: configuration.tokenEndpoint,
       ...token,

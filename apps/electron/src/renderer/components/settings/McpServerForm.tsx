@@ -305,7 +305,7 @@ export function McpServerForm({ server, workspaceSlug, onSaved, onChanged, onCan
 
     try {
       const entry = buildEntry(false) // 测试时不包含旧的测试结果
-      const result = await window.electronAPI.testMcpServer(serverName, entry)
+      const result = await window.electronAPI.testMcpServer(workspaceSlug, serverName, entry)
       setTestResult({
         success: result.success,
         message: result.message,

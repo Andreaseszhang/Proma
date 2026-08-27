@@ -12,19 +12,21 @@ interface CredentialDialogProps {
 }
 
 export function CredentialDialog({ integration, onOpenChange, onSave }: CredentialDialogProps): React.ReactElement {
-  const [value, setValue] = React.useState('')
+  const inputRef = React.useRef<HTMLInputElement>(null)
   const [saving, setSaving] = React.useState(false)
 
   React.useEffect(() => {
-    setValue('')
+    if (inputRef.current) inputRef.current.value = ''
     setSaving(false)
   }, [integration?.id])
 
   const handleSave = async (): Promise<void> => {
+    const value = inputRef.current?.value ?? ''
     if (!integration || !value.trim() || saving) return
     setSaving(true)
     try {
       await onSave(integration, value)
+      if (inputRef.current) inputRef.current.value = ''
       onOpenChange(false)
     } catch {
       // The parent reports a provider-specific error toast and keeps the dialog open.
@@ -64,8 +66,7 @@ export function CredentialDialog({ integration, onOpenChange, onSave }: Credenti
                 className="mt-2 h-12 text-sm"
                 placeholder={integration.credential.placeholder}
                 type="password"
-                value={value}
-                onChange={(event) => setValue(event.target.value)}
+                ref={inputRef}
                 onKeyDown={(event) => {
                   if (event.key === 'Enter') void handleSave()
                 }}
@@ -75,7 +76,7 @@ export function CredentialDialog({ integration, onOpenChange, onSave }: Credenti
 
             <DialogFooter className="mt-7 gap-3 sm:justify-end">
               <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>取消</Button>
-              <Button onClick={() => { void handleSave() }} disabled={!value.trim() || saving}>
+              <Button onClick={() => { void handleSave() }} disabled={saving}>
                 {saving && <Loader2 size={15} className="animate-spin" />}
                 保存并连接
               </Button>

@@ -38,9 +38,17 @@ import { BuiltinMcpDetailSheet } from './BuiltinMcpDetailSheet'
 import { ImportSkillDialog } from './ImportSkillDialog'
 import { WorkspaceMemoryTab } from './WorkspaceMemoryTab'
 import { groupSkills } from './skillGrouping'
-import { IntegrationCatalog } from './IntegrationCatalog'
+import { EMBEDDED_CATALOG_TWO_COLUMN_MIN_WIDTH, IntegrationCatalog } from './IntegrationCatalog'
 import { CredentialDialog } from './CredentialDialog'
-import { MCP_INTEGRATION_CATALOG, matchesCatalogSearch, type CatalogCliIntegration, type CatalogCredentialIntegration, type CatalogGuidedIntegration, type CatalogMcpIntegration } from './integration-catalog'
+import { buildCatalogMcpGuidePrompt, MCP_CREDENTIAL_SETUP_INSTRUCTION, MCP_INTEGRATION_CATALOG, getCatalogServerNames, isCatalogIntegrationVisible, matchesCatalogSearch, type CatalogCliIntegration, type CatalogCliProbeState, type CatalogCredentialIntegration, type CatalogGuidedIntegration, type CatalogMcpIntegration } from './integration-catalog'
+
+const embeddedMcpSectionContainerQuery = `
+  @container (min-width: ${EMBEDDED_CATALOG_TWO_COLUMN_MIN_WIDTH}) {
+    .mcp-section-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+`
 
 function buildSkillClassificationPrompt(input: {
   workspaceName: string
@@ -90,6 +98,20 @@ version: "1.0.0"
 - 是否有需要用户确认或后续合并同类项的建议`
 }
 
+function buildManualMcpGuidePrompt(): string {
+  return `请帮我为当前 Proma 工作区添加并配置一个 MCP 服务器。
+
+开始前先询问我想接入的服务名称、官方文档或 MCP 地址；信息不足时不要猜测命令、URL、transport、认证方式或权限范围。
+
+执行要求：
+1. 基于官方文档核验 MCP transport（stdio / Streamable HTTP / SSE）、启动命令或 URL、所需依赖、认证方式和权限范围。
+2. 不要打开 Proma 的手动 MCP 编辑抽屉，也不要只给我网页链接；请逐步说明，并在可安全执行的步骤中直接操作。
+3. 写入前先读取当前工作区的 mcp.json。不得覆盖、删除或改写已有服务器；名称与 Proma 内置 MCP 保留名冲突时，改用安全且明确的名称。
+4. API Key、token、Cookie、OAuth code、密码和 secret 不得写入 mcp.json、AGENTS.md、日志或普通项目文件。需要我登录、授权、输入凭据、付费或授予高风险权限时，停下来明确说明。
+5. 仅在配置完整并完成可行的连接验证后启用服务器；失败时保留已有配置，并说明准确原因、已验证事实和下一步。
+6. 当前会话开始时已加载工具列表。若本轮新增或修改 MCP，不能假定它会即时注入本轮工具；配置完成后告诉我如何在下一条消息或新会话中验证。${MCP_CREDENTIAL_SETUP_INSTRUCTION}`
+}
+
 export function AgentSkillsView({
   embedded = false,
   componentTab,
@@ -123,6 +145,7 @@ export function AgentSkillsView({
   const [isDeletingSkill, setIsDeletingSkill] = React.useState(false)
   const [isDeletingMcp, setIsDeletingMcp] = React.useState(false)
   const [classifyingSkills, setClassifyingSkills] = React.useState(false)
+  const [guidingManualMcp, setGuidingManualMcp] = React.useState(false)
   const [installingCatalogMcpId, setInstallingCatalogMcpId] = React.useState<string | null>(null)
   const [pendingCredentialIntegration, setPendingCredentialIntegration] = React.useState<CatalogCredentialIntegration | null>(null)
 
@@ -142,10 +165,13 @@ export function AgentSkillsView({
   const builtinSkills = filteredSkills.filter((s) => data.defaultSkillSlugs.has(s.slug))
   const updateCount = data.skills.filter((s) => s.hasUpdate).length
 
+  const catalogServerNames = React.useMemo(() => getCatalogServerNames(), [])
+
   const userMcpEntries = React.useMemo(() => {
     return Object.entries(data.mcpConfig.servers ?? {})
+      .filter(([name]) => !catalogServerNames.has(name))
       .filter(([name]) => !q || name.toLowerCase().includes(q))
-  }, [data.mcpConfig, q])
+  }, [catalogServerNames, data.mcpConfig, q])
 
   const builtinMcpServers = React.useMemo(() => {
     if (!q) return data.builtinMcpServers
@@ -159,25 +185,25 @@ export function AgentSkillsView({
 
   const catalogMcps = React.useMemo(() => {
     return MCP_INTEGRATION_CATALOG.filter((integration): integration is CatalogMcpIntegration =>
-      integration.kind === 'mcp' && matchesCatalogSearch(integration, q),
+      isCatalogIntegrationVisible(integration) && integration.kind === 'mcp' && matchesCatalogSearch(integration, q),
     )
   }, [q])
 
   const catalogClis = React.useMemo(() => {
     return MCP_INTEGRATION_CATALOG.filter((integration): integration is CatalogCliIntegration =>
-      integration.kind === 'cli' && matchesCatalogSearch(integration, q),
+      isCatalogIntegrationVisible(integration) && integration.kind === 'cli' && matchesCatalogSearch(integration, q),
     )
   }, [q])
 
   const catalogGuided = React.useMemo(() => {
     return MCP_INTEGRATION_CATALOG.filter((integration): integration is CatalogGuidedIntegration =>
-      integration.kind === 'guided' && matchesCatalogSearch(integration, q),
+      isCatalogIntegrationVisible(integration) && integration.kind === 'guided' && matchesCatalogSearch(integration, q),
     )
   }, [q])
 
   const catalogCredentials = React.useMemo(() => {
     return MCP_INTEGRATION_CATALOG.filter((integration): integration is CatalogCredentialIntegration =>
-      integration.kind === 'credential' && matchesCatalogSearch(integration, q),
+      isCatalogIntegrationVisible(integration) && integration.kind === 'credential' && matchesCatalogSearch(integration, q),
     )
   }, [q])
 
@@ -223,8 +249,41 @@ export function AgentSkillsView({
     setSelectedBuiltinMcp(null)
   }, [setSettingsOpen, setSettingsTab, setToolSettingsFocus])
 
+  const guideManualMcp = React.useCallback(async (): Promise<void> => {
+    if (guidingManualMcp) return
+    setGuidingManualMcp(true)
+    try {
+      const sessionId = await createAgent()
+      if (!sessionId) {
+        toast.error('无法创建 MCP 配置会话')
+        return
+      }
+      setPendingPrompt({ sessionId, message: buildManualMcpGuidePrompt() })
+      toast.success('已创建 MCP 配置引导会话')
+    } finally {
+      setGuidingManualMcp(false)
+    }
+  }, [createAgent, guidingManualMcp, setPendingPrompt])
+
+  const guideCatalogMcp = React.useCallback(async (integration: CatalogMcpIntegration): Promise<void> => {
+    const sessionId = await createAgent()
+    if (!sessionId) {
+      toast.error(`无法创建 ${integration.name} 配置会话`)
+      return
+    }
+    setPendingPrompt({
+      sessionId,
+      message: buildCatalogMcpGuidePrompt(integration),
+    })
+    toast.success(`已创建 ${integration.name} 配置会话`)
+  }, [createAgent, setPendingPrompt])
+
   const installCatalogMcp = React.useCallback(async (integration: CatalogMcpIntegration): Promise<void> => {
     if (installingCatalogMcpId) return
+    if (integration.authentication !== 'none' && !integration.oauthProvider) {
+      await guideCatalogMcp(integration)
+      return
+    }
     if (integration.authentication === 'oauth' && integration.oauthProvider && integration.entry.url) {
       setInstallingCatalogMcpId(integration.id)
       try {
@@ -267,7 +326,7 @@ export function AgentSkillsView({
     } finally {
       setInstallingCatalogMcpId(null)
     }
-  }, [data, installingCatalogMcpId])
+  }, [data, guideCatalogMcp, installingCatalogMcpId])
 
   const connectCredentialIntegration = React.useCallback(async (integration: CatalogCredentialIntegration, value: string): Promise<void> => {
     if (installingCatalogMcpId) return
@@ -284,8 +343,11 @@ export function AgentSkillsView({
         headerName: integration.credential.headerName,
         value,
       })
-      await data.toggleMcp(integration.serverName, true)
-      toast.success(`${integration.name} 已配置`, { description: '凭据已加密保存到系统 Keychain，连接已启用。' })
+      const verification = await data.toggleMcp(integration.serverName, true)
+      if (!verification.success) {
+        throw new Error(verification.message || 'MCP 握手或工具发现失败，请检查 Token 和空间权限后重试')
+      }
+      toast.success(`${integration.name} 已连接`, { description: 'MCP Token 已加密保存到系统 Keychain，并已通过真实握手和工具发现验证。' })
     } catch (error) {
       console.error(`[Agent 技能] ${integration.name} 凭据配置失败:`, error)
       toast.error(`${integration.name} 连接失败`, { description: error instanceof Error ? error.message : '请检查凭据后重试' })
@@ -295,9 +357,32 @@ export function AgentSkillsView({
     }
   }, [data, installingCatalogMcpId])
 
-  const openCatalogCli = React.useCallback((integration: CatalogCliIntegration): void => {
-    void window.electronAPI.openExternal(integration.setupUrl)
-  }, [])
+  const guideCatalogCli = React.useCallback(async (integration: CatalogCliIntegration): Promise<void> => {
+    try {
+      // “配置”是重新授予 Proma 使用此 CLI 的入口，不会影响 CLI 自己的登录或授权。
+      await data.setCliIntegrationEnabled(integration.id, true)
+    } catch {
+      toast.error(`无法启用 ${integration.name} 集成`)
+      return
+    }
+
+    const sessionId = await createAgent()
+    if (!sessionId) {
+      toast.error(`无法创建 ${integration.name} 配置会话`)
+      return
+    }
+    setPendingPrompt({ sessionId, message: integration.agentPrompt })
+    toast.success(`已创建 ${integration.name} 配置会话`)
+  }, [createAgent, data, setPendingPrompt])
+
+  const disconnectCatalogCli = React.useCallback(async (integration: CatalogCliIntegration): Promise<void> => {
+    try {
+      await data.setCliIntegrationEnabled(integration.id, false)
+      toast.success(`已断开 ${integration.name}`, { description: '仅停止 Proma 使用该 CLI，不会登出或撤销第三方授权。' })
+    } catch {
+      toast.error(`无法断开 ${integration.name}`)
+    }
+  }, [data])
 
   const guideCatalogIntegration = React.useCallback(async (integration: CatalogGuidedIntegration): Promise<void> => {
     const sessionId = await createAgent()
@@ -395,7 +480,12 @@ export function AgentSkillsView({
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
+    <div
+      className="flex h-full flex-col overflow-hidden"
+      // The embedded view fills a resizable SidePanel, so its child layout must
+      // respond to this element rather than the application viewport.
+      style={embedded ? { containerType: 'inline-size' } : undefined}
+    >
       {/* 标题栏 + 工作区切换 */}
       {/* 不加 titlebar-drag-region：与 DropdownMenu 嵌套时 drag/no-drag 会让 Radix 拿不到
           pointerdown，下拉打不开。窗口拖拽由 AppShell 顶部 0–50px 的全局 drag 层兜底。
@@ -549,10 +639,12 @@ export function AgentSkillsView({
         {tab === 'mcp' && (
           <button
             type="button"
-            onClick={() => { setEditingMcp(null); setMcpSheetOpen(true) }}
-            className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-[13px] font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
+            onClick={() => void guideManualMcp()}
+            disabled={guidingManualMcp}
+            title="创建 Agent 会话协助配置 MCP"
+            className="flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-[13px] font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 disabled:cursor-wait disabled:opacity-60"
           >
-            <Plus size={14} />
+            {guidingManualMcp ? <Loader2 size={14} className="animate-spin" /> : <Plus size={14} />}
             <span>添加服务器</span>
           </button>
         )}
@@ -583,17 +675,25 @@ export function AgentSkillsView({
               catalogClis={catalogClis}
               catalogGuided={catalogGuided}
               catalogCredentials={catalogCredentials}
+              embedded={embedded}
               installedMcpNames={new Set(Object.keys(data.mcpConfig.servers ?? {}))}
-              enabledMcpNames={new Set(Object.entries(data.mcpConfig.servers ?? {}).filter(([, entry]) => entry.enabled !== false).map(([name]) => name))}
+              enabledMcpNames={new Set(Object.entries(data.mcpConfig.servers ?? {}).filter(([, entry]) => entry.enabled === true).map(([name]) => name))}
+              // 后台复检期间保留上一次成功的握手证据；只有刷新返回新的失败结果时才降级状态。
+              verifiedMcpNames={new Set(Object.entries(data.mcpConfig.servers ?? {}).filter(([, entry]) => entry.lastTestResult?.success).map(([name]) => name))}
+              // getWorkspaceSkills() 仅返回当前工作区 skills/ 下的 active Skill；不让
+              // 其他工作区或 inactive Skill 误把目录卡标为可用。
+              activeSkillSlugs={new Set(data.skills.filter((skill) => skill.enabled).map((skill) => skill.slug))}
+              connectedCliIds={new Set(data.cliIntegrationStatuses.filter((status) => status.connected && status.enabled).map((status) => status.id))}
+              cliIntegrationProbeState={data.cliIntegrationProbeState}
               installingCatalogMcpId={installingCatalogMcpId}
               onOpen={(name, entry) => { setEditingMcp({ name, entry }); setMcpSheetOpen(true) }}
               onOpenBuiltin={setSelectedBuiltinMcp}
               onToggle={data.toggleMcp}
               onToggleBuiltin={data.toggleBuiltinMcp}
               onRequestDelete={setPendingDeleteMcpName}
-              onAdd={() => { setEditingMcp(null); setMcpSheetOpen(true) }}
               onInstallCatalogMcp={(integration) => { void installCatalogMcp(integration) }}
-              onOpenCatalogCli={openCatalogCli}
+              onGuideCatalogCli={guideCatalogCli}
+              onDisconnectCatalogCli={(integration) => { void disconnectCatalogCli(integration) }}
               onGuideCatalogIntegration={(integration) => { void guideCatalogIntegration(integration) }}
               onRequestCredential={setPendingCredentialIntegration}
             />
@@ -789,40 +889,35 @@ interface McpTabProps {
   catalogClis: CatalogCliIntegration[]
   catalogGuided: CatalogGuidedIntegration[]
   catalogCredentials: CatalogCredentialIntegration[]
+  embedded: boolean
   installedMcpNames: Set<string>
   enabledMcpNames: Set<string>
+  verifiedMcpNames: Set<string>
+  activeSkillSlugs: Set<string>
+  connectedCliIds: Set<string>
+  cliIntegrationProbeState: CatalogCliProbeState
   installingCatalogMcpId: string | null
   onOpen: (name: string, entry: McpServerEntry) => void
   onOpenBuiltin: (server: BuiltinMcpServerSummary) => void
   onToggle: (name: string, enabled: boolean) => void
   onToggleBuiltin: (id: string, enabled: boolean) => void
   onRequestDelete: (name: string) => void
-  onAdd: () => void
   onInstallCatalogMcp: (integration: CatalogMcpIntegration) => void
-  onOpenCatalogCli: (integration: CatalogCliIntegration) => void
+  onGuideCatalogCli: (integration: CatalogCliIntegration) => void
+  onDisconnectCatalogCli: (integration: CatalogCliIntegration) => void
   onGuideCatalogIntegration: (integration: CatalogGuidedIntegration) => void
   onRequestCredential: (integration: CatalogCredentialIntegration) => void
 }
 
-function McpTab({ userEntries, builtinServers, catalogMcps, catalogClis, catalogGuided, catalogCredentials, installedMcpNames, enabledMcpNames, installingCatalogMcpId, onOpen, onOpenBuiltin, onToggle, onToggleBuiltin, onRequestDelete, onAdd, onInstallCatalogMcp, onOpenCatalogCli, onGuideCatalogIntegration, onRequestCredential }: McpTabProps): React.ReactElement {
+function McpTab({ userEntries, builtinServers, catalogMcps, catalogClis, catalogGuided, catalogCredentials, embedded, installedMcpNames, enabledMcpNames, verifiedMcpNames, activeSkillSlugs, connectedCliIds, cliIntegrationProbeState, installingCatalogMcpId, onOpen, onOpenBuiltin, onToggle, onToggleBuiltin, onRequestDelete, onInstallCatalogMcp, onGuideCatalogCli, onDisconnectCatalogCli, onGuideCatalogIntegration, onRequestCredential }: McpTabProps): React.ReactElement {
   if (userEntries.length === 0 && builtinServers.length === 0 && catalogMcps.length === 0 && catalogClis.length === 0 && catalogGuided.length === 0 && catalogCredentials.length === 0) {
     return <EmptyState icon={<Search className="size-8 text-foreground/30" />} title="没有匹配的 MCP 服务器" hint="试试更换搜索关键词。" />
   }
 
   return (
     <div className="flex flex-col gap-8">
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={onAdd}
-          className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90"
-        >
-          <Plus size={14} />
-          <span>手动添加 MCP</span>
-        </button>
-      </div>
       {userEntries.length > 0 && (
-        <McpSection title="我的 MCP" count={userEntries.length}>
+        <McpSection title="我的 MCP" count={userEntries.length} embedded={embedded}>
           {userEntries.map(([name, entry]) => (
             <McpCard
               key={name}
@@ -831,13 +926,15 @@ function McpTab({ userEntries, builtinServers, catalogMcps, catalogClis, catalog
               onOpen={() => onOpen(name, entry)}
               onToggle={(enabled) => onToggle(name, enabled)}
               onRequestDelete={() => onRequestDelete(name)}
+              statusLabel={entry.enabled ? '已启用' : '已关闭'}
+              statusTone={entry.enabled ? 'success' : 'muted'}
             />
           ))}
         </McpSection>
       )}
 
       {builtinServers.length > 0 && (
-        <McpSection title="Proma 集成能力" count={builtinServers.length}>
+        <McpSection title="Proma 集成能力" count={builtinServers.length} embedded={embedded}>
           {builtinServers.map((server) => (
             <McpCard
               key={server.id}
@@ -865,13 +962,20 @@ function McpTab({ userEntries, builtinServers, catalogMcps, catalogClis, catalog
         clis={catalogClis}
         guided={catalogGuided}
         credentials={catalogCredentials}
+        embedded={embedded}
         installedMcpNames={installedMcpNames}
         enabledMcpNames={enabledMcpNames}
+        verifiedMcpNames={verifiedMcpNames}
+        activeSkillSlugs={activeSkillSlugs}
+        connectedCliIds={connectedCliIds}
+        cliIntegrationProbeState={cliIntegrationProbeState}
         installingMcpId={installingCatalogMcpId}
         onInstallMcp={onInstallCatalogMcp}
-        onOpenCli={onOpenCatalogCli}
+        onGuideCli={onGuideCatalogCli}
+        onDisconnectCli={onDisconnectCatalogCli}
         onGuide={onGuideCatalogIntegration}
         onRequestCredential={onRequestCredential}
+        onToggleMcp={onToggle}
       />
     </div>
   )
@@ -883,14 +987,15 @@ function getBuiltinMcpStatus(server: BuiltinMcpServerSummary): { label: string; 
   return { label: '需配置', tone: 'warning' }
 }
 
-function McpSection({ title, count, children }: { title: string; count: number; children: React.ReactNode }): React.ReactElement {
+function McpSection({ title, count, children, embedded }: { title: string; count: number; children: React.ReactNode; embedded: boolean }): React.ReactElement {
   return (
     <div className="flex flex-col gap-3">
+      {embedded && <style>{embeddedMcpSectionContainerQuery}</style>}
       <div className="flex items-center gap-2 px-1">
         <span className="text-[13px] font-medium text-foreground/55">{title}</span>
         <span className="text-[12px] tabular-nums text-foreground/35">{count}</span>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className={cn('grid grid-cols-1 gap-4', embedded ? 'mcp-section-grid' : 'md:grid-cols-2')}>
         {children}
       </div>
     </div>

@@ -280,7 +280,7 @@ export function AgentSkillsView({
   }
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
+    <div className={cn('flex h-full flex-col overflow-hidden', embedded && 'skills-embedded-container')}>
       {/* 标题栏 + 工作区切换 */}
       {/* 不加 titlebar-drag-region：与 DropdownMenu 嵌套时 drag/no-drag 会让 Radix 拿不到
           pointerdown，下拉打不开。窗口拖拽由 AppShell 顶部 0–50px 的全局 drag 层兜底。
@@ -452,6 +452,7 @@ export function AgentSkillsView({
             <SkillsTab
               customSkills={customSkills}
               builtinSkills={builtinSkills}
+              embedded={embedded}
               total={data.skills.length}
               updateCount={updateCount}
               updatingSkill={data.updatingSkill}
@@ -539,6 +540,7 @@ export function AgentSkillsView({
 interface SkillsTabProps {
   customSkills: SkillMeta[]
   builtinSkills: SkillMeta[]
+  embedded: boolean
   total: number
   updateCount: number
   updatingSkill: string | null
@@ -551,6 +553,7 @@ interface SkillsTabProps {
 function SkillsTab({
   customSkills,
   builtinSkills,
+  embedded,
   total,
   updateCount,
   updatingSkill,
@@ -574,10 +577,10 @@ function SkillsTab({
         </div>
       )}
       {customSkills.length > 0 && (
-        <SkillSection title="我的 Skills" skills={customSkills} isBuiltin={isBuiltin} updatingSkill={updatingSkill} onOpen={onOpen} onToggle={onToggle} onUpdate={onUpdate} />
+        <SkillSection title="我的 Skills" skills={customSkills} embedded={embedded} isBuiltin={isBuiltin} updatingSkill={updatingSkill} onOpen={onOpen} onToggle={onToggle} onUpdate={onUpdate} />
       )}
       {builtinSkills.length > 0 && (
-        <SkillSection title="PROMA 内置" skills={builtinSkills} isBuiltin={isBuiltin} updatingSkill={updatingSkill} onOpen={onOpen} onToggle={onToggle} onUpdate={onUpdate} />
+        <SkillSection title="PROMA 内置" skills={builtinSkills} embedded={embedded} isBuiltin={isBuiltin} updatingSkill={updatingSkill} onOpen={onOpen} onToggle={onToggle} onUpdate={onUpdate} />
       )}
     </div>
   )
@@ -586,6 +589,7 @@ function SkillsTab({
 interface SkillSectionProps {
   title: string
   skills: SkillMeta[]
+  embedded: boolean
   isBuiltin: (slug: string) => boolean
   updatingSkill: string | null
   onOpen: (slug: string) => void
@@ -593,7 +597,7 @@ interface SkillSectionProps {
   onUpdate: (slug: string) => void
 }
 
-function SkillSection({ title, skills, isBuiltin, updatingSkill, onOpen, onToggle, onUpdate }: SkillSectionProps): React.ReactElement {
+function SkillSection({ title, skills, embedded, isBuiltin, updatingSkill, onOpen, onToggle, onUpdate }: SkillSectionProps): React.ReactElement {
   const [collapsedGroups, setCollapsedGroups] = React.useState<Set<string>>(new Set())
   const groups = React.useMemo(() => groupSkills(skills), [skills])
 
@@ -627,7 +631,7 @@ function SkillSection({ title, skills, isBuiltin, updatingSkill, onOpen, onToggl
                 <span className="text-[12px] tabular-nums text-foreground/35">{group.skills.length}</span>
               </button>
               {!collapsed && (
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <div className={cn('grid gap-3', embedded ? 'skills-embedded-card-grid' : 'sm:grid-cols-2 lg:grid-cols-3')}>
                   {group.skills.map((skill) => (
                     <SkillCard
                       key={skill.slug}

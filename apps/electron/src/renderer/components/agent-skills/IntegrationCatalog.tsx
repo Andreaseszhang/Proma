@@ -194,23 +194,23 @@ function IntegrationCard({ name, description, capabilities, iconSlug, status, st
   }[iconSlug]
   return (
     <article className={cn(
-      'group flex min-h-[172px] flex-col rounded-lg p-4 shadow-md transition-[transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:shadow-lg',
-      statusTone === 'success' ? 'bg-primary/5' : 'bg-card',
+      'group relative flex min-h-[172px] flex-col gap-3 rounded-lg bg-card p-4 text-left shadow-md transition-[transform,box-shadow] duration-200',
+      'hover:-translate-y-0.5 hover:shadow-lg',
     )}>
       <div className="flex items-start gap-3">
-        <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-muted/80">
+        <div className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
           {localIcon
-            ? <img className="size-10 object-contain" src={localIcon} alt="" />
+            ? <img className="size-9 rounded-md object-contain outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10" src={localIcon} alt="" />
             : DomainIcon
-              ? <DomainIcon size={25} strokeWidth={1.8} className="text-foreground/70" />
+              ? <DomainIcon size={23} strokeWidth={1.8} />
               : iconFailed
                 ? commandLine
                   ? <Terminal size={21} className="text-muted-foreground" />
                   : <CircleDashed size={21} className="text-muted-foreground" />
-                : <img className="size-6 object-contain" src={`https://cdn.simpleicons.org/${iconSlug}`} alt="" onError={() => setIconFailed(true)} />}
+                : <img className="size-6 object-contain outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10" src={`https://cdn.simpleicons.org/${iconSlug}`} alt="" onError={() => setIconFailed(true)} />}
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-[15px] font-semibold text-foreground">{name}</h3>
+          <h3 className="truncate text-[15px] font-semibold text-foreground [text-wrap:balance]">{name}</h3>
           <p className="mt-1 line-clamp-2 text-[12px] leading-4 text-muted-foreground">{description}</p>
         </div>
       </div>
@@ -221,28 +221,31 @@ function IntegrationCard({ name, description, capabilities, iconSlug, status, st
         ))}
       </div>
 
-      <div className="mt-3 flex items-center justify-between gap-3">
-        <span className={cn('inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium', statusTone === 'success' ? 'bg-primary/12 text-primary' : 'bg-muted text-muted-foreground')}>
-          {statusTone === 'success' ? <Check size={13} strokeWidth={2.5} /> : <CircleDashed size={12} />}
+      <div className="mt-auto flex items-center gap-2 pt-3">
+        <span className={cn('inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium', statusTone === 'success' ? 'bg-primary/12 text-primary' : 'bg-muted text-muted-foreground')}>
+          {statusTone === 'success' ? <Check size={12} strokeWidth={2.5} /> : <CircleDashed size={12} />}
           <span className="truncate">{status}</span>
         </span>
-        {statusTone === 'success' && onDisconnect ? (
-          <button
-            type="button"
-            title={`断开连接 ${name}`}
-            aria-label={`断开连接 ${name}`}
-            disabled={installing}
-            onClick={onDisconnect}
-            className="pointer-events-none flex shrink-0 -translate-x-2.5 items-center gap-1.5 p-0 text-[12px] font-medium text-destructive opacity-0 transition-opacity hover:text-destructive/80 focus-visible:pointer-events-auto focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 disabled:cursor-wait disabled:opacity-60"
-          >
-            <Unplug size={14} />
-            <span>断开连接</span>
-          </button>
-        ) : (
-          <button type="button" title={actionControlLabel} aria-label={actionControlLabel} disabled={installing} onClick={onAction} className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted text-foreground/65 transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-wait disabled:opacity-60">
-            {installing ? <CircleDashed size={17} className="animate-spin" /> : installed ? <ArrowUpRight size={17} /> : <Plus size={17} />}
-          </button>
-        )}
+        <div className="ml-auto flex items-center gap-1">
+          {statusTone === 'success' && onDisconnect && (
+            <button
+              type="button"
+              title={`断开连接 ${name}`}
+              aria-label={`断开连接 ${name}`}
+              disabled={installing}
+              onClick={onDisconnect}
+              className="pointer-events-none flex shrink-0 items-center gap-1.5 p-0 text-[12px] font-medium text-destructive opacity-0 transition-[color,opacity,background-color] hover:text-destructive/80 focus-visible:pointer-events-auto focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100 disabled:cursor-wait disabled:opacity-60"
+            >
+              <Unplug size={14} />
+              <span>断开连接</span>
+            </button>
+          )}
+          {(!onDisconnect || statusTone !== 'success') && (
+            <button type="button" title={actionControlLabel} aria-label={actionControlLabel} disabled={installing} onClick={onAction} className="flex size-10 shrink-0 items-center justify-center rounded-full bg-muted text-foreground/65 transition-[transform,background-color,color] hover:bg-accent hover:text-foreground active:scale-[0.96] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-wait disabled:opacity-60">
+              {installing ? <CircleDashed size={17} className="animate-spin" /> : installed ? <ArrowUpRight size={17} /> : <Plus size={17} />}
+            </button>
+          )}
+        </div>
       </div>
     </article>
   )

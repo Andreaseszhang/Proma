@@ -610,6 +610,23 @@ export const agentFileSourceFilterMapAtom = atomWithStorage<Record<string, Agent
  */
 export const fileBrowserExpandedPathsAtom = atom<Map<string, Map<string, boolean>>>(new Map())
 
+/** 更新单个目录的展开状态，同时保留其他文件树与目录的状态。 */
+export function updateFileBrowserExpandedPath(
+  state: Map<string, Map<string, boolean>>,
+  stateKey: string,
+  path: string,
+  expanded: boolean,
+): Map<string, Map<string, boolean>> {
+  const current = state.get(stateKey)
+  if (current?.get(path) === expanded) return state
+
+  const nextPaths = new Map(current)
+  nextPaths.set(path, expanded)
+  const next = new Map(state)
+  next.set(stateKey, nextPaths)
+  return next
+}
+
 /** Files Tab 各滚动视图的 scrollTop，按会话和文件视图隔离。 */
 export const fileBrowserScrollTopMapAtom = atom<Map<string, number>>(new Map())
 

@@ -18,6 +18,7 @@ import {
   fileBrowserExpandedPathsAtom,
   fileBrowserScrollTopMapAtom,
   pruneFileBrowserStateMap,
+  updateFileBrowserExpandedPath,
   type AgentStreamState,
 } from './agent-atoms'
 
@@ -89,12 +90,17 @@ describe('文件页面展开状态', () => {
     const sessionAProjectKey = 'session-a\u0002project\u0000/Users/a/project'
     const sessionBProjectKey = 'session-b\u0002project\u0000/Users/a/project'
 
-    store.set(fileBrowserExpandedPathsAtom, new Map([
+    const initialState = new Map([
       [sessionAProjectKey, new Map([
         ['/Users/a/project/src', true],
-        ['/Users/a/project/src/components', false],
       ])],
-    ]))
+    ])
+    store.set(fileBrowserExpandedPathsAtom, updateFileBrowserExpandedPath(
+      initialState,
+      sessionAProjectKey,
+      '/Users/a/project/src/components',
+      false,
+    ))
 
     expect(store.get(fileBrowserExpandedPathsAtom).get(sessionAProjectKey)).toEqual(
       new Map([
@@ -102,6 +108,9 @@ describe('文件页面展开状态', () => {
         ['/Users/a/project/src/components', false],
       ]),
     )
+    expect(initialState.get(sessionAProjectKey)).toEqual(new Map([
+      ['/Users/a/project/src', true],
+    ]))
     expect(store.get(fileBrowserExpandedPathsAtom).get(sessionBProjectKey)).toBeUndefined()
   })
 

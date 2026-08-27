@@ -115,12 +115,13 @@ function PersistentFileScrollArea({ stateKey, className, children, autoRevealTs 
   const setScrollTopMap = useSetAtom(fileBrowserScrollTopMapAtom)
   const scrollTop = scrollTopMap.get(stateKey) ?? 0
   const containerRef = React.useRef<HTMLDivElement>(null)
-  const latestScrollTopRef = React.useRef(scrollTop)
+  // 用 stateKey 分隔最新值：切换文件来源时，旧 effect 的 cleanup 仍须写回旧视图的位置。
+  const latestScrollTopByStateKeyRef = React.useRef(new Map<string, number>())
   const pendingFlushRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
   const suppressRestoreUntilRef = React.useRef(0)
 
   React.useLayoutEffect(() => {
-    latestScrollTopRef.current = scrollTop
+    latestScrollTopByStateKeyRef.current.set(stateKey, scrollTop)
   }, [scrollTop, stateKey])
 
   // 主动搜索定位时，旧 scrollTop 不能覆盖 scrollIntoView 的目标位置；
@@ -139,7 +140,8 @@ function PersistentFileScrollArea({ stateKey, className, children, autoRevealTs 
     const restore = () => {
       if (Date.now() < suppressRestoreUntilRef.current) return
       const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight)
-      container.scrollTop = Math.min(latestScrollTopRef.current, maxScrollTop)
+      const latestScrollTop = latestScrollTopByStateKeyRef.current.get(stateKey) ?? 0
+      container.scrollTop = Math.min(latestScrollTop, maxScrollTop)
     }
     const scheduleRestore = () => {
       restore()
@@ -176,7 +178,7 @@ function PersistentFileScrollArea({ stateKey, className, children, autoRevealTs 
 
     const flush = () => {
       pendingFlushRef.current = null
-      const nextScrollTop = latestScrollTopRef.current
+      const nextScrollTop = latestScrollTopByStateKeyRef.current.get(stateKey) ?? 0
       setScrollTopMap((previous) => {
         if (previous.get(stateKey) === nextScrollTop) return previous
         const next = new Map(previous)
@@ -185,7 +187,7 @@ function PersistentFileScrollArea({ stateKey, className, children, autoRevealTs 
       })
     }
     const handleScroll = () => {
-      latestScrollTopRef.current = container.scrollTop
+      latestScrollTopByStateKeyRef.current.set(stateKey, container.scrollTop)
       if (pendingFlushRef.current === null) {
         pendingFlushRef.current = setTimeout(flush, 120)
       }

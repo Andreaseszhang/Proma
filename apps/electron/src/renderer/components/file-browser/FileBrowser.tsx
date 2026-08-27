@@ -11,7 +11,8 @@
  */
 
 import * as React from 'react'
-import { useAtom, useAtomValue } from 'jotai'
+import { useAtomValue, useSetAtom } from 'jotai'
+import { selectAtom } from 'jotai/utils'
 import { toast } from 'sonner'
 import {
   ChevronRight,
@@ -46,7 +47,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import { workspaceFilesVersionAtom, fileBrowserAutoRevealAtom, recentlyModifiedPathsAtom, currentAgentSessionIdAtom, fileBrowserExpandedPathsAtom } from '@/atoms/agent-atoms'
+import { workspaceFilesVersionAtom, fileBrowserAutoRevealAtom, recentlyModifiedPathsAtom, currentAgentSessionIdAtom, fileBrowserExpandedPathsAtom, updateFileBrowserExpandedPath } from '@/atoms/agent-atoms'
 import type { FileAccessOptions, FileEntry } from '@proma/shared'
 import { FileTypeIcon } from './FileTypeIcon'
 import { DefaultAppMenuItem } from './DefaultAppMenuItem'
@@ -137,8 +138,6 @@ function getFileBrowserStateKey(sessionId: string | null, roots: readonly FileBr
   return `${sessionId ?? 'standalone'}\u0002${rootKey}`
 }
 
-const EMPTY_EXPANDED_PATHS = new Map<string, boolean>()
-
 export function FileBrowser({ rootPath, roots, hideToolbar, embedded, hideEmpty, access, projectRootPath, showSessionBadge = true, onAddToChat, onFilePreview }: FileBrowserProps): React.ReactElement {
   const browserRoots = React.useMemo<FileBrowserRoot[]>(() => {
     if (roots && roots.length > 0) return roots.filter((root) => Boolean(root.path))
@@ -149,23 +148,10 @@ export function FileBrowser({ rootPath, roots, hideToolbar, embedded, hideEmpty,
   const [error, setError] = React.useState<string | null>(null)
   const filesVersion = useAtomValue(workspaceFilesVersionAtom)
   const currentSessionId = useAtomValue(currentAgentSessionIdAtom)
-  const [expandedPathsMap, setExpandedPathsMap] = useAtom(fileBrowserExpandedPathsAtom)
   const expandedStateKey = React.useMemo(
     () => getFileBrowserStateKey(currentSessionId, browserRoots),
     [currentSessionId, browserRoots],
   )
-  const expandedPaths = expandedPathsMap.get(expandedStateKey) ?? EMPTY_EXPANDED_PATHS
-  const handleExpandedChange = React.useCallback((path: string, expanded: boolean) => {
-    setExpandedPathsMap((previous) => {
-      const current = previous.get(expandedStateKey) ?? EMPTY_EXPANDED_PATHS
-      if (current.get(path) === expanded) return previous
-      const nextPaths = new Map(current)
-      nextPaths.set(path, expanded)
-      const next = new Map(previous)
-      next.set(expandedStateKey, nextPaths)
-      return next
-    })
-  }, [expandedStateKey, setExpandedPathsMap])
 
   // ===== Agent 写入文件时的自动定位 =====
   const autoReveal = useAtomValue(fileBrowserAutoRevealAtom)
@@ -416,8 +402,7 @@ export function FileBrowser({ rootPath, roots, hideToolbar, embedded, hideEmpty,
           revealTarget={revealTarget}
           revealTs={revealTs}
           recentlyModifiedSet={recentlyModifiedSet}
-          expandedPaths={expandedPaths}
-          onExpandedChange={handleExpandedChange}
+          expandedStateKey={expandedStateKey}
           onSelect={handleSelect}
           onShowInFolder={handleShowInFolder}
           onOpenInTerminal={handleOpenInTerminal}
@@ -526,9 +511,8 @@ interface FileTreeItemProps {
   /** 自动定位时间戳，变化时重新触发 */
   revealTs: number
   recentlyModifiedSet: Set<string>
-  /** 当前文件树实例中目录的显式展开/折叠状态。 */
-  expandedPaths: Map<string, boolean>
-  onExpandedChange: (path: string, expanded: boolean) => void
+  /** 当前文件树实例的隔离状态 key。 */
+  expandedStateKey: string
   onSelect: (entry: FileEntry, event: React.MouseEvent) => void
   onShowInFolder: (entry: FileEntry) => void
   onOpenInTerminal: (entry: FileEntry) => void
@@ -558,8 +542,7 @@ function FileTreeItem({
   revealTarget,
   revealTs,
   recentlyModifiedSet,
-  expandedPaths,
-  onExpandedChange,
+  expandedStateKey,
   onSelect,
   onShowInFolder,
   onOpenInTerminal,
@@ -575,7 +558,16 @@ function FileTreeItem({
   onAddToChat,
   onFilePreview,
 }: FileTreeItemProps): React.ReactElement {
-  const expanded = expandedPaths.get(entry.path) ?? false
+  // 每行只订阅自己的布尔值；其他目录展开/折叠不重渲染整棵已展开树。
+  const expandedAtom = React.useMemo(
+    () => selectAtom(fileBrowserExpandedPathsAtom, (state) => state.get(expandedStateKey)?.get(entry.path) ?? false),
+    [entry.path, expandedStateKey],
+  )
+  const expanded = useAtomValue(expandedAtom)
+  const setExpandedPathsMap = useSetAtom(fileBrowserExpandedPathsAtom)
+  const setExpanded = React.useCallback((nextExpanded: boolean) => {
+    setExpandedPathsMap((previous) => updateFileBrowserExpandedPath(previous, expandedStateKey, entry.path, nextExpanded))
+  }, [entry.path, expandedStateKey, setExpandedPathsMap])
   const [children, setChildren] = React.useState<ScopedFileEntry[]>([])
   const [childrenLoaded, setChildrenLoaded] = React.useState(false)
   const rowRef = React.useRef<HTMLDivElement>(null)
@@ -638,7 +630,7 @@ function FileTreeItem({
           }
         }
         if (cancelled) return
-        onExpandedChange(entry.path, true)
+        setExpanded(true)
         // 目标自身就是这个目录时，等展开后再滚动，避免子项渲染改变行高使
         // smooth scroll 的目标位置过时；加载失败路径不会到这里。
         if (isTarget) scrollToTarget()
@@ -689,7 +681,7 @@ function FileTreeItem({
       }
     }
 
-    onExpandedChange(entry.path, !expanded)
+    setExpanded(!expanded)
   }
 
   /** 点击行为：选中 + 文件夹展开/收起 / 文件预览 */
@@ -1048,8 +1040,7 @@ function FileTreeItem({
               revealTarget={revealTarget}
               revealTs={revealTs}
               recentlyModifiedSet={recentlyModifiedSet}
-              expandedPaths={expandedPaths}
-              onExpandedChange={onExpandedChange}
+              expandedStateKey={expandedStateKey}
               onSelect={onSelect}
               onShowInFolder={onShowInFolder}
               onOpenInTerminal={onOpenInTerminal}

@@ -42,12 +42,10 @@ import {
   richTextRenderingEnabledAtom,
   stickyUserMessageEnabledAtom,
   sessionHoverPreviewEnabledAtom,
-  autoRevealChangesTabAtom,
   updateLongTextPasteAsAttachmentEnabled,
   updateRichTextRenderingEnabled,
   updateStickyUserMessageEnabled,
   updateSessionHoverPreviewEnabled,
-  updateAutoRevealChangesTab,
 } from '@/atoms/ui-preferences'
 import { cn } from '@/lib/utils'
 import { detectIsMac, detectIsWindows } from '@/lib/platform'
@@ -73,7 +71,6 @@ export function GeneralSettings(): React.ReactElement {
   const [longTextPasteAsAttachmentEnabled, setLongTextPasteAsAttachmentEnabled] = useAtom(longTextPasteAsAttachmentEnabledAtom)
   const [richTextRenderingEnabled, setRichTextRenderingEnabled] = useAtom(richTextRenderingEnabledAtom)
   const [sessionHoverPreviewEnabled, setSessionHoverPreviewEnabled] = useAtom(sessionHoverPreviewEnabledAtom)
-  const [autoRevealChangesTab, setAutoRevealChangesTab] = useAtom(autoRevealChangesTabAtom)
   const [isEditingName, setIsEditingName] = React.useState(false)
   const [nameInput, setNameInput] = React.useState(userProfile.userName)
   const [showEmojiPicker, setShowEmojiPicker] = React.useState(false)
@@ -393,15 +390,6 @@ export function GeneralSettings(): React.ReactElement {
             onCheckedChange={(checked) => {
               setSessionHoverPreviewEnabled(checked)
               updateSessionHoverPreviewEnabled(checked)
-            }}
-          />
-          <SettingsToggle
-            label="自动跳转到改动页"
-            description="Agent 写入文件时自动展开右侧栏并切换到“改动”页；关闭后仍会保留改动提示"
-            checked={autoRevealChangesTab}
-            onCheckedChange={(checked) => {
-              setAutoRevealChangesTab(checked)
-              updateAutoRevealChangesTab(checked)
             }}
           />
           {isMac && (

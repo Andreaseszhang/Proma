@@ -822,34 +822,42 @@ export function mergeMcpRefreshResults(
 }
 
 /**
- * Runs the real MCP validation after the enabled entry is safely persisted. Its
- * result is conditionally merged into a fresh config snapshot, so a later edit,
- * disable, deletion, or unrelated MCP change is never overwritten by the
- * renderer's old snapshot.
+ * Validates an enabled candidate while the persisted entry remains disabled. If
+ * the configuration changed while validation was in flight, return that latest
+ * snapshot instead of overwriting it. A failed validation is persisted as a
+ * disabled entry, so invalid MCPs are never loaded by the runtime.
  */
 async function validateAndConditionallyPersistMcp(
   workspaceSlug: string,
   name: string,
-  entry: import('@proma/shared').McpServerEntry,
+  candidateEntry: import('@proma/shared').McpServerEntry,
+  expectedPersistedFingerprint: string,
+  expectedRefreshGeneration: number,
 ): Promise<import('@proma/shared').McpConnectionMutationResult> {
-  const fingerprint = getMcpEntryFingerprint(entry)
   const { validateMcpServer } = await import('./lib/mcp-validator')
-  const result = await validateMcpServer(name, entry, workspaceSlug)
+  const result = await validateMcpServer(name, candidateEntry, workspaceSlug)
   const verification = {
     success: result.valid,
     message: result.valid ? (result.message ?? 'MCP 连接成功') : (result.reason ?? 'MCP 连接失败'),
   }
   const current = getWorkspaceMcpConfig(workspaceSlug)
-  const merged = mergeMcpRefreshResults(current, [{
-    name,
-    fingerprint,
-    lastTestResult: { ...verification, timestamp: Date.now() },
-  }])
+  const currentEntry = current.servers[name]
+  if (
+    !isWorkspaceMcpRefreshCurrent(workspaceSlug, expectedRefreshGeneration) ||
+    !currentEntry ||
+    getMcpEntryFingerprint(currentEntry) !== expectedPersistedFingerprint
+  ) {
+    return { config: current, verification }
+  }
 
-  // mergeMcpRefreshResults only changes a still-enabled, fingerprint-identical
-  // entry. Persist only then; otherwise return the intervening latest snapshot.
-  if (merged.servers[name] !== current.servers[name]) saveWorkspaceMcpConfig(workspaceSlug, merged)
-  return { config: merged, verification }
+  const nextEntry = {
+    ...candidateEntry,
+    enabled: verification.success,
+    lastTestResult: { ...verification, timestamp: Date.now() },
+  }
+  const config = { servers: { ...current.servers, [name]: nextEntry } }
+  saveWorkspaceMcpConfig(workspaceSlug, config)
+  return { config, verification }
 }
 
 async function runCliProbe(
@@ -2824,12 +2832,26 @@ export function registerIpcHandlers(): void {
 
       const entryWithoutTestResult = { ...entry }
       delete entryWithoutTestResult.lastTestResult
-      const nextEntry = enabled ? { ...entryWithoutTestResult, enabled: true } : { ...entry, enabled: false }
-      const config = { servers: { ...current.servers, [name]: nextEntry } }
-      advanceWorkspaceMcpRefreshGeneration(workspaceSlug)
-      saveWorkspaceMcpConfig(workspaceSlug, config)
-      if (!enabled) return { config, verification: { success: true, message: 'MCP 已关闭' } }
-      return validateAndConditionallyPersistMcp(workspaceSlug, name, nextEntry)
+      if (!enabled) {
+        const config = { servers: { ...current.servers, [name]: { ...entry, enabled: false } } }
+        advanceWorkspaceMcpRefreshGeneration(workspaceSlug)
+        saveWorkspaceMcpConfig(workspaceSlug, config)
+        return { config, verification: { success: true, message: 'MCP 已关闭' } }
+      }
+
+      // Keep the entry disabled until the real handshake succeeds. This prevents
+      // the runtime from repeatedly starting a known-invalid server.
+      const pendingEntry = { ...entryWithoutTestResult, enabled: false }
+      const pendingConfig = { servers: { ...current.servers, [name]: pendingEntry } }
+      const refreshGeneration = advanceWorkspaceMcpRefreshGeneration(workspaceSlug)
+      saveWorkspaceMcpConfig(workspaceSlug, pendingConfig)
+      return validateAndConditionallyPersistMcp(
+        workspaceSlug,
+        name,
+        { ...entryWithoutTestResult, enabled: true },
+        getMcpEntryFingerprint(pendingEntry),
+        refreshGeneration,
+      )
     },
   )
 
@@ -2847,11 +2869,27 @@ export function registerIpcHandlers(): void {
         }
       }
 
-      const config = { servers: { ...current.servers, [name]: entry } }
-      advanceWorkspaceMcpRefreshGeneration(workspaceSlug)
-      saveWorkspaceMcpConfig(workspaceSlug, config)
-      if (!entry.enabled) return { installed: true, config, verification: { success: true, message: 'MCP 已添加，等待配置' } }
-      const result = await validateAndConditionallyPersistMcp(workspaceSlug, name, entry)
+      const entryWithoutTestResult = { ...entry }
+      delete entryWithoutTestResult.lastTestResult
+      if (!entry.enabled) {
+        const config = { servers: { ...current.servers, [name]: entryWithoutTestResult } }
+        advanceWorkspaceMcpRefreshGeneration(workspaceSlug)
+        saveWorkspaceMcpConfig(workspaceSlug, config)
+        return { installed: true, config, verification: { success: true, message: 'MCP 已添加，等待配置' } }
+      }
+
+      // Newly installed catalog MCPs are also kept disabled until validation.
+      const pendingEntry = { ...entryWithoutTestResult, enabled: false }
+      const pendingConfig = { servers: { ...current.servers, [name]: pendingEntry } }
+      const refreshGeneration = advanceWorkspaceMcpRefreshGeneration(workspaceSlug)
+      saveWorkspaceMcpConfig(workspaceSlug, pendingConfig)
+      const result = await validateAndConditionallyPersistMcp(
+        workspaceSlug,
+        name,
+        { ...entryWithoutTestResult, enabled: true },
+        getMcpEntryFingerprint(pendingEntry),
+        refreshGeneration,
+      )
       return { installed: true, ...result }
     },
   )
@@ -4005,22 +4043,7 @@ export function registerIpcHandlers(): void {
     }
   )
 
-  // DOCX 转 HTML（内联预览使用 mammoth）
-  ipcMain.handle(
-    'file:docx-to-html',
-    async (_, filePath: string, access?: FileAccessOptions | string[]): Promise<{ resolvedPath: string; html: string } | null> => {
-      const { convertDocxToHtml, resolveFilePath } = await import('./lib/file-preview-service')
-      const options = normalizeFileAccessOptions(access)
-      const resolved = resolveFilePath(filePath, getPreviewCandidateBasePaths(options))
-      if (!resolved) {
-        return null
-      }
-      const result = await convertDocxToHtml(resolved)
-      return result
-    }
-  )
-
-  // XLSX/PPTX 转 HTML（内联预览使用 OOXML 解析）
+  // Office 文件转高保真 HTML（内联预览；失败时由服务层降级到内置解析器）
   ipcMain.handle(
     'file:office-to-html',
     async (_, filePath: string, access?: FileAccessOptions | string[]): Promise<import('@proma/shared').OfficePreviewResult | null> => {

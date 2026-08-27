@@ -9,7 +9,7 @@
  */
 
 import { existsSync } from 'node:fs'
-import { execSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
@@ -108,11 +108,10 @@ async function isCommandAvailable(command: string): Promise<boolean> {
     return existsSync(command)
   }
 
-  // 相对命令：使用 which 查找
+  // 相对命令：使用 which 查找。使用参数数组，避免 MCP 配置中的命令名进入 shell。
   try {
-    // 跨平台 which 查找
     const whichCommand = process.platform === 'win32' ? 'where' : 'which'
-    execSync(`${whichCommand} ${command}`, { stdio: 'ignore' })
+    execFileSync(whichCommand, [command], { stdio: 'ignore' })
     return true
   } catch {
     return false

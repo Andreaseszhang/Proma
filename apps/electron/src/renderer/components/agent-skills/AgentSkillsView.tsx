@@ -10,7 +10,7 @@
  */
 
 import * as React from 'react'
-import { useAtom, useAtomValue, useSetAtom } from 'jotai'
+import { useAtom, useAtomValue, useSetAtom, useStore } from 'jotai'
 import { toast } from 'sonner'
 import { Blocks, ChevronDown, ChevronRight, Search, Plus, Store, FolderOpen, Check, Sparkles, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -27,6 +27,7 @@ import { useProjectActions } from '@/hooks/useProjectActions'
 import { useCreateSession } from '@/hooks/useCreateSession'
 import { LocalProjectBadge } from '@/components/agent/LocalProjectBadge'
 import { AgentActionHint } from '@/components/agent/AgentActionHint'
+import { queuedTextToParagraphHtml } from '@/lib/agent-message-queue'
 import type { McpServerEntry, SkillMeta } from '@proma/shared'
 import { useAgentSkillsData } from './useAgentSkillsData'
 import { SkillCard } from './SkillCard'
@@ -113,6 +114,7 @@ export function AgentSkillsView({
 }: { embedded?: boolean; componentTab?: 'skills' | 'mcp'; workspaceId?: string; sessionId?: string } = {}): React.ReactElement {
   const data = useAgentSkillsData(workspaceId)
   const bumpCapabilities = useSetAtom(workspaceCapabilitiesVersionAtom)
+  const store = useStore()
   const setDrafts = useSetAtom(agentSessionDraftsAtom)
   const setDraftHtml = useSetAtom(agentSessionDraftHtmlAtom)
   const setDraftSyncVersions = useSetAtom(agentSessionDraftSyncVersionsAtom)
@@ -130,15 +132,28 @@ export function AgentSkillsView({
       toast.error('请先打开一个 Agent 会话')
       return false
     }
+
+    const currentDraft = store.get(agentSessionDraftsAtom).get(targetSessionId) ?? ''
+    const currentDraftHtml = store.get(agentSessionDraftHtmlAtom).get(targetSessionId) ?? ''
+    const hasDraft = currentDraft.trim().length > 0
+    const nextDraft = hasDraft ? `${currentDraft.trimEnd()}\n\n${message}` : message
+
     setDrafts((previous) => {
       const next = new Map(previous)
-      next.set(targetSessionId, message)
+      next.set(targetSessionId, nextDraft)
       return next
     })
     setDraftHtml((previous) => {
-      if (!previous.has(targetSessionId)) return previous
       const next = new Map(previous)
-      next.delete(targetSessionId)
+      if (hasDraft) {
+        const draftHtml = currentDraftHtml.trim().length > 0
+          ? currentDraftHtml
+          : queuedTextToParagraphHtml(currentDraft)
+        next.set(targetSessionId, `${draftHtml}${queuedTextToParagraphHtml(message)}`)
+      } else {
+        // Preserve normal RichTextInput rendering for a previously empty draft.
+        next.delete(targetSessionId)
+      }
       return next
     })
     setDraftSyncVersions((previous) => {
@@ -147,7 +162,7 @@ export function AgentSkillsView({
       return next
     })
     return true
-  }, [currentAgentSessionId, sessionId, setDraftHtml, setDraftSyncVersions, setDrafts])
+  }, [currentAgentSessionId, sessionId, setDraftHtml, setDraftSyncVersions, setDrafts, store])
 
   const [storedTab, setTab] = useAtom(agentSkillsTabAtom)
   // 右侧组件锁定能力域，避免其内部的总览 Tab 与右侧工作区标签产生两套导航。
@@ -283,7 +298,10 @@ export function AgentSkillsView({
           provider: integration.oauthProvider,
           serverUrl: integration.entry.url,
         })
-        await data.toggleMcp(integration.serverName, true)
+        const verification = await data.toggleMcp(integration.serverName, true)
+        if (!verification.success) {
+          throw new Error(verification.message || 'MCP 握手或工具发现失败，请检查授权后重试')
+        }
         toast.success(`${integration.name} 已完成授权`, { description: 'OAuth token 已安全保存，MCP 已启用。' })
       } catch (error) {
         console.error(`[Agent 技能] ${integration.name} OAuth 失败:`, error)
@@ -458,9 +476,8 @@ export function AgentSkillsView({
 
   return (
     <div
-      className="flex h-full flex-col overflow-hidden"
-      // The embedded view fills a resizable SidePanel, so its child layout must
-      // respond to this element rather than the application viewport.
+      className={cn('flex h-full flex-col overflow-hidden', embedded && 'skills-embedded-container')}
+      // Container query keeps the catalog responsive to this resizable SidePanel.
       style={embedded ? { containerType: 'inline-size' } : undefined}
     >
       {/* 标题栏 + 工作区切换 */}
@@ -636,6 +653,7 @@ export function AgentSkillsView({
             <SkillsTab
               customSkills={customSkills}
               builtinSkills={builtinSkills}
+              embedded={embedded}
               total={data.skills.length}
               updateCount={updateCount}
               updatingSkill={data.updatingSkill}
@@ -737,6 +755,7 @@ export function AgentSkillsView({
 interface SkillsTabProps {
   customSkills: SkillMeta[]
   builtinSkills: SkillMeta[]
+  embedded: boolean
   total: number
   updateCount: number
   updatingSkill: string | null
@@ -749,6 +768,7 @@ interface SkillsTabProps {
 function SkillsTab({
   customSkills,
   builtinSkills,
+  embedded,
   total,
   updateCount,
   updatingSkill,
@@ -772,10 +792,10 @@ function SkillsTab({
         </div>
       )}
       {customSkills.length > 0 && (
-        <SkillSection title="我的 Skills" skills={customSkills} isBuiltin={isBuiltin} updatingSkill={updatingSkill} onOpen={onOpen} onToggle={onToggle} onUpdate={onUpdate} />
+        <SkillSection title="我的 Skills" skills={customSkills} embedded={embedded} isBuiltin={isBuiltin} updatingSkill={updatingSkill} onOpen={onOpen} onToggle={onToggle} onUpdate={onUpdate} />
       )}
       {builtinSkills.length > 0 && (
-        <SkillSection title="PROMA 内置" skills={builtinSkills} isBuiltin={isBuiltin} updatingSkill={updatingSkill} onOpen={onOpen} onToggle={onToggle} onUpdate={onUpdate} />
+        <SkillSection title="PROMA 内置" skills={builtinSkills} embedded={embedded} isBuiltin={isBuiltin} updatingSkill={updatingSkill} onOpen={onOpen} onToggle={onToggle} onUpdate={onUpdate} />
       )}
     </div>
   )
@@ -784,6 +804,7 @@ function SkillsTab({
 interface SkillSectionProps {
   title: string
   skills: SkillMeta[]
+  embedded: boolean
   isBuiltin: (slug: string) => boolean
   updatingSkill: string | null
   onOpen: (slug: string) => void
@@ -791,7 +812,7 @@ interface SkillSectionProps {
   onUpdate: (slug: string) => void
 }
 
-function SkillSection({ title, skills, isBuiltin, updatingSkill, onOpen, onToggle, onUpdate }: SkillSectionProps): React.ReactElement {
+function SkillSection({ title, skills, embedded, isBuiltin, updatingSkill, onOpen, onToggle, onUpdate }: SkillSectionProps): React.ReactElement {
   const [collapsedGroups, setCollapsedGroups] = React.useState<Set<string>>(new Set())
   const groups = React.useMemo(() => groupSkills(skills), [skills])
 
@@ -825,7 +846,7 @@ function SkillSection({ title, skills, isBuiltin, updatingSkill, onOpen, onToggl
                 <span className="text-[12px] tabular-nums text-foreground/35">{group.skills.length}</span>
               </button>
               {!collapsed && (
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <div className={cn('grid gap-3', embedded ? 'skills-embedded-card-grid' : 'sm:grid-cols-2 lg:grid-cols-3')}>
                   {group.skills.map((skill) => (
                     <SkillCard
                       key={skill.slug}

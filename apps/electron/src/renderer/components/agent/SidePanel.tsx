@@ -1040,8 +1040,8 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
       id: getBrowserSidePanelTab(tab.tabId),
       label: tab.title || '新建标签页',
       icon: <Globe className="size-3.5" />,
-      // Agent 当前工作标签不能直接销毁，否则未指定 tabId 的后续浏览器工具会失去目标。
-      closable: tab.tabId !== browserState.agentTabId,
+      // 用户可关闭任何浏览器标签；关闭 Agent 工作标签后，后续未指定 tabId 的工具会提示新建或选择工作标签。
+      closable: true,
       activity: showBrowserActivity && activeBrowserTabId !== tab.tabId && browserState.activeTabId === tab.tabId,
     })) ?? []),
   ], [activeBrowserTabId, browserState, previewFiles, sessions, sessionId, showBrowserActivity, sideChatConversationId, sideDelegationSessionIds, sideTemporaryAgents, terminalTabs, workspaceComponentTabs])
@@ -1076,8 +1076,8 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
     const delegationSessionId = getDelegationSessionIdFromSidePanelTab(tab)
     if (delegationSessionId) { handleCloseDelegationTab(delegationSessionId); return }
     const browserTabId = getBrowserTabIdFromSidePanelTab(tab)
-    if (browserTabId && browserTabId !== browserState?.agentTabId) void handleCloseBrowserTab(browserTabId)
-  }, [browserState?.agentTabId, handleCloseBrowserTab, handleCloseChatTab, handleCloseDelegationTab, handleCloseExplorationTab, handleClosePreviewTab, returnToPreviousTabAfterClose, sessionId, setTerminalTabsMap, setWorkspaceComponentTabs])
+    if (browserTabId) void handleCloseBrowserTab(browserTabId)
+  }, [handleCloseBrowserTab, handleCloseChatTab, handleCloseDelegationTab, handleCloseExplorationTab, handleClosePreviewTab, returnToPreviousTabAfterClose, sessionId, setTerminalTabsMap, setWorkspaceComponentTabs])
 
   React.useEffect(() => {
     const handleCloseActiveWorkspaceTab = (event: Event) => {

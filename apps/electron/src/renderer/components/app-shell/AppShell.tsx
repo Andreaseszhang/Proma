@@ -28,14 +28,14 @@ import { getWindowTitlebarContentInsetClass } from '@/lib/window-titlebar-layout
 import { cn } from '@/lib/utils'
 import { Toaster } from '@/components/ui/sonner'
 
-const MIN_RIGHT_PANEL_WIDTH = 360
+const MIN_RIGHT_PANEL_WIDTH = 280
 // 日程、定时任务、能力、记忆、探索、协作、终端及浏览/预览统一采用可读的工作区宽度。
-const MIN_EXPANDED_WORKSPACE_PANEL_WIDTH = 480
+const MIN_EXPANDED_WORKSPACE_PANEL_WIDTH = 400
 // Todo 选中任务后同时展示导航、列表与详情三栏，需要比其他工作区组件更宽的可读空间。
 const MIN_TODO_PANEL_WIDTH = 720
 const RIGHT_PANEL_MAX_VIEWPORT_RATIO = 3 / 5
 const EXPANDED_WORKSPACE_DEFAULT_VIEWPORT_RATIO = 2 / 5
-// 窄窗口时优先保留主会话的最小可读宽度；扩展工作区的 480px 仅在空间足够时强制。
+// 窄窗口时优先保留主会话的最小可读宽度；扩展工作区的 400px 仅在空间足够时强制。
 const MIN_MAIN_AREA_WIDTH = 320
 const COLLAPSED_LEFT_SIDEBAR_WIDTH = 60
 const CLASSIC_LEFT_SIDEBAR_LEADING_PADDING = 8
@@ -79,7 +79,7 @@ function clampRightPanelWidth(
   leftSidebarOccupiedWidth = 0,
 ): number {
   const maximumWidth = getRightPanelMaxWidth(viewportWidth, leftSidebarOccupiedWidth)
-  // 480px 是 Agent 会话的理想下限；在窄窗口中放宽它，而不是把中间会话挤到不可用。
+  // 最小宽度只是理想下限；在窄窗口中放宽它，而不是把中间会话挤到不可用。
   const effectiveMinimumWidth = Math.min(minimumWidth, maximumWidth)
   return Math.max(effectiveMinimumWidth, Math.min(maximumWidth, width))
 }

@@ -77,7 +77,6 @@ import { AutomationFormView } from '@/components/automation/AutomationFormView'
 import { automationFormAtom } from '@/atoms/automation-atoms'
 import { memoryFileNavigationAtom, workspaceMemoryChangesAtom } from '@/atoms/memory-change-atoms'
 import { agentSideChatMapAtom } from '@/atoms/chat-atoms'
-import { interfaceVariantAtom } from '@/atoms/theme'
 import {
   browserPanelMinimizedMapAtom,
   browserPanelOpenMapAtom,
@@ -652,8 +651,6 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
   const hasWorkspaceAttachedItems = wsAttachedDirs.length > 0 || wsAttachedFiles.length > 0
   const hasVisibleSessionAttachedItems = showSessionFiles && hasSessionAttachedItems
   const hasVisibleWorkspaceAttachedItems = showProjectFiles && hasWorkspaceAttachedItems
-  const interfaceVariant = useAtomValue(interfaceVariantAtom)
-  const isClassic = interfaceVariant === 'classic'
   const sideChatMap = useAtomValue(agentSideChatMapAtom)
   const setSideChatMap = useSetAtom(agentSideChatMapAtom)
   const sideChatConversationId = sideChatMap.get(sessionId) ?? null
@@ -1127,7 +1124,6 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
     <div
       className={cn(
         'relative z-0 h-full flex-shrink-0 overflow-hidden titlebar-drag-region bg-content-area',
-        isClassic && 'rounded-2xl shadow-xl dark:shadow-md',
         shouldAnimate && 'transition-[width] duration-300 ease-in-out',
         isOpen ? '' : '!w-0',
       )}

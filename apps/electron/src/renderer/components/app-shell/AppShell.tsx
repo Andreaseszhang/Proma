@@ -20,7 +20,6 @@ import { automationFormAtom } from '@/atoms/automation-atoms'
 import { activeViewAtom } from '@/atoms/active-view'
 import { useProjectActions } from '@/hooks/useProjectActions'
 import { WorkspaceMemoryChangeObserver } from '@/components/agent-skills/WorkspaceMemoryChangeObserver'
-import { interfaceVariantAtom } from '@/atoms/theme'
 import { settingsOpenAtom } from '@/atoms/settings-tab'
 import { WindowControls } from '@/components/WindowControls'
 import { SettingsPanel } from '@/components/settings/SettingsPanel'
@@ -36,7 +35,6 @@ const MIN_EXPANDED_WORKSPACE_PANEL_WIDTH = 360
 const MIN_TODO_PANEL_WIDTH = 600
 const EXPANDED_WORKSPACE_DEFAULT_VIEWPORT_RATIO = 2 / 5
 const COLLAPSED_LEFT_SIDEBAR_WIDTH = 60
-const CLASSIC_LEFT_SIDEBAR_LEADING_PADDING = 8
 
 function isExpandedWorkspaceTab(tab: string | undefined): boolean {
   return Boolean(
@@ -77,10 +75,8 @@ export function AppShell(): React.ReactElement {
   const activeRightPanelTab = useAtomValue(agentDiffPanelTabAtom).get(currentSessionId ?? '')
   const isPanelOpen = useAtomValue(currentSessionSidePanelOpenAtom)
   const automationForm = useAtomValue(automationFormAtom)
-  const interfaceVariant = useAtomValue(interfaceVariantAtom)
   const settingsOpen = useAtomValue(settingsOpenAtom)
   const setSettingsOpen = useSetAtom(settingsOpenAtom)
-  const isClassic = interfaceVariant === 'classic'
   // 定时任务表单打开时隐藏右侧文件面板，让中间区域扩展到全宽（表单内含自己的右栏配置）
   const activeView = useAtomValue(activeViewAtom)
   const showRightPanel = appMode === 'agent' && !!currentSessionId && !(automationForm.open && activeView !== 'conversations') && activeView !== 'planning' && activeView !== 'agent-skills'
@@ -157,7 +153,8 @@ export function AppShell(): React.ReactElement {
     isExpandedRightWorkspace || rightPanelLayout.hasOpenedWideWorkspace,
   )
   const leftSidebarContentWidth = sidebarCollapsed ? COLLAPSED_LEFT_SIDEBAR_WIDTH : clampedLeftSidebarWidth
-  const leftSidebarOccupiedWidth = leftSidebarContentWidth + (isClassic ? CLASSIC_LEFT_SIDEBAR_LEADING_PADDING : 1)
+  // 经典界面已移除，侧栏始终只占内容宽度与分隔线。
+  const leftSidebarOccupiedWidth = leftSidebarContentWidth + 1
   const canUseCollapsedSidebarSpace = sidebarCollapsed && (
     isExpandedRightWorkspace || rightPanelLayout.hasOpenedWideWorkspace
   )
@@ -238,7 +235,7 @@ export function AppShell(): React.ReactElement {
       const shouldCollapseSidebar = canAutoCollapseSidebarForRightPanel && requestedWidth > normalMaximumWidth
       const nextSidebarCollapsed = sidebarCollapsedDuringDrag || shouldCollapseSidebar
       const nextLeftSidebarContentWidth = nextSidebarCollapsed ? COLLAPSED_LEFT_SIDEBAR_WIDTH : clampedLeftSidebarWidth
-      const nextLeftSidebarOccupiedWidth = nextLeftSidebarContentWidth + (isClassic ? CLASSIC_LEFT_SIDEBAR_LEADING_PADDING : 1)
+      const nextLeftSidebarOccupiedWidth = nextLeftSidebarContentWidth + 1
       const allowFullAvailableWidth = nextSidebarCollapsed && (
         isExpandedRightWorkspace || rightPanelLayout.hasOpenedWideWorkspace
       )
@@ -296,7 +293,7 @@ export function AppShell(): React.ReactElement {
     rightPanelDragCleanup.current = cancelDrag
     document.addEventListener('mousemove', onMouseMove)
     document.addEventListener('mouseup', onMouseUp)
-  }, [canAutoCollapseSidebarForRightPanel, clampedLeftSidebarWidth, currentSessionId, displayedRightPanelWidth, isClassic, isExpandedRightWorkspace, leftSidebarOccupiedWidth, rightPanelLayout.hasOpenedWideWorkspace, rightPanelMinimumWidth, setRightPanelLayout, setSidebarCollapsed, sidebarCollapsed, usesWidePanelLayout, viewportWidth])
+  }, [canAutoCollapseSidebarForRightPanel, clampedLeftSidebarWidth, currentSessionId, displayedRightPanelWidth, isExpandedRightWorkspace, leftSidebarOccupiedWidth, rightPanelLayout.hasOpenedWideWorkspace, rightPanelMinimumWidth, setRightPanelLayout, setSidebarCollapsed, sidebarCollapsed, usesWidePanelLayout, viewportWidth])
 
   return (
     <>
@@ -305,7 +302,7 @@ export function AppShell(): React.ReactElement {
       <div className="shell-bg relative h-screen w-screen overflow-hidden bg-gradient-to-br from-zinc-50 to-zinc-100 dark:from-zinc-950 dark:to-zinc-900">
         <div className={cn('flex h-full w-full', getWindowTitlebarContentInsetClass(isWindows), settingsOpen && 'hidden')} aria-hidden={settingsOpen}>
             {/* 左侧边栏：可折叠，可拖拽调整宽度 */}
-            <div className={cn(isClassic ? 'p-2 pr-0' : '', 'relative z-[60] crt-sidebar')}>
+            <div className="relative z-[60] crt-sidebar">
               <LeftSidebar width={clampedLeftSidebarWidth} noTransition={isDraggingLeftSidebar} />
               {/* 侧边栏展开时显示拖拽手柄，折叠态隐藏 */}
               {!sidebarCollapsed && (
@@ -317,12 +314,10 @@ export function AppShell(): React.ReactElement {
                 />
               )}
             </div>
-            {!isClassic && (
-              <div aria-hidden="true" className="relative z-[61] w-px flex-shrink-0 bg-border/80 dark:bg-border/70" />
-            )}
+            <div aria-hidden="true" className="relative z-[61] w-px flex-shrink-0 bg-border/80 dark:bg-border/70" />
 
             {/* 中间容器：relative z-[60] 使其在 z-50 拖动区域之上 */}
-            <div className={cn('flex-1 min-w-0 relative z-[60]', isClassic && 'p-2')}>
+            <div className="flex-1 min-w-0 relative z-[60]">
               {/* 主内容区域（TabBar + TabContent） */}
               <MainArea />
               {/* 全局 Toast 固定在 Agent 历史主区右上角，不进入右侧原生浏览器面板。 */}
@@ -332,23 +327,14 @@ export function AppShell(): React.ReactElement {
             {/* 右侧边栏：Agent 文件面板 */}
             {showRightPanel && (
               <div
-                className={cn(
-                  'relative z-[60] flex flex-shrink-0 items-stretch crt-sidebar',
-                  isClassic
-                    ? 'transition-[padding] duration-300 ease-in-out'
-                    : '',
-                  isClassic && (isPanelOpen ? 'p-2' : 'p-0')
-                )}
+                className="relative z-[60] flex flex-shrink-0 items-stretch crt-sidebar"
               >
-                {!isClassic && (
-                  <div aria-hidden="true" className="pointer-events-none absolute left-0 top-0 bottom-0 z-10 w-px bg-border/80 dark:bg-border/70" />
-                )}
+                <div aria-hidden="true" className="pointer-events-none absolute left-0 top-0 bottom-0 z-10 w-px bg-border/80 dark:bg-border/70" />
                 {/* 拖拽手柄 */}
                 {isPanelOpen && (
                   <div
                     className={cn(
-                      'absolute left-0 top-0 bottom-0 w-[8px] -translate-x-1/2 cursor-col-resize active:bg-primary/50 transition-colors',
-                      isClassic ? 'z-10' : 'z-20'
+                      'absolute left-0 top-0 bottom-0 w-[8px] -translate-x-1/2 cursor-col-resize active:bg-primary/50 transition-colors z-20'
                     )}
                     onMouseDown={handleMouseDown}
                   />

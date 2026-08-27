@@ -27,8 +27,6 @@ import { PlanningView } from '@/components/planning/PlanningView'
 import { AgentSkillsView } from '@/components/agent-skills/AgentSkillsView'
 import { automationFormAtom } from '@/atoms/automation-atoms'
 import { activeViewAtom } from '@/atoms/active-view'
-import { interfaceVariantAtom } from '@/atoms/theme'
-import { cn } from '@/lib/utils'
 import { registerShortcut } from '@/lib/shortcut-registry'
 import {
   agentDiffPanelTabAtom,
@@ -52,8 +50,6 @@ export function MainArea(): React.ReactElement {
   const activeTab = useAtomValue(activeTabAtom)
   const automationFormOpen = useAtomValue(automationFormAtom).open
   const activeView = useAtomValue(activeViewAtom)
-  const interfaceVariant = useAtomValue(interfaceVariantAtom)
-  const isClassic = interfaceVariant === 'classic'
   const store = useStore()
 
   // TabBar 立即反馈，较重的中心内容可让出当前交互帧；Agent 历史则保持当前会话避免旧内容占屏。
@@ -180,7 +176,7 @@ export function MainArea(): React.ReactElement {
     : { flex: '1 1 auto' }
 
   return (
-    <Panel variant="grow" className={cn('bg-content-area', isClassic && 'rounded-2xl shadow-xl dark:shadow-sm')}>
+    <Panel variant="grow" className="bg-content-area">
       <div className="flex flex-1 min-h-0 overflow-hidden" data-scratch-split-container>
         <div className="flex flex-col min-w-0 h-full" style={leftFlexStyle}>
           {activeView === 'planning' ? (

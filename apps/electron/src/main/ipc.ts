@@ -2816,24 +2816,52 @@ export function registerIpcHandlers(): void {
     }
   )
 
-  // 保存工作区 MCP 配置
+  // Save full MCP configurations defensively: renderer-provided test results are
+  // display data, not authorization to load an MCP. Newly enabled or changed
+  // entries are persisted disabled and receive the same real validation as a
+  // card toggle before they can become enabled.
   ipcMain.handle(
     AGENT_IPC_CHANNELS.SAVE_MCP_CONFIG,
     async (_, workspaceSlug: string, config: WorkspaceMcpConfig): Promise<void> => {
-      advanceWorkspaceMcpRefreshGeneration(workspaceSlug)
-      const normalizedConfig: WorkspaceMcpConfig = {
-        servers: Object.fromEntries(
-          Object.entries(config.servers).map(([name, entry]) => [
-            name,
-            // A config write must not bypass the validated-enable contract. New
-            // or changed entries stay disabled until a successful test result.
-            entry.enabled && entry.lastTestResult?.success !== true
-              ? { ...entry, enabled: false }
-              : entry,
-          ]),
-        ),
+      const current = getWorkspaceMcpConfig(workspaceSlug)
+      const pendingValidations: Array<{ name: string; candidate: import('@proma/shared').McpServerEntry }> = []
+      const servers: WorkspaceMcpConfig['servers'] = {}
+
+      for (const [name, entry] of Object.entries(config.servers)) {
+        const entryWithoutTestResult = { ...entry }
+        delete entryWithoutTestResult.lastTestResult
+        const candidate = { ...entryWithoutTestResult, enabled: true }
+        const existing = current.servers[name]
+        const remainsVerified = Boolean(
+          entry.enabled &&
+          existing?.enabled &&
+          getMcpEntryFingerprint(existing) === getMcpEntryFingerprint(candidate),
+        )
+
+        if (remainsVerified) {
+          // Keep the authoritative existing result instead of accepting a
+          // renderer-supplied success flag.
+          if (existing) servers[name] = existing
+        } else if (entry.enabled) {
+          servers[name] = { ...entryWithoutTestResult, enabled: false }
+          pendingValidations.push({ name, candidate })
+        } else {
+          servers[name] = entry
+        }
       }
-      return saveWorkspaceMcpConfig(workspaceSlug, normalizedConfig)
+
+      const pendingConfig = { servers }
+      const refreshGeneration = advanceWorkspaceMcpRefreshGeneration(workspaceSlug)
+      saveWorkspaceMcpConfig(workspaceSlug, pendingConfig)
+      for (const validation of pendingValidations) {
+        await validateAndConditionallyPersistMcp(
+          workspaceSlug,
+          validation.name,
+          validation.candidate,
+          getMcpEntryFingerprint(pendingConfig.servers[validation.name]!),
+          refreshGeneration,
+        )
+      }
     }
   )
 

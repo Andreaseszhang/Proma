@@ -354,11 +354,38 @@ const workspaceMemoryWatchDestroyedListeners = new Set<number>()
  * 该代数仅用于进程内竞态保护，不写入用户的 mcp.json。
  */
 const workspaceMcpRefreshGenerations = new Map<string, number>()
+const workspaceMcpPendingValidations = new Map<string, Map<string, import('@proma/shared').McpServerEntry>>()
 
 function advanceWorkspaceMcpRefreshGeneration(workspaceSlug: string): number {
   const generation = (workspaceMcpRefreshGenerations.get(workspaceSlug) ?? 0) + 1
   workspaceMcpRefreshGenerations.set(workspaceSlug, generation)
   return generation
+}
+
+function getWorkspaceMcpPendingValidation(workspaceSlug: string, name: string): import('@proma/shared').McpServerEntry | undefined {
+  return workspaceMcpPendingValidations.get(workspaceSlug)?.get(name)
+}
+
+function setWorkspaceMcpPendingValidation(workspaceSlug: string, name: string, entry: import('@proma/shared').McpServerEntry): void {
+  const pending = workspaceMcpPendingValidations.get(workspaceSlug) ?? new Map<string, import('@proma/shared').McpServerEntry>()
+  pending.set(name, entry)
+  workspaceMcpPendingValidations.set(workspaceSlug, pending)
+}
+
+function clearWorkspaceMcpPendingValidation(workspaceSlug: string, name: string): void {
+  const pending = workspaceMcpPendingValidations.get(workspaceSlug)
+  if (!pending) return
+  pending.delete(name)
+  if (pending.size === 0) workspaceMcpPendingValidations.delete(workspaceSlug)
+}
+
+function clearMissingWorkspaceMcpPendingValidations(workspaceSlug: string, serverNames: ReadonlySet<string>): void {
+  const pending = workspaceMcpPendingValidations.get(workspaceSlug)
+  if (!pending) return
+  for (const name of pending.keys()) {
+    if (!serverNames.has(name)) pending.delete(name)
+  }
+  if (pending.size === 0) workspaceMcpPendingValidations.delete(workspaceSlug)
 }
 
 function isWorkspaceMcpRefreshCurrent(workspaceSlug: string, generation: number): boolean {
@@ -860,6 +887,7 @@ async function validateAndConditionallyPersistMcp(
     lastTestResult: { ...verification, timestamp: Date.now() },
   }
   const config = { servers: { ...current.servers, [name]: nextEntry } }
+  clearWorkspaceMcpPendingValidation(workspaceSlug, name)
   saveWorkspaceMcpConfig(workspaceSlug, config)
   return { config, verification }
 }
@@ -2826,6 +2854,8 @@ export function registerIpcHandlers(): void {
       const pendingValidations: Array<{ name: string; candidate: import('@proma/shared').McpServerEntry }> = []
       const servers: WorkspaceMcpConfig['servers'] = {}
 
+      const configServerNames = new Set(Object.keys(config.servers))
+      clearMissingWorkspaceMcpPendingValidations(workspaceSlug, configServerNames)
       for (const [name, entry] of Object.entries(config.servers)) {
         const entryWithoutTestResult = { ...entry }
         delete entryWithoutTestResult.lastTestResult
@@ -2836,9 +2866,18 @@ export function registerIpcHandlers(): void {
           // configs created by earlier app versions or manually edited on disk.
           servers[name] = { ...entryWithoutTestResult, enabled: false }
           pendingValidations.push({ name, candidate })
+          setWorkspaceMcpPendingValidation(workspaceSlug, name, candidate)
         } else {
-          // Do not persist renderer-provided verification data for disabled entries.
-          servers[name] = entryWithoutTestResult
+          const pendingCandidate = getWorkspaceMcpPendingValidation(workspaceSlug, name)
+          const pendingEntry = pendingCandidate ? { ...pendingCandidate, enabled: false } : undefined
+          if (pendingEntry && getMcpEntryFingerprint(pendingEntry) === getMcpEntryFingerprint(entry)) {
+            servers[name] = pendingEntry
+            pendingValidations.push({ name, candidate: pendingCandidate! })
+          } else {
+            clearWorkspaceMcpPendingValidation(workspaceSlug, name)
+            // Do not persist renderer-provided verification data for disabled entries.
+            servers[name] = entryWithoutTestResult
+          }
         }
       }
 
@@ -2871,6 +2910,7 @@ export function registerIpcHandlers(): void {
       if (!enabled) {
         const config = { servers: { ...current.servers, [name]: { ...entry, enabled: false } } }
         advanceWorkspaceMcpRefreshGeneration(workspaceSlug)
+        clearWorkspaceMcpPendingValidation(workspaceSlug, name)
         saveWorkspaceMcpConfig(workspaceSlug, config)
         return { config, verification: { success: true, message: 'MCP 已关闭' } }
       }
@@ -2879,7 +2919,11 @@ export function registerIpcHandlers(): void {
       // the runtime from repeatedly starting a known-invalid server.
       const pendingEntry = { ...entryWithoutTestResult, enabled: false }
       const pendingConfig = { servers: { ...current.servers, [name]: pendingEntry } }
+      // Keep this candidate in memory so an unrelated full-config save during
+      // the handshake preserves and resumes the validation instead of treating
+      // the temporary disabled entry as a user-requested disable.
       const refreshGeneration = advanceWorkspaceMcpRefreshGeneration(workspaceSlug)
+      setWorkspaceMcpPendingValidation(workspaceSlug, name, { ...entryWithoutTestResult, enabled: true })
       saveWorkspaceMcpConfig(workspaceSlug, pendingConfig)
       return validateAndConditionallyPersistMcp(
         workspaceSlug,
@@ -2917,7 +2961,11 @@ export function registerIpcHandlers(): void {
       // Newly installed catalog MCPs are also kept disabled until validation.
       const pendingEntry = { ...entryWithoutTestResult, enabled: false }
       const pendingConfig = { servers: { ...current.servers, [name]: pendingEntry } }
+      // Keep this candidate in memory so an unrelated full-config save during
+      // the handshake preserves and resumes the validation instead of treating
+      // the temporary disabled entry as a user-requested disable.
       const refreshGeneration = advanceWorkspaceMcpRefreshGeneration(workspaceSlug)
+      setWorkspaceMcpPendingValidation(workspaceSlug, name, { ...entryWithoutTestResult, enabled: true })
       saveWorkspaceMcpConfig(workspaceSlug, pendingConfig)
       const result = await validateAndConditionallyPersistMcp(
         workspaceSlug,

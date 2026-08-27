@@ -21,7 +21,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
-import { agentPendingPromptAtom, skillDetailNavigationAtomFamily, workspaceCapabilitiesVersionAtom } from '@/atoms/agent-atoms'
+import { agentPendingPromptAtom, agentSessionDraftHtmlAtom, agentSessionDraftsAtom, currentAgentSessionIdAtom, skillDetailNavigationAtomFamily, workspaceCapabilitiesVersionAtom } from '@/atoms/agent-atoms'
 import { agentSkillsTabAtom } from '@/atoms/active-view'
 import { useProjectActions } from '@/hooks/useProjectActions'
 import { useCreateSession } from '@/hooks/useCreateSession'
@@ -113,12 +113,35 @@ export function AgentSkillsView({
 }: { embedded?: boolean; componentTab?: 'skills' | 'mcp'; workspaceId?: string; sessionId?: string } = {}): React.ReactElement {
   const data = useAgentSkillsData(workspaceId)
   const bumpCapabilities = useSetAtom(workspaceCapabilitiesVersionAtom)
+  const setDrafts = useSetAtom(agentSessionDraftsAtom)
+  const setDraftHtml = useSetAtom(agentSessionDraftHtmlAtom)
   const setPendingPrompt = useSetAtom(agentPendingPromptAtom)
+  const currentAgentSessionId = useAtomValue(currentAgentSessionIdAtom)
   const skillDetailNavigation = useAtomValue(skillDetailNavigationAtomFamily(sessionId ?? ''))
   const setSkillDetailNavigation = useSetAtom(skillDetailNavigationAtomFamily(sessionId ?? ''))
   const { workspaces, currentWorkspaceId: selectedWorkspaceId, selectProject } = useProjectActions()
   const { createAgent } = useCreateSession()
   const currentWorkspace = workspaces.find((workspace) => workspace.id === (workspaceId ?? selectedWorkspaceId))
+
+  const fillCurrentAgentPrompt = React.useCallback((message: string): boolean => {
+    const targetSessionId = sessionId ?? currentAgentSessionId
+    if (!targetSessionId) {
+      toast.error('请先打开一个 Agent 会话')
+      return false
+    }
+    setDrafts((previous) => {
+      const next = new Map(previous)
+      next.set(targetSessionId, message)
+      return next
+    })
+    setDraftHtml((previous) => {
+      if (!previous.has(targetSessionId)) return previous
+      const next = new Map(previous)
+      next.delete(targetSessionId)
+      return next
+    })
+    return true
+  }, [currentAgentSessionId, sessionId, setDraftHtml, setDrafts])
 
   const [storedTab, setTab] = useAtom(agentSkillsTabAtom)
   // 右侧组件锁定能力域，避免其内部的总览 Tab 与右侧工作区标签产生两套导航。
@@ -216,34 +239,23 @@ export function AgentSkillsView({
     if (data.skillsDir) window.electronAPI.openFile(`${data.skillsDir}/${slug}`)
   }
 
-  const guideManualMcp = React.useCallback(async (): Promise<void> => {
+  const guideManualMcp = React.useCallback((): void => {
     if (guidingManualMcp) return
     setGuidingManualMcp(true)
     try {
-      const sessionId = await createAgent({ open: false })
-      if (!sessionId) {
-        toast.error('无法创建 MCP 配置会话')
-        return
+      if (fillCurrentAgentPrompt(buildManualMcpGuidePrompt())) {
+        toast.success('已填入 MCP 配置提示词')
       }
-      setPendingPrompt({ sessionId, message: buildManualMcpGuidePrompt() })
-      toast.success('已创建 MCP 配置引导会话')
     } finally {
       setGuidingManualMcp(false)
     }
-  }, [createAgent, guidingManualMcp, setPendingPrompt])
+  }, [fillCurrentAgentPrompt, guidingManualMcp])
 
-  const guideCatalogMcp = React.useCallback(async (integration: CatalogMcpIntegration): Promise<void> => {
-    const sessionId = await createAgent({ open: false })
-    if (!sessionId) {
-      toast.error(`无法创建 ${integration.name} 配置会话`)
-      return
+  const guideCatalogMcp = React.useCallback((integration: CatalogMcpIntegration): void => {
+    if (fillCurrentAgentPrompt(buildCatalogMcpGuidePrompt(integration))) {
+      toast.success(`已填入 ${integration.name} 配置提示词`)
     }
-    setPendingPrompt({
-      sessionId,
-      message: buildCatalogMcpGuidePrompt(integration),
-    })
-    toast.success(`已创建 ${integration.name} 配置会话`)
-  }, [createAgent, setPendingPrompt])
+  }, [fillCurrentAgentPrompt])
 
   const installCatalogMcp = React.useCallback(async (integration: CatalogMcpIntegration): Promise<void> => {
     if (installingCatalogMcpId) return
@@ -333,14 +345,10 @@ export function AgentSkillsView({
       return
     }
 
-    const sessionId = await createAgent()
-    if (!sessionId) {
-      toast.error(`无法创建 ${integration.name} 配置会话`)
-      return
+    if (fillCurrentAgentPrompt(integration.agentPrompt)) {
+      toast.success(`已填入 ${integration.name} 配置提示词`)
     }
-    setPendingPrompt({ sessionId, message: integration.agentPrompt })
-    toast.success(`已创建 ${integration.name} 配置会话`)
-  }, [createAgent, data, setPendingPrompt])
+  }, [data, fillCurrentAgentPrompt])
 
   const disconnectCatalogCli = React.useCallback(async (integration: CatalogCliIntegration): Promise<void> => {
     try {
@@ -351,15 +359,11 @@ export function AgentSkillsView({
     }
   }, [data])
 
-  const guideCatalogIntegration = React.useCallback(async (integration: CatalogGuidedIntegration): Promise<void> => {
-    const sessionId = await createAgent()
-    if (!sessionId) {
-      toast.error(`无法创建 ${integration.name} 配置会话`)
-      return
+  const guideCatalogIntegration = React.useCallback((integration: CatalogGuidedIntegration): void => {
+    if (fillCurrentAgentPrompt(integration.agentPrompt)) {
+      toast.success(`已填入 ${integration.name} 配置提示词`)
     }
-    setPendingPrompt({ sessionId, message: integration.agentPrompt })
-    toast.success(`已创建 ${integration.name} 配置会话`)
-  }, [createAgent, setPendingPrompt])
+  }, [fillCurrentAgentPrompt])
 
   const handleClassifySkills = React.useCallback(async (): Promise<void> => {
     if (classifyingSkills) return

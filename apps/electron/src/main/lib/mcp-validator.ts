@@ -78,7 +78,7 @@ export async function validateMcpServer(
       }
       transport = new StdioClientTransport({ command: entry.command!, args: entry.args, env, stderr: 'pipe' })
     } else {
-      const oauthHeaders = workspaceSlug ? await getMcpOAuthHeaders(workspaceSlug, name) : undefined
+      const oauthHeaders = workspaceSlug ? await getMcpOAuthHeaders(workspaceSlug, name, entry.url!) : undefined
       const headers = { ...(entry.headers ?? {}), ...(oauthHeaders ?? {}) }
       const requestInit = Object.keys(headers).length > 0 ? { headers } : undefined
       if (type === 'http') transport = new StreamableHTTPClientTransport(new URL(entry.url!), { requestInit })

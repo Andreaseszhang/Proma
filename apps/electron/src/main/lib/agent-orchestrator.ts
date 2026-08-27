@@ -291,7 +291,7 @@ export class AgentOrchestrator {
       } else if ((type === 'http' || type === 'sse') && entry.url) {
         let oauthHeaders: Record<string, string> | undefined
         try {
-          oauthHeaders = await getMcpOAuthHeaders(workspaceSlug, name)
+          oauthHeaders = await getMcpOAuthHeaders(workspaceSlug, name, entry.url)
         } catch (error) {
           console.warn(`[Agent 编排] MCP OAuth 凭据不可用：${name}`, error instanceof Error ? error.message : error)
           continue

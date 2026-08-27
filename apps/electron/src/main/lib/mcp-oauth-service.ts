@@ -53,6 +53,7 @@ interface McpOAuthCredential {
 
 interface McpApiKeyCredential {
   kind: 'api-key'
+  serverUrl: string
   headerName: string
   value: string
 }
@@ -286,8 +287,8 @@ function decryptCredential(encrypted: string): McpCredential | undefined {
   if (!safeStorage.isEncryptionAvailable()) return undefined
   try {
     const parsed = JSON.parse(safeStorage.decryptString(Buffer.from(encrypted, 'base64'))) as Record<string, unknown>
-    if (parsed.kind === 'api-key' && typeof parsed.headerName === 'string' && typeof parsed.value === 'string') {
-      return { kind: 'api-key', headerName: parsed.headerName, value: parsed.value }
+    if (parsed.kind === 'api-key' && typeof parsed.serverUrl === 'string' && typeof parsed.headerName === 'string' && typeof parsed.value === 'string') {
+      return { kind: 'api-key', serverUrl: parsed.serverUrl, headerName: parsed.headerName, value: parsed.value }
     }
     if (typeof parsed.accessToken !== 'string' || typeof parsed.clientId !== 'string' || typeof parsed.tokenEndpoint !== 'string' || typeof parsed.serverUrl !== 'string' || typeof parsed.provider !== 'string') return undefined
     return {
@@ -401,6 +402,7 @@ export async function startMcpOAuth(input: StartMcpOAuthInput): Promise<McpOAuth
 export function saveMcpApiKey(input: {
   workspaceSlug: string
   serverName: string
+  serverUrl: string
   headerName: string
   value: string
 }): void {
@@ -408,15 +410,16 @@ export function saveMcpApiKey(input: {
   if (!input.headerName.trim()) throw new Error('凭据请求头不能为空')
   saveCredential(input.workspaceSlug, input.serverName, {
     kind: 'api-key',
+    serverUrl: normalizeMcpResource(input.serverUrl),
     headerName: input.headerName,
     value: input.value.trim(),
   })
 }
 
 /** Resolve a current authentication header for a configured remote MCP without exposing its token to the renderer. */
-export async function getMcpOAuthHeaders(workspaceSlug: string, serverName: string): Promise<Record<string, string> | undefined> {
+export async function getMcpOAuthHeaders(workspaceSlug: string, serverName: string, serverUrl: string): Promise<Record<string, string> | undefined> {
   let credential = readCredential(workspaceSlug, serverName)
-  if (!credential) return undefined
+  if (!credential || credential.serverUrl !== normalizeMcpResource(serverUrl)) return undefined
   if (isMcpApiKeyCredential(credential)) return { [credential.headerName]: credential.value }
   const oauthCredential = credential
   if (oauthCredential.expiresAt && oauthCredential.expiresAt <= Date.now() + EXPIRY_SKEW_MS) {

@@ -1025,6 +1025,7 @@ export interface McpOAuthStartResult {
 export interface SaveMcpApiKeyInput {
   workspaceSlug: string
   serverName: string
+  serverUrl: string
   headerName: string
   value: string
 }

@@ -343,6 +343,7 @@ export function AgentSkillsView({
       await window.electronAPI.saveMcpApiKey({
         workspaceSlug: data.workspaceSlug,
         serverName: integration.serverName,
+        serverUrl: integration.entry.url!,
         headerName: integration.credential.headerName,
         value,
       })

@@ -572,9 +572,9 @@ export function McpServerForm({ server, workspaceSlug, onSaved, onChanged, onCan
           <SettingsToggle
             label="启用此服务器"
             description={
-              testResult?.success
-                ? '开启后该 MCP 服务器将在 Agent 会话中加载'
-                : '开启后该 MCP 服务器将在 Agent 会话中加载；如配置有误，Agent 会按运行时错误提示处理'
+              enabled
+                ? '保存后会进行真实连接验证；仅验证成功才会在 Agent 会话中加载。'
+                : '关闭时该 MCP 不会在 Agent 会话中加载。'
             }
             checked={enabled}
             onCheckedChange={setEnabled}

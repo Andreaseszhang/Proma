@@ -919,6 +919,16 @@ export interface FileBrowserAutoReveal {
 }
 export const fileBrowserAutoRevealAtom = atom<FileBrowserAutoReveal | null>(null)
 
+/** 文件搜索定位只应影响发起后的短暂视图，避免切回 Files 时重放旧定位。 */
+export const FILE_BROWSER_AUTO_REVEAL_TTL_MS = 1_500
+
+export function isFileBrowserAutoRevealActive(
+  reveal: FileBrowserAutoReveal | null,
+  now = Date.now(),
+): reveal is FileBrowserAutoReveal {
+  return reveal !== null && now - reveal.ts >= 0 && now - reveal.ts < FILE_BROWSER_AUTO_REVEAL_TTL_MS
+}
+
 /**
  * 最近被 Agent 修改的文件路径（per-session，path → 修改时间戳 ms）。
  * FileBrowser 据此在文件行左侧渲染竖条标记，60s 后自动消失，

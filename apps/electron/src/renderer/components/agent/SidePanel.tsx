@@ -48,6 +48,7 @@ import {
   getDelegationTabLabel,
   fileBrowserAutoRevealAtom,
   fileBrowserScrollTopMapAtom,
+  isFileBrowserAutoRevealActive,
   pruneFileBrowserStateMap,
   agentSelectedWorktreeAtom,
   agentSideTemporaryAgentMapAtom,
@@ -118,59 +119,61 @@ function PersistentFileScrollArea({ stateKey, className, children, autoRevealTs 
   // 用 stateKey 分隔最新值：切换文件来源时，旧 effect 的 cleanup 仍须写回旧视图的位置。
   const latestScrollTopByStateKeyRef = React.useRef(new Map<string, number>())
   const pendingFlushRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
-  const suppressRestoreUntilRef = React.useRef(0)
 
   React.useLayoutEffect(() => {
     latestScrollTopByStateKeyRef.current.set(stateKey, scrollTop)
   }, [scrollTop, stateKey])
 
-  // 主动搜索定位时，旧 scrollTop 不能覆盖 scrollIntoView 的目标位置；
-  // 用 layout effect 先于 MutationObserver 回调设置保护窗口。
   React.useLayoutEffect(() => {
-    if (!autoRevealTs) return
-    suppressRestoreUntilRef.current = Date.now() + 1500
-  }, [autoRevealTs])
+    // 新搜索的 scrollIntoView 优先于历史位置；过期 reveal 会在传入前被过滤。
+    if (autoRevealTs) return
 
-  React.useLayoutEffect(() => {
     const container = containerRef.current
     if (!container) return
 
     let firstFrame = 0
     let secondFrame = 0
-    const restore = () => {
-      if (Date.now() < suppressRestoreUntilRef.current) return
+    let mutationObserver: MutationObserver | null = null
+    const restore = (): boolean => {
       const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight)
       const latestScrollTop = latestScrollTopByStateKeyRef.current.get(stateKey) ?? 0
       container.scrollTop = Math.min(latestScrollTop, maxScrollTop)
+      return maxScrollTop >= latestScrollTop
     }
     const scheduleRestore = () => {
-      restore()
+      if (restore()) {
+        mutationObserver?.disconnect()
+        return
+      }
       firstFrame = requestAnimationFrame(() => {
-        restore()
-        secondFrame = requestAnimationFrame(restore)
+        if (restore()) {
+          mutationObserver?.disconnect()
+          return
+        }
+        secondFrame = requestAnimationFrame(() => {
+          if (restore()) mutationObserver?.disconnect()
+        })
       })
     }
 
-    scheduleRestore()
     const resizeObserver = typeof ResizeObserver !== 'undefined'
       ? new ResizeObserver(scheduleRestore)
       : null
     resizeObserver?.observe(container)
-    // 懒加载目录只在首次恢复窗口内监听，避免持续 observer 与主动搜索滚动竞争。
-    const mutationObserver = typeof MutationObserver !== 'undefined'
+    // 仅在尚未达到保存位置时保留观察；深层目录慢速恢复后继续定位，达到目标即释放。
+    mutationObserver = typeof MutationObserver !== 'undefined'
       ? new MutationObserver(scheduleRestore)
       : null
     mutationObserver?.observe(container, { childList: true, subtree: true })
-    const mutationObserverStopTimer = setTimeout(() => mutationObserver?.disconnect(), 1500)
+    scheduleRestore()
 
     return () => {
       cancelAnimationFrame(firstFrame)
       cancelAnimationFrame(secondFrame)
-      clearTimeout(mutationObserverStopTimer)
       resizeObserver?.disconnect()
       mutationObserver?.disconnect()
     }
-  }, [stateKey])
+  }, [autoRevealTs, stateKey])
 
   React.useEffect(() => {
     const container = containerRef.current
@@ -459,6 +462,9 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
 
   const filesVersion = useAtomValue(workspaceFilesVersionAtom)
   const autoReveal = useAtomValue(fileBrowserAutoRevealAtom)
+  const activeAutoRevealTs = autoReveal?.sessionId === sessionId && isFileBrowserAutoRevealActive(autoReveal)
+    ? autoReveal.ts
+    : 0
   const setFilesVersion = useSetAtom(workspaceFilesVersionAtom)
   const diffRefreshVersionMap = useAtomValue(agentDiffRefreshVersionAtom)
   const diffRefreshVersion = diffRefreshVersionMap.get(sessionId) ?? 0
@@ -1221,7 +1227,7 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
         </h3>
         <PersistentFileScrollArea
           stateKey={getFileBrowserScrollStateKey(sessionId, scope, roots)}
-          autoRevealTs={autoReveal?.sessionId === sessionId ? autoReveal.ts : 0}
+          autoRevealTs={activeAutoRevealTs}
           className="min-h-0 flex-1 overflow-y-auto scrollbar-thin pt-1"
         >
           {isSession && attachedFiles.length > 0 && (
@@ -1419,7 +1425,7 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
                   ) : (
                     <PersistentFileScrollArea
                       stateKey={getFileBrowserScrollStateKey(sessionId, fileSourceFilter, visibleFileRoots)}
-                      autoRevealTs={autoReveal?.sessionId === sessionId ? autoReveal.ts : 0}
+                      autoRevealTs={activeAutoRevealTs}
                       className="flex-1 min-h-0 overflow-y-auto scrollbar-thin pt-1"
                     >
                       {/* 拖拽引用提示：引用块样式，左侧竖线 + 缩进，与下方文件列表内容左对齐 */}

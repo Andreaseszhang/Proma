@@ -47,7 +47,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import { workspaceFilesVersionAtom, fileBrowserAutoRevealAtom, recentlyModifiedPathsAtom, currentAgentSessionIdAtom, fileBrowserExpandedPathsAtom, updateFileBrowserExpandedPath } from '@/atoms/agent-atoms'
+import { workspaceFilesVersionAtom, fileBrowserAutoRevealAtom, recentlyModifiedPathsAtom, currentAgentSessionIdAtom, fileBrowserExpandedPathsAtom, isFileBrowserAutoRevealActive, updateFileBrowserExpandedPath } from '@/atoms/agent-atoms'
 import type { FileAccessOptions, FileEntry } from '@proma/shared'
 import { FileTypeIcon } from './FileTypeIcon'
 import { DefaultAppMenuItem } from './DefaultAppMenuItem'
@@ -155,13 +155,14 @@ export function FileBrowser({ rootPath, roots, hideToolbar, embedded, hideEmpty,
 
   // ===== Agent 写入文件时的自动定位 =====
   const autoReveal = useAtomValue(fileBrowserAutoRevealAtom)
+  const activeAutoReveal = isFileBrowserAutoRevealActive(autoReveal) ? autoReveal : null
   const revealRoot = React.useMemo(() => {
-    if (!autoReveal) return null
+    if (!activeAutoReveal) return null
     return browserRoots
-      .filter((root) => isPathUnderRoot(root.path, autoReveal.path))
+      .filter((root) => isPathUnderRoot(root.path, activeAutoReveal.path))
       .sort((a, b) => b.path.length - a.path.length)[0] ?? null
-  }, [autoReveal, browserRoots])
-  const revealForThisRoot = revealRoot ? autoReveal : null
+  }, [activeAutoReveal, browserRoots])
+  const revealForThisRoot = revealRoot ? activeAutoReveal : null
   const revealAncestors = React.useMemo(
     () => revealForThisRoot && revealRoot ? computeRevealAncestors(revealRoot.path, revealForThisRoot.path) : new Set<string>(),
     [revealForThisRoot, revealRoot],

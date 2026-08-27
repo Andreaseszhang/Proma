@@ -17,6 +17,7 @@ import {
   skillDetailNavigationAtomFamily,
   fileBrowserExpandedPathsAtom,
   fileBrowserScrollTopMapAtom,
+  isFileBrowserAutoRevealActive,
   pruneFileBrowserStateMap,
   updateFileBrowserExpandedPath,
   type AgentStreamState,
@@ -136,6 +137,14 @@ describe('文件页面展开状态', () => {
       ['session-a\u0002files\u0002project', 240],
       ['standalone\u0002project\u0000/root', 60],
     ]))
+  })
+
+  test('仅将当前搜索触发的自动定位视为有效事件', () => {
+    const reveal = { sessionId: 'session-a', path: '/Users/a/project/src/App.tsx', ts: 1_000, select: true }
+
+    expect(isFileBrowserAutoRevealActive(reveal, 1_000)).toBe(true)
+    expect(isFileBrowserAutoRevealActive(reveal, 2_499)).toBe(true)
+    expect(isFileBrowserAutoRevealActive(reveal, 2_500)).toBe(false)
   })
 })
 

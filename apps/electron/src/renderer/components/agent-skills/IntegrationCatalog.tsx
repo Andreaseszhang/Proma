@@ -198,10 +198,10 @@ function IntegrationCard({ name, description, capabilities, iconSlug, status, st
   }[iconSlug]
   return (
     <article className={cn(
-      'group relative flex min-h-[156px] flex-col gap-2.5 rounded-lg bg-card p-3.5 text-left shadow-md transition-[transform,box-shadow] duration-200',
+      'group relative flex min-h-[144px] flex-col gap-2 rounded-lg bg-card p-3 text-left shadow-md transition-[transform,box-shadow] duration-200',
       'hover:-translate-y-0.5 hover:shadow-lg',
     )}>
-      <div className="flex items-start gap-2.5">
+      <div className="flex items-start gap-2">
         <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
           {localIcon
             ? <img className="size-[2.125rem] rounded-md object-contain outline outline-1 -outline-offset-1 outline-black/10 dark:outline-white/10" src={localIcon} alt="" />
@@ -219,18 +219,18 @@ function IntegrationCard({ name, description, capabilities, iconSlug, status, st
         </div>
       </div>
 
-      <div className="mt-2 flex flex-wrap gap-1.5">
+      <div className="mt-1 flex flex-wrap gap-1">
         {capabilities.map((capability) => (
           <span key={capability} className="rounded-md bg-foreground/[0.045] px-1.5 py-0.5 text-[11px] text-foreground/60">{capability}</span>
         ))}
       </div>
 
-      <div className="mt-auto flex items-center gap-2 pt-2">
+      <div className="mt-auto flex items-center gap-1.5 pt-1.5">
         <span className={cn('inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-medium', statusTone === 'success' ? 'bg-primary/12 text-primary' : 'bg-muted text-muted-foreground')}>
           {statusTone === 'success' ? <Check size={12} strokeWidth={2.5} /> : <CircleDashed size={12} />}
           <span className="truncate">{status}</span>
         </span>
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto flex items-center gap-0.5">
           {statusTone === 'success' && onDisconnect && (
             <button
               type="button"
@@ -245,7 +245,7 @@ function IntegrationCard({ name, description, capabilities, iconSlug, status, st
             </button>
           )}
           {(!onDisconnect || statusTone !== 'success') && (
-            <button type="button" title={actionLabel} aria-label={actionLabel} disabled={installing} onClick={onAction} className="inline-flex h-8 shrink-0 items-center gap-1 rounded-md bg-primary px-2.5 text-[12px] font-medium text-primary-foreground shadow-sm transition-[transform,background-color,box-shadow] hover:bg-primary/90 hover:shadow active:scale-[0.96] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-wait disabled:opacity-60">
+            <button type="button" title={actionLabel} aria-label={actionLabel} disabled={installing} onClick={onAction} className="inline-flex h-7 shrink-0 items-center gap-1 rounded-md bg-primary px-2 text-[11px] font-medium text-primary-foreground shadow-sm transition-[transform,background-color,box-shadow] hover:bg-primary/90 hover:shadow active:scale-[0.96] focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-wait disabled:opacity-60">
               {installing ? <CircleDashed size={14} className="animate-spin" /> : <span>{actionText}</span>}
             </button>
           )}

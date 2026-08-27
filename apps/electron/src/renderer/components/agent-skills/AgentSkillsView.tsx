@@ -220,7 +220,7 @@ export function AgentSkillsView({
     if (guidingManualMcp) return
     setGuidingManualMcp(true)
     try {
-      const sessionId = await createAgent()
+      const sessionId = await createAgent({ open: false })
       if (!sessionId) {
         toast.error('无法创建 MCP 配置会话')
         return
@@ -233,7 +233,7 @@ export function AgentSkillsView({
   }, [createAgent, guidingManualMcp, setPendingPrompt])
 
   const guideCatalogMcp = React.useCallback(async (integration: CatalogMcpIntegration): Promise<void> => {
-    const sessionId = await createAgent()
+    const sessionId = await createAgent({ open: false })
     if (!sessionId) {
       toast.error(`无法创建 ${integration.name} 配置会话`)
       return

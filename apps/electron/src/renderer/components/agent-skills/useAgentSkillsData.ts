@@ -18,21 +18,26 @@ import {
 import type { BuiltinMcpServerSummary, CliIntegrationStatus, McpServerEntry, SkillMeta, WorkspaceCapabilities, WorkspaceMcpConfig } from '@proma/shared'
 import type { CatalogCliProbeState } from './integration-catalog'
 
+const CLI_STATUS_CACHE_TTL_MS = 5 * 60 * 1000
+const cliIntegrationStatusCache = new Map<string, { statuses: CliIntegrationStatus[]; cachedAt: number }>()
 const cliIntegrationStatusRequests = new Map<string, Promise<CliIntegrationStatus[]>>()
 
-/** Deduplicate only concurrent renderer probes; completed results are never cached. */
+/** Reuse recent probes for a short period so revisiting a workspace does not flash through loading. */
 function probeCliIntegrationStatuses(workspaceSlug: string): Promise<CliIntegrationStatus[]> {
+  const cached = cliIntegrationStatusCache.get(workspaceSlug)
+  if (cached && Date.now() - cached.cachedAt < CLI_STATUS_CACHE_TTL_MS) return Promise.resolve(cached.statuses)
+
   const inFlight = cliIntegrationStatusRequests.get(workspaceSlug)
   if (inFlight) return inFlight
 
-  // Defer the IPC invocation too: an unavailable preload bridge becomes a rejected
-  // probe instead of interrupting the already-rendered MCP configuration.
   const request = Promise.resolve().then(() => window.electronAPI.getCliIntegrationStatuses(workspaceSlug))
   cliIntegrationStatusRequests.set(workspaceSlug, request)
-  void request.then(
-    () => { if (cliIntegrationStatusRequests.get(workspaceSlug) === request) cliIntegrationStatusRequests.delete(workspaceSlug) },
-    () => { if (cliIntegrationStatusRequests.get(workspaceSlug) === request) cliIntegrationStatusRequests.delete(workspaceSlug) },
-  )
+  void request.then((statuses) => {
+    cliIntegrationStatusCache.set(workspaceSlug, { statuses, cachedAt: Date.now() })
+    if (cliIntegrationStatusRequests.get(workspaceSlug) === request) cliIntegrationStatusRequests.delete(workspaceSlug)
+  }, () => {
+    if (cliIntegrationStatusRequests.get(workspaceSlug) === request) cliIntegrationStatusRequests.delete(workspaceSlug)
+  })
   return request
 }
 
@@ -119,8 +124,10 @@ export function useAgentSkillsData(workspaceId?: string): AgentSkillsData {
       setDefaultSkillSlugs(new Set(defaultSlugs))
       setCapabilities(capabilities)
       setBuiltinMcpServers(capabilities.builtinMcpServers)
-      setCliIntegrationStatuses([])
-      setCliIntegrationProbeState('loading')
+      const cachedCliStatuses = cliIntegrationStatusCache.get(workspaceSlug)
+      const hasFreshCliCache = cachedCliStatuses && Date.now() - cachedCliStatuses.cachedAt < CLI_STATUS_CACHE_TTL_MS
+      setCliIntegrationProbeState(hasFreshCliCache ? 'ready' : 'loading')
+      setCliIntegrationStatuses(cachedCliStatuses?.statuses ?? [])
       const hasEnabledMcp = Object.values(config.servers).some((entry) => entry.enabled)
       setMcpConnectionsRefreshing(hasEnabledMcp)
       setLoading(false)
@@ -130,6 +137,7 @@ export function useAgentSkillsData(workspaceId?: string): AgentSkillsData {
         .then((statuses) => {
           if (loadRequestRef.current !== requestId || cliProbeRequestRef.current !== cliProbeRequestId) return
           setCliIntegrationStatuses(statuses)
+          cliIntegrationStatusCache.set(workspaceSlug, { statuses, cachedAt: Date.now() })
           setCliIntegrationProbeState('ready')
         })
         .catch((error) => {
@@ -172,6 +180,7 @@ export function useAgentSkillsData(workspaceId?: string): AgentSkillsData {
       const statuses = await window.electronAPI.setCliIntegrationEnabled(workspaceSlug, id, enabled)
       if (cliProbeRequestRef.current !== cliProbeRequestId) return
       setCliIntegrationStatuses(statuses)
+      cliIntegrationStatusCache.set(workspaceSlug, { statuses, cachedAt: Date.now() })
       setCliIntegrationProbeState('ready')
     } catch (error) {
       if (cliProbeRequestRef.current === cliProbeRequestId) setCliIntegrationProbeState('failed')

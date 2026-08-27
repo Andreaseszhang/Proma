@@ -23,18 +23,16 @@ import {
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { agentPendingPromptAtom, skillDetailNavigationAtomFamily, workspaceCapabilitiesVersionAtom } from '@/atoms/agent-atoms'
 import { agentSkillsTabAtom } from '@/atoms/active-view'
-import { settingsOpenAtom, settingsTabAtom, toolSettingsFocusAtom, type ToolSettingsFocus } from '@/atoms/settings-tab'
 import { useProjectActions } from '@/hooks/useProjectActions'
 import { useCreateSession } from '@/hooks/useCreateSession'
 import { LocalProjectBadge } from '@/components/agent/LocalProjectBadge'
 import { AgentActionHint } from '@/components/agent/AgentActionHint'
-import type { BuiltinMcpServerSummary, McpServerEntry, SkillMeta } from '@proma/shared'
+import type { McpServerEntry, SkillMeta } from '@proma/shared'
 import { useAgentSkillsData } from './useAgentSkillsData'
 import { SkillCard } from './SkillCard'
 import { McpCard } from './McpCard'
 import { SkillDetailView } from './SkillDetailView'
 import { McpDetailSheet } from './McpDetailSheet'
-import { BuiltinMcpDetailSheet } from './BuiltinMcpDetailSheet'
 import { ImportSkillDialog } from './ImportSkillDialog'
 import { WorkspaceMemoryTab } from './WorkspaceMemoryTab'
 import { groupSkills } from './skillGrouping'
@@ -121,9 +119,6 @@ export function AgentSkillsView({
   const data = useAgentSkillsData(workspaceId)
   const bumpCapabilities = useSetAtom(workspaceCapabilitiesVersionAtom)
   const setPendingPrompt = useSetAtom(agentPendingPromptAtom)
-  const setSettingsOpen = useSetAtom(settingsOpenAtom)
-  const setSettingsTab = useSetAtom(settingsTabAtom)
-  const setToolSettingsFocus = useSetAtom(toolSettingsFocusAtom)
   const skillDetailNavigation = useAtomValue(skillDetailNavigationAtomFamily(sessionId ?? ''))
   const setSkillDetailNavigation = useSetAtom(skillDetailNavigationAtomFamily(sessionId ?? ''))
   const { workspaces, currentWorkspaceId: selectedWorkspaceId, selectProject } = useProjectActions()
@@ -137,7 +132,6 @@ export function AgentSkillsView({
   const [selectedSkillSlug, setSelectedSkillSlug] = React.useState<string | null>(null)
   const [mcpSheetOpen, setMcpSheetOpen] = React.useState(false)
   const [editingMcp, setEditingMcp] = React.useState<{ name: string; entry: McpServerEntry } | null>(null)
-  const [selectedBuiltinMcp, setSelectedBuiltinMcp] = React.useState<BuiltinMcpServerSummary | null>(null)
   const [showImport, setShowImport] = React.useState(false)
   const [wsPopoverOpen, setWsPopoverOpen] = React.useState(false)
   const [pendingDeleteSkill, setPendingDeleteSkill] = React.useState<SkillMeta | null>(null)
@@ -173,16 +167,6 @@ export function AgentSkillsView({
       .filter(([name]) => !q || name.toLowerCase().includes(q))
   }, [catalogServerNames, data.mcpConfig, q])
 
-  const builtinMcpServers = React.useMemo(() => {
-    if (!q) return data.builtinMcpServers
-    return data.builtinMcpServers.filter((server) =>
-      server.name.toLowerCase().includes(q) ||
-      server.displayName.toLowerCase().includes(q) ||
-      server.description.toLowerCase().includes(q) ||
-      server.tools.some((tool) => tool.name.toLowerCase().includes(q) || tool.description.toLowerCase().includes(q)),
-    )
-  }, [data.builtinMcpServers, q])
-
   const catalogMcps = React.useMemo(() => {
     return MCP_INTEGRATION_CATALOG.filter((integration): integration is CatalogMcpIntegration =>
       isCatalogIntegrationVisible(integration) && integration.kind === 'mcp' && matchesCatalogSearch(integration, q),
@@ -209,8 +193,8 @@ export function AgentSkillsView({
 
   // 不含搜索过滤的 MCP 总数（Tab 计数与空态判断用）
   const mcpCount = React.useMemo(
-    () => Object.keys(data.mcpConfig.servers ?? {}).length + data.builtinMcpServers.length,
-    [data.mcpConfig, data.builtinMcpServers],
+    () => Object.keys(data.mcpConfig.servers ?? {}).length,
+    [data.mcpConfig],
   )
   const memoryCount = (data.capabilities?.memory.agentsMd.exists ? 1 : 0) + (data.capabilities?.memory.autoMemory.fileCount ?? 0)
 
@@ -236,18 +220,6 @@ export function AgentSkillsView({
   const openSkillFolder = (slug: string): void => {
     if (data.skillsDir) window.electronAPI.openFile(`${data.skillsDir}/${slug}`)
   }
-
-  const configureBuiltinMcp = React.useCallback((serverId: string): void => {
-    const focusMap: Partial<Record<string, ToolSettingsFocus>> = {
-      'nano-banana': 'nano-banana',
-    }
-    const focus = focusMap[serverId]
-    if (!focus) return
-    setToolSettingsFocus(focus)
-    setSettingsTab('tools')
-    setSettingsOpen(true)
-    setSelectedBuiltinMcp(null)
-  }, [setSettingsOpen, setSettingsTab, setToolSettingsFocus])
 
   const guideManualMcp = React.useCallback(async (): Promise<void> => {
     if (guidingManualMcp) return
@@ -670,7 +642,6 @@ export function AgentSkillsView({
           ) : tab === 'mcp' ? (
             <McpTab
               userEntries={userMcpEntries}
-              builtinServers={builtinMcpServers}
               catalogMcps={catalogMcps}
               catalogClis={catalogClis}
               catalogGuided={catalogGuided}
@@ -687,9 +658,7 @@ export function AgentSkillsView({
               cliIntegrationProbeState={data.cliIntegrationProbeState}
               installingCatalogMcpId={installingCatalogMcpId}
               onOpen={(name, entry) => { setEditingMcp({ name, entry }); setMcpSheetOpen(true) }}
-              onOpenBuiltin={setSelectedBuiltinMcp}
               onToggle={data.toggleMcp}
-              onToggleBuiltin={data.toggleBuiltinMcp}
               onRequestDelete={setPendingDeleteMcpName}
               onInstallCatalogMcp={(integration) => { void installCatalogMcp(integration) }}
               onGuideCatalogCli={guideCatalogCli}
@@ -739,13 +708,6 @@ export function AgentSkillsView({
           void data.refreshMcpConfig()
           bumpCapabilities((v) => v + 1)
         }}
-      />
-
-      <BuiltinMcpDetailSheet
-        open={!!selectedBuiltinMcp}
-        server={selectedBuiltinMcp}
-        onOpenChange={(open) => { if (!open) setSelectedBuiltinMcp(null) }}
-        onConfigure={configureBuiltinMcp}
       />
 
       <CredentialDialog
@@ -884,7 +846,6 @@ function SkillSection({ title, skills, isBuiltin, updatingSkill, onOpen, onToggl
 
 interface McpTabProps {
   userEntries: Array<[string, McpServerEntry]>
-  builtinServers: BuiltinMcpServerSummary[]
   catalogMcps: CatalogMcpIntegration[]
   catalogClis: CatalogCliIntegration[]
   catalogGuided: CatalogGuidedIntegration[]
@@ -898,9 +859,7 @@ interface McpTabProps {
   cliIntegrationProbeState: CatalogCliProbeState
   installingCatalogMcpId: string | null
   onOpen: (name: string, entry: McpServerEntry) => void
-  onOpenBuiltin: (server: BuiltinMcpServerSummary) => void
   onToggle: (name: string, enabled: boolean) => void
-  onToggleBuiltin: (id: string, enabled: boolean) => void
   onRequestDelete: (name: string) => void
   onInstallCatalogMcp: (integration: CatalogMcpIntegration) => void
   onGuideCatalogCli: (integration: CatalogCliIntegration) => void
@@ -909,8 +868,8 @@ interface McpTabProps {
   onRequestCredential: (integration: CatalogCredentialIntegration) => void
 }
 
-function McpTab({ userEntries, builtinServers, catalogMcps, catalogClis, catalogGuided, catalogCredentials, embedded, installedMcpNames, enabledMcpNames, verifiedMcpNames, activeSkillSlugs, connectedCliIds, cliIntegrationProbeState, installingCatalogMcpId, onOpen, onOpenBuiltin, onToggle, onToggleBuiltin, onRequestDelete, onInstallCatalogMcp, onGuideCatalogCli, onDisconnectCatalogCli, onGuideCatalogIntegration, onRequestCredential }: McpTabProps): React.ReactElement {
-  if (userEntries.length === 0 && builtinServers.length === 0 && catalogMcps.length === 0 && catalogClis.length === 0 && catalogGuided.length === 0 && catalogCredentials.length === 0) {
+function McpTab({ userEntries, catalogMcps, catalogClis, catalogGuided, catalogCredentials, embedded, installedMcpNames, enabledMcpNames, verifiedMcpNames, activeSkillSlugs, connectedCliIds, cliIntegrationProbeState, installingCatalogMcpId, onOpen, onToggle, onRequestDelete, onInstallCatalogMcp, onGuideCatalogCli, onDisconnectCatalogCli, onGuideCatalogIntegration, onRequestCredential }: McpTabProps): React.ReactElement {
+  if (userEntries.length === 0 && catalogMcps.length === 0 && catalogClis.length === 0 && catalogGuided.length === 0 && catalogCredentials.length === 0) {
     return <EmptyState icon={<Search className="size-8 text-foreground/30" />} title="没有匹配的 MCP 服务器" hint="试试更换搜索关键词。" />
   }
 
@@ -928,30 +887,6 @@ function McpTab({ userEntries, builtinServers, catalogMcps, catalogClis, catalog
               onRequestDelete={() => onRequestDelete(name)}
               statusLabel={entry.enabled ? '已启用' : '已关闭'}
               statusTone={entry.enabled ? 'success' : 'muted'}
-            />
-          ))}
-        </McpSection>
-      )}
-
-      {builtinServers.length > 0 && (
-        <McpSection title="Proma 集成能力" count={builtinServers.length} embedded={embedded}>
-          {builtinServers.map((server) => (
-            <McpCard
-              key={server.id}
-              name={server.displayName}
-              entry={{
-                type: 'stdio',
-                command: 'Proma 运行时注入',
-                enabled: server.enabled,
-                isBuiltin: true,
-              }}
-              description={server.description}
-              targetLabel={server.availabilityReason ?? 'Proma 运行时注入'}
-              statusLabel={getBuiltinMcpStatus(server).label}
-              statusTone={getBuiltinMcpStatus(server).tone}
-              readOnly
-              onOpen={() => onOpenBuiltin(server)}
-              onToggle={(enabled) => onToggleBuiltin(server.id, enabled)}
             />
           ))}
         </McpSection>
@@ -979,12 +914,6 @@ function McpTab({ userEntries, builtinServers, catalogMcps, catalogClis, catalog
       />
     </div>
   )
-}
-
-function getBuiltinMcpStatus(server: BuiltinMcpServerSummary): { label: string; tone: 'success' | 'warning' | 'muted' } {
-  if (!server.enabled) return { label: '已关闭', tone: 'muted' }
-  if (server.available) return { label: '可用', tone: 'success' }
-  return { label: '需配置', tone: 'warning' }
 }
 
 function McpSection({ title, count, children, embedded }: { title: string; count: number; children: React.ReactNode; embedded: boolean }): React.ReactElement {

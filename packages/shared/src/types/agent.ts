@@ -1802,6 +1802,7 @@ export const AGENT_IPC_CHANNELS = {
   RELOAD_BROWSER: 'agent:reload-browser',
   CLOSE_BROWSER: 'agent:close-browser',
   BROWSER_STATE_CHANGED: 'agent:browser-state-changed',
+  BROWSER_TAB_FOCUSED: 'agent:browser-tab-focused',
 
   // 工作区能力（MCP + Skill）
   /** 获取工作区能力摘要 */

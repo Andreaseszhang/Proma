@@ -12,7 +12,7 @@ import { LeftSidebar } from './LeftSidebar'
 import { RightSidePanel } from './RightSidePanel'
 import { MainArea } from '@/components/tabs/MainArea'
 import { appModeAtom } from '@/atoms/app-mode'
-import { agentDiffPanelTabAtom, agentSessionsAtom, agentSidePanelLayoutAtomFamily, agentSidePanelLayoutMapAtom, currentAgentSessionIdAtom, currentSessionSidePanelOpenAtom, isWorkspaceComponentTab, pruneAgentSidePanelLayouts, fileBrowserExpandedPathsAtom, fileBrowserScrollTopMapAtom, pruneFileBrowserStateMap } from '@/atoms/agent-atoms'
+import { agentDiffPanelTabAtom, agentSessionsAtom, agentSidePanelLayoutAtomFamily, agentSidePanelLayoutMapAtom, agentSidePanelSplitMapAtom, currentAgentSessionIdAtom, currentSessionSidePanelOpenAtom, isWorkspaceComponentTab, pruneAgentSidePanelLayouts, fileBrowserExpandedPathsAtom, fileBrowserScrollTopMapAtom, pruneFileBrowserStateMap } from '@/atoms/agent-atoms'
 import { leftSidebarWidthAtom } from '@/atoms/sidebar-atoms'
 import { sidebarCollapsedAtom } from '@/atoms/tab-atoms'
 import { clampRightPanelWidth, getRightPanelMaxWidth } from './right-panel-layout'
@@ -33,6 +33,8 @@ const MIN_RIGHT_PANEL_WIDTH = 300
 const MIN_EXPANDED_WORKSPACE_PANEL_WIDTH = 360
 // Todo 在 600px 起切换为双栏，避免将三栏导航、列表、详情强行压缩。
 const MIN_TODO_PANEL_WIDTH = 600
+// 两个 Pane 需要各自保留约 320px 内容区及中间分隔条。
+const MIN_SPLIT_PANEL_WIDTH = 720
 const EXPANDED_WORKSPACE_DEFAULT_VIEWPORT_RATIO = 2 / 5
 const COLLAPSED_LEFT_SIDEBAR_WIDTH = 60
 
@@ -73,6 +75,7 @@ export function AppShell(): React.ReactElement {
   const currentWorkspace = workspaces.find((workspace) => workspace.id === currentWorkspaceId)
   const currentSessionId = useAtomValue(currentAgentSessionIdAtom)
   const activeRightPanelTab = useAtomValue(agentDiffPanelTabAtom).get(currentSessionId ?? '')
+  const activeRightPanelSplit = useAtomValue(agentSidePanelSplitMapAtom).get(currentSessionId ?? '') ?? null
   const isPanelOpen = useAtomValue(currentSessionSidePanelOpenAtom)
   const automationForm = useAtomValue(automationFormAtom)
   const settingsOpen = useAtomValue(settingsOpenAtom)
@@ -142,6 +145,7 @@ export function AppShell(): React.ReactElement {
   const setRightPanelLayouts = useSetAtom(agentSidePanelLayoutMapAtom)
   const setFileBrowserExpandedPaths = useSetAtom(fileBrowserExpandedPathsAtom)
   const setFileBrowserScrollTopMap = useSetAtom(fileBrowserScrollTopMapAtom)
+  const setRightPanelSplitMap = useSetAtom(agentSidePanelSplitMapAtom)
   const [rightPanelLayout, setRightPanelLayout] = useAtom(agentSidePanelLayoutAtomFamily(currentSessionId ?? ''))
   const [viewportWidth, setViewportWidth] = React.useState(() => window.innerWidth)
   const dragging = React.useRef(false)
@@ -150,21 +154,27 @@ export function AppShell(): React.ReactElement {
   const [draggedRightPanelWidth, setDraggedRightPanelWidth] = React.useState<number | null>(null)
   currentSessionIdRef.current = currentSessionId
   const isExpandedRightWorkspace = isExpandedWorkspaceTab(activeRightPanelTab)
-  const rightPanelMinimumWidth = getRightPanelMinWidth(
-    activeRightPanelTab === 'todos',
-    isExpandedRightWorkspace || rightPanelLayout.hasOpenedWideWorkspace,
+  // 普通宽度必须独立计算：分屏的临时 720px 下限不能被 effect 写回 Session 的普通 width。
+  const ordinaryRightPanelMinimumWidth = getRightPanelMinWidth(
+    activeRightPanelSplit === null && activeRightPanelTab === 'todos',
+    rightPanelLayout.hasOpenedWideWorkspace || (activeRightPanelSplit === null && isExpandedRightWorkspace),
   )
+  const rightPanelMinimumWidth = activeRightPanelSplit
+    ? MIN_SPLIT_PANEL_WIDTH
+    : ordinaryRightPanelMinimumWidth
   const leftSidebarContentWidth = sidebarCollapsed ? COLLAPSED_LEFT_SIDEBAR_WIDTH : clampedLeftSidebarWidth
   // 经典界面已移除，侧栏始终只占内容宽度与分隔线。
   const leftSidebarOccupiedWidth = leftSidebarContentWidth + 1
   const canUseCollapsedSidebarSpace = sidebarCollapsed && (
-    isExpandedRightWorkspace || rightPanelLayout.hasOpenedWideWorkspace
+    activeRightPanelSplit !== null || isExpandedRightWorkspace || rightPanelLayout.hasOpenedWideWorkspace
   )
-  const canAutoCollapseSidebarForRightPanel = !sidebarCollapsed && isExpandedRightWorkspace
+  const canAutoCollapseSidebarForRightPanel = !sidebarCollapsed && (
+    activeRightPanelSplit !== null || isExpandedRightWorkspace
+  )
   const clampedRightPanelWidth = clampRightPanelWidth(
     rightPanelLayout.width,
     viewportWidth,
-    rightPanelMinimumWidth,
+    ordinaryRightPanelMinimumWidth,
     leftSidebarOccupiedWidth,
     canUseCollapsedSidebarSpace,
   )
@@ -184,7 +194,8 @@ export function AppShell(): React.ReactElement {
       canUseCollapsedSidebarSpace,
     )
   // 打开任一扩展工作区后，当前会话保持该宽度，避免在右侧 Tab 间切换时反复缩放。
-  const usesWidePanelLayout = rightPanelLayout.hasOpenedWideWorkspace
+  // 并排仅临时借用宽布局；退出后自动回到 Session 先前的普通/宽工作区宽度。
+  const usesWidePanelLayout = rightPanelLayout.hasOpenedWideWorkspace || activeRightPanelSplit !== null
   const persistedRightPanelWidth = usesWidePanelLayout ? effectiveWidePanelWidth : clampedRightPanelWidth
   const displayedRightPanelWidth = draggedRightPanelWidth ?? persistedRightPanelWidth
 
@@ -198,13 +209,18 @@ export function AppShell(): React.ReactElement {
     if (currentSessionId) retainedSessionIds.add(currentSessionId)
     setFileBrowserExpandedPaths((previous) => pruneFileBrowserStateMap(previous, retainedSessionIds))
     setFileBrowserScrollTopMap((previous) => pruneFileBrowserStateMap(previous, retainedSessionIds))
-  }, [agentSessions, currentSessionId, setFileBrowserExpandedPaths, setFileBrowserScrollTopMap, setRightPanelLayouts])
+    setRightPanelSplitMap((previous) => {
+      const next = new Map([...previous].filter(([sessionId]) => retainedSessionIds.has(sessionId)))
+      return next.size === previous.size ? previous : next
+    })
+  }, [agentSessions, currentSessionId, setFileBrowserExpandedPaths, setFileBrowserScrollTopMap, setRightPanelLayouts, setRightPanelSplitMap])
 
   React.useEffect(() => {
-    if (isExpandedRightWorkspace && currentSessionId && !rightPanelLayout.hasOpenedWideWorkspace) {
+    // 分屏本身是临时宽布局，不能因为其中一个 Pane 是 Browser/Preview 就污染退出后的宽度。
+    if (!activeRightPanelSplit && isExpandedRightWorkspace && currentSessionId && !rightPanelLayout.hasOpenedWideWorkspace) {
       setRightPanelLayout((previous) => ({ ...previous, hasOpenedWideWorkspace: true }))
     }
-  }, [currentSessionId, isExpandedRightWorkspace, rightPanelLayout.hasOpenedWideWorkspace, setRightPanelLayout])
+  }, [activeRightPanelSplit, currentSessionId, isExpandedRightWorkspace, rightPanelLayout.hasOpenedWideWorkspace, setRightPanelLayout])
 
   React.useEffect(() => {
     const updateViewportWidth = () => setViewportWidth(window.innerWidth)
@@ -243,7 +259,7 @@ export function AppShell(): React.ReactElement {
       const nextLeftSidebarContentWidth = nextSidebarCollapsed ? COLLAPSED_LEFT_SIDEBAR_WIDTH : clampedLeftSidebarWidth
       const nextLeftSidebarOccupiedWidth = nextLeftSidebarContentWidth + 1
       const allowFullAvailableWidth = nextSidebarCollapsed && (
-        isExpandedRightWorkspace || rightPanelLayout.hasOpenedWideWorkspace
+        activeRightPanelSplit !== null || isExpandedRightWorkspace || rightPanelLayout.hasOpenedWideWorkspace
       )
 
       if (shouldCollapseSidebar && !sidebarCollapsedDuringDrag) {
@@ -299,7 +315,7 @@ export function AppShell(): React.ReactElement {
     rightPanelDragCleanup.current = cancelDrag
     document.addEventListener('mousemove', onMouseMove)
     document.addEventListener('mouseup', onMouseUp)
-  }, [canAutoCollapseSidebarForRightPanel, clampedLeftSidebarWidth, currentSessionId, displayedRightPanelWidth, isExpandedRightWorkspace, leftSidebarOccupiedWidth, rightPanelLayout.hasOpenedWideWorkspace, rightPanelMinimumWidth, setRightPanelLayout, setSidebarCollapsed, sidebarCollapsed, usesWidePanelLayout, viewportWidth])
+  }, [activeRightPanelSplit, canAutoCollapseSidebarForRightPanel, clampedLeftSidebarWidth, currentSessionId, displayedRightPanelWidth, isExpandedRightWorkspace, leftSidebarOccupiedWidth, rightPanelLayout.hasOpenedWideWorkspace, rightPanelMinimumWidth, setRightPanelLayout, setSidebarCollapsed, sidebarCollapsed, usesWidePanelLayout, viewportWidth])
 
   return (
     <>

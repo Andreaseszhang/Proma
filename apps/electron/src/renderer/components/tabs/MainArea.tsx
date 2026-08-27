@@ -6,7 +6,7 @@
  */
 
 import * as React from 'react'
-import type { BrowserStateChange } from '@proma/shared'
+import type { BrowserStateChange, BrowserTabFocusChange } from '@proma/shared'
 import { useAtom, useAtomValue, useSetAtom, useStore } from 'jotai'
 import {
   tabsAtom,
@@ -113,6 +113,25 @@ export function MainArea(): React.ReactElement {
     if (typeof subscribe !== 'function') return
     return subscribe(publishBrowserState)
   }, [publishBrowserState])
+
+  const focusNativeBrowserTab = React.useCallback((change: BrowserTabFocusChange) => {
+    // WebContentsView 不在 React DOM 中；点击后台 Browser Pane 的网页正文只能由主进程
+    // 把原生 focus 映射回右侧 Pane/Tab 焦点。后台 Agent Session 不得借此抢前台。
+    if (activeTab?.type !== 'agent' || activeTab.sessionId !== change.sessionId) return
+    store.set(agentSidePanelOpenAtomFamily(change.sessionId), true)
+    setAgentSidePanelTabMap((previous) => {
+      if (previous.get(change.sessionId) === getBrowserSidePanelTab(change.tabId)) return previous
+      const next = new Map(previous)
+      next.set(change.sessionId, getBrowserSidePanelTab(change.tabId))
+      return next
+    })
+  }, [activeTab, setAgentSidePanelTabMap, store])
+
+  React.useEffect(() => {
+    const subscribe = (window.electronAPI as Partial<typeof window.electronAPI>).onAgentBrowserTabFocused
+    if (typeof subscribe !== 'function') return
+    return subscribe(focusNativeBrowserTab)
+  }, [focusNativeBrowserTab])
 
   React.useEffect(() => {
     if (!browserSessionId) return

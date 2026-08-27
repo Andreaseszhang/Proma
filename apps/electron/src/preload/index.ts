@@ -262,6 +262,7 @@ export interface ElectronAPI {
   reloadAgentBrowser: (sessionId: string) => Promise<import('@proma/shared').BrowserViewState>
   closeAgentBrowser: (sessionId: string) => Promise<void>
   onAgentBrowserStateChanged: (callback: (state: import('@proma/shared').BrowserStateChange) => void) => () => void
+  onAgentBrowserTabFocused: (callback: (change: import('@proma/shared').BrowserTabFocusChange) => void) => () => void
 
   // ===== 通用工具 =====
 
@@ -1421,6 +1422,11 @@ const electronAPI: ElectronAPI = {
     const listener = (_event: Electron.IpcRendererEvent, state: import('@proma/shared').BrowserStateChange) => callback(state)
     ipcRenderer.on(AGENT_IPC_CHANNELS.BROWSER_STATE_CHANGED, listener)
     return () => ipcRenderer.removeListener(AGENT_IPC_CHANNELS.BROWSER_STATE_CHANGED, listener)
+  },
+  onAgentBrowserTabFocused: (callback: (change: import('@proma/shared').BrowserTabFocusChange) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, change: import('@proma/shared').BrowserTabFocusChange) => callback(change)
+    ipcRenderer.on(AGENT_IPC_CHANNELS.BROWSER_TAB_FOCUSED, listener)
+    return () => ipcRenderer.removeListener(AGENT_IPC_CHANNELS.BROWSER_TAB_FOCUSED, listener)
   },
 
   // 通用工具

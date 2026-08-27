@@ -605,6 +605,30 @@ export const agentFileSourceFilterMapAtom = atomWithStorage<Record<string, Agent
 )
 
 /**
+ * 文件树展开状态。Files Tab 切换时 FileBrowser 会卸载，因此按会话与文件根保存
+ * 每个目录的显式展开/折叠状态；仅用于当前应用运行期的 UI 恢复，不写入用户的长期偏好。
+ */
+export const fileBrowserExpandedPathsAtom = atom<Map<string, Map<string, boolean>>>(new Map())
+
+/** Files Tab 各滚动视图的 scrollTop，按会话和文件视图隔离。 */
+export const fileBrowserScrollTopMapAtom = atom<Map<string, number>>(new Map())
+
+/** 清理已删除会话遗留的文件树 UI 状态；保留 standalone FileBrowser 状态。 */
+export function pruneFileBrowserStateMap<T>(state: Map<string, T>, retainedSessionIds: ReadonlySet<string>): Map<string, T> {
+  let changed = false
+  const next = new Map(state)
+  for (const key of state.keys()) {
+    const separatorIndex = key.indexOf('\u0002')
+    const sessionId = separatorIndex >= 0 ? key.slice(0, separatorIndex) : key
+    if (sessionId !== 'standalone' && !retainedSessionIds.has(sessionId)) {
+      next.delete(key)
+      changed = true
+    }
+  }
+  return changed ? next : state
+}
+
+/**
  * 工作区级组件：内容归属项目而非单个会话，但在当前会话的右侧工作区中呈现。
  * 同一项目下的打开状态跨会话保留；关闭一个组件不会影响其他项目。
  */

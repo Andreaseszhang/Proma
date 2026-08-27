@@ -15,6 +15,9 @@ import {
   agentSidePanelOpenAtomFamily,
   revealChangedWorkspaceComponentAtom,
   skillDetailNavigationAtomFamily,
+  fileBrowserExpandedPathsAtom,
+  fileBrowserScrollTopMapAtom,
+  pruneFileBrowserStateMap,
   type AgentStreamState,
 } from './agent-atoms'
 
@@ -77,6 +80,53 @@ describe('右侧工作区组件', () => {
     expect(getDelegationTabLabel('  ')).toBe('委派任务')
     expect(getDelegationTabLabel(undefined)).toBe('委派任务')
     expect(getDelegationTabLabel('整理 PR')).toBe('整理 PR')
+  })
+})
+
+describe('文件页面展开状态', () => {
+  test('按会话与文件根隔离展开路径', () => {
+    const store = createStore()
+    const sessionAProjectKey = 'session-a\u0002project\u0000/Users/a/project'
+    const sessionBProjectKey = 'session-b\u0002project\u0000/Users/a/project'
+
+    store.set(fileBrowserExpandedPathsAtom, new Map([
+      [sessionAProjectKey, new Map([
+        ['/Users/a/project/src', true],
+        ['/Users/a/project/src/components', false],
+      ])],
+    ]))
+
+    expect(store.get(fileBrowserExpandedPathsAtom).get(sessionAProjectKey)).toEqual(
+      new Map([
+        ['/Users/a/project/src', true],
+        ['/Users/a/project/src/components', false],
+      ]),
+    )
+    expect(store.get(fileBrowserExpandedPathsAtom).get(sessionBProjectKey)).toBeUndefined()
+  })
+
+  test('按会话与文件视图隔离滚动位置', () => {
+    const store = createStore()
+    store.set(fileBrowserScrollTopMapAtom, new Map([
+      ['session-a\u0002files\u0002project', 240],
+    ]))
+
+    expect(store.get(fileBrowserScrollTopMapAtom).get('session-a\u0002files\u0002project')).toBe(240)
+    expect(store.get(fileBrowserScrollTopMapAtom).get('session-b\u0002files\u0002project')).toBeUndefined()
+    expect(store.get(fileBrowserScrollTopMapAtom).get('session-a\u0002files\u0002session')).toBeUndefined()
+  })
+
+  test('清理已删除会话的文件页面状态并保留当前与 standalone 状态', () => {
+    const state = new Map([
+      ['session-a\u0002files\u0002project', 240],
+      ['session-deleted\u0002files\u0002project', 120],
+      ['standalone\u0002project\u0000/root', 60],
+    ])
+
+    expect(pruneFileBrowserStateMap(state, new Set(['session-a']))).toEqual(new Map([
+      ['session-a\u0002files\u0002project', 240],
+      ['standalone\u0002project\u0000/root', 60],
+    ]))
   })
 })
 

@@ -47,6 +47,8 @@ import {
   sanitizeWorkspaceComponentTabs,
   getDelegationTabLabel,
   fileBrowserAutoRevealAtom,
+  fileBrowserScrollTopMapAtom,
+  pruneFileBrowserStateMap,
   agentSelectedWorktreeAtom,
   agentSideTemporaryAgentMapAtom,
   agentSideDelegationMapAtom,
@@ -99,6 +101,122 @@ import {
 import { rememberStopGenerationTarget } from '@/lib/stop-generation-target'
 import { TerminalTabContent } from '@/components/tabs/TerminalTabContent'
 import { shouldShowBothFileSources } from './file-panel-layout'
+
+interface PersistentFileScrollAreaProps {
+  stateKey: string
+  className: string
+  children: React.ReactNode
+  autoRevealTs?: number
+}
+
+/** 保存 Files Tab 的滚动位置，并在文件树异步恢复内容后再次定位。 */
+function PersistentFileScrollArea({ stateKey, className, children, autoRevealTs = 0 }: PersistentFileScrollAreaProps): React.ReactElement {
+  const scrollTopMap = useAtomValue(fileBrowserScrollTopMapAtom)
+  const setScrollTopMap = useSetAtom(fileBrowserScrollTopMapAtom)
+  const scrollTop = scrollTopMap.get(stateKey) ?? 0
+  const containerRef = React.useRef<HTMLDivElement>(null)
+  const latestScrollTopRef = React.useRef(scrollTop)
+  const pendingFlushRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  const suppressRestoreUntilRef = React.useRef(0)
+
+  React.useLayoutEffect(() => {
+    latestScrollTopRef.current = scrollTop
+  }, [scrollTop, stateKey])
+
+  // 主动搜索定位时，旧 scrollTop 不能覆盖 scrollIntoView 的目标位置；
+  // 用 layout effect 先于 MutationObserver 回调设置保护窗口。
+  React.useLayoutEffect(() => {
+    if (!autoRevealTs) return
+    suppressRestoreUntilRef.current = Date.now() + 1500
+  }, [autoRevealTs])
+
+  React.useLayoutEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    let firstFrame = 0
+    let secondFrame = 0
+    const restore = () => {
+      if (Date.now() < suppressRestoreUntilRef.current) return
+      const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight)
+      container.scrollTop = Math.min(latestScrollTopRef.current, maxScrollTop)
+    }
+    const scheduleRestore = () => {
+      restore()
+      firstFrame = requestAnimationFrame(() => {
+        restore()
+        secondFrame = requestAnimationFrame(restore)
+      })
+    }
+
+    scheduleRestore()
+    const resizeObserver = typeof ResizeObserver !== 'undefined'
+      ? new ResizeObserver(scheduleRestore)
+      : null
+    resizeObserver?.observe(container)
+    // 懒加载目录只在首次恢复窗口内监听，避免持续 observer 与主动搜索滚动竞争。
+    const mutationObserver = typeof MutationObserver !== 'undefined'
+      ? new MutationObserver(scheduleRestore)
+      : null
+    mutationObserver?.observe(container, { childList: true, subtree: true })
+    const mutationObserverStopTimer = setTimeout(() => mutationObserver?.disconnect(), 1500)
+
+    return () => {
+      cancelAnimationFrame(firstFrame)
+      cancelAnimationFrame(secondFrame)
+      clearTimeout(mutationObserverStopTimer)
+      resizeObserver?.disconnect()
+      mutationObserver?.disconnect()
+    }
+  }, [stateKey])
+
+  React.useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    const flush = () => {
+      pendingFlushRef.current = null
+      const nextScrollTop = latestScrollTopRef.current
+      setScrollTopMap((previous) => {
+        if (previous.get(stateKey) === nextScrollTop) return previous
+        const next = new Map(previous)
+        next.set(stateKey, nextScrollTop)
+        return next
+      })
+    }
+    const handleScroll = () => {
+      latestScrollTopRef.current = container.scrollTop
+      if (pendingFlushRef.current === null) {
+        pendingFlushRef.current = setTimeout(flush, 120)
+      }
+    }
+
+    container.addEventListener('scroll', handleScroll, { passive: true })
+    return () => {
+      container.removeEventListener('scroll', handleScroll)
+      if (pendingFlushRef.current !== null) {
+        clearTimeout(pendingFlushRef.current)
+        pendingFlushRef.current = null
+      }
+      // Tab 切换卸载前同步落盘到内存 atom，避免最后 120ms 丢失。
+      flush()
+    }
+  }, [setScrollTopMap, stateKey])
+
+  return <div ref={containerRef} className={className}>{children}</div>
+}
+
+function getFileBrowserScrollStateKey(
+  sessionId: string,
+  view: string,
+  roots: readonly { path: string; scope: string }[],
+): string {
+  const rootKey = roots
+    .map((root) => `${root.scope}\u0000${root.path}`)
+    .sort()
+    .join('\u0001')
+  return `${sessionId}\u0002files\u0002${view}\u0002${rootKey}`
+}
 
 function getPathBasename(filePath: string): string {
   return filePath.split(/[\\/]/).filter(Boolean).pop() || filePath
@@ -338,6 +456,7 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
   })
 
   const filesVersion = useAtomValue(workspaceFilesVersionAtom)
+  const autoReveal = useAtomValue(fileBrowserAutoRevealAtom)
   const setFilesVersion = useSetAtom(workspaceFilesVersionAtom)
   const diffRefreshVersionMap = useAtomValue(agentDiffRefreshVersionAtom)
   const diffRefreshVersion = diffRefreshVersionMap.get(sessionId) ?? 0
@@ -1098,7 +1217,11 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
         <h3 className="flex h-8 shrink-0 items-center px-3 text-[11px] font-medium text-muted-foreground">
           {isSession ? '会话文件' : '项目文件'}
         </h3>
-        <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin pt-1">
+        <PersistentFileScrollArea
+          stateKey={getFileBrowserScrollStateKey(sessionId, scope, roots)}
+          autoRevealTs={autoReveal?.sessionId === sessionId ? autoReveal.ts : 0}
+          className="min-h-0 flex-1 overflow-y-auto scrollbar-thin pt-1"
+        >
           {isSession && attachedFiles.length > 0 && (
             <AttachedFilesSection scope="session" showSessionBadge={false} attachedFiles={attachedFiles} onDetach={handleDetachFile} onAddToChat={handleAddToChat} onFilePreview={handleFilePreview} allowedPaths={basePathsRef.current} sessionId={sessionId} />
           )}
@@ -1118,7 +1241,7 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
           ) : !isProjectRootUnavailable ? (
             <FileDropZone workspaceSlug={workspaceSlug} target="workspace" onFilesUploaded={handleFilesUploaded} onFilesAttached={handleWorkspaceFilesAttached} onAttachFolder={handleAttachWorkspaceFolder} onFoldersDropped={handleWorkspaceFoldersDropped} />
           ) : null)}
-        </div>
+        </PersistentFileScrollArea>
       </section>
     )
   }
@@ -1292,7 +1415,11 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
                       {renderFileSourceContent('project')}
                     </div>
                   ) : (
-                    <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin pt-1">
+                    <PersistentFileScrollArea
+                      stateKey={getFileBrowserScrollStateKey(sessionId, fileSourceFilter, visibleFileRoots)}
+                      autoRevealTs={autoReveal?.sessionId === sessionId ? autoReveal.ts : 0}
+                      className="flex-1 min-h-0 overflow-y-auto scrollbar-thin pt-1"
+                    >
                       {/* 拖拽引用提示：引用块样式，左侧竖线 + 缩进，与下方文件列表内容左对齐 */}
                       <div className="mb-1.5 ml-4 border-l-2 border-primary/40 pl-2 text-[11px] leading-4 text-foreground/75">
                         支持拖拽文件或文件夹到输入框，实现引用
@@ -1321,7 +1448,7 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
                       {showProjectFiles && !isProjectRootUnavailable && workspaceSlug && (
                         <FileDropZone workspaceSlug={workspaceSlug} target="workspace" onFilesUploaded={handleFilesUploaded} onFilesAttached={handleWorkspaceFilesAttached} onAttachFolder={handleAttachWorkspaceFolder} onFoldersDropped={handleWorkspaceFoldersDropped} />
                       )}
-                    </div>
+                    </PersistentFileScrollArea>
                   )}
                 </>
               ) : (

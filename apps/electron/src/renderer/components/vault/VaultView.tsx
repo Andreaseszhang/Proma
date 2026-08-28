@@ -147,7 +147,7 @@ function VaultFileList({
                     <span className="min-w-0 truncate">{child.name}</span>
                   </button>
                 </ContextMenuTrigger>
-                <ContextMenuContent className="w-40">
+                <ContextMenuContent className="z-[9999] w-40 min-w-0 p-0.5">
                   <ContextMenuItem disabled={!canCreate} onSelect={() => onCreateNote(child.relativePath)}>新建笔记</ContextMenuItem>
                   <ContextMenuItem disabled={!canCreate} onSelect={() => onCreateFolder(child.relativePath)}>新建文件夹</ContextMenuItem>
                 </ContextMenuContent>

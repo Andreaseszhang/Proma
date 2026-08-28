@@ -6,7 +6,8 @@
 
 import * as React from 'react'
 import { useAtomValue, useSetAtom } from 'jotai'
-import { Blocks, Brain, BookOpen, CalendarDays, Clock, Columns2, FolderOpen, Globe, ListTodo, MessageCircle, PanelRight, Plus, Repeat2, ServerCog, SquareTerminal, X } from 'lucide-react'
+import { Blocks, Brain, CalendarDays, Clock, Columns2, FolderOpen, Globe, ListTodo, MessageCircle, PanelRight, Plus, Repeat2, ServerCog, SquareTerminal, X } from 'lucide-react'
+import { OBSIDIAN_NAME, ObsidianIcon } from '@/components/obsidian/obsidian-brand'
 import { cn } from '@/lib/utils'
 import { getScrollLeftToRevealTab } from '@/lib/tab-visibility'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
@@ -397,12 +398,6 @@ export function DiffPanelTabBar({
                 </DropdownMenuItem>
               </>
             )}
-            {onOpenVault && (
-              <DropdownMenuItem onSelect={onOpenVault}>
-                <BookOpen className="size-3.5" />
-                打开 Vault
-              </DropdownMenuItem>
-            )}
             {onOpenChat && (
               <>
                 <DropdownMenuSeparator />
@@ -416,6 +411,12 @@ export function DiffPanelTabBar({
               <DropdownMenuItem onSelect={() => onOpenWorkspaceComponent('automations')}>
                 <Clock className="size-3.5" />
                 打开定时任务
+              </DropdownMenuItem>
+            )}
+            {onOpenVault && (
+              <DropdownMenuItem onSelect={onOpenVault}>
+                <ObsidianIcon className="size-3.5" />
+                打开 {OBSIDIAN_NAME}
               </DropdownMenuItem>
             )}
           </DropdownMenuContent>

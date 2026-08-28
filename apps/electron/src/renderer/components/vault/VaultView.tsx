@@ -2,7 +2,7 @@ import * as React from 'react'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
 import { BookOpen, ChevronDown, ChevronRight, ChevronsUpDown, CircleHelp, Folder, FolderOpen, Loader2, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import type { VaultCandidate, VaultFileEntry, VaultReadResult, VaultSummary, SkillMeta } from '@proma/shared'
+import type { VaultCandidate, VaultFileEntry, VaultFocus, VaultReadResult, VaultSummary, SkillMeta } from '@proma/shared'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -15,6 +15,7 @@ import { VaultLiveMarkdownEditor, type VaultLiveMarkdownEditorHandle } from './V
 import { VaultReferencePicker } from './VaultReferencePicker'
 import { SkillDetailView } from '@/components/agent-skills/SkillDetailView'
 import {
+  focusedVaultFolderAtom,
   selectedVaultFileAtom,
   vaultReadResultAtom,
   vaultRefreshTokenAtom,
@@ -61,7 +62,9 @@ function replaceVaultFrontmatterProperties(markdown: string, entries: Array<{ ke
 function VaultFileList({
   files,
   selectedPath,
+  focusedFolder,
   onSelect,
+  onFocusFolder,
   onDelete,
   onCreateNote,
   onCreateFolder,
@@ -70,7 +73,9 @@ function VaultFileList({
 }: {
   files: VaultFileEntry[]
   selectedPath: string | null
+  focusedFolder: string | null
   onSelect: (relativePath: string) => void
+  onFocusFolder: (relativePath: string) => void
   onDelete: (file: VaultFileEntry) => void
   onCreateNote: (folderPath: string) => void
   onCreateFolder: (folderPath: string) => void
@@ -115,12 +120,29 @@ function VaultFileList({
     })
   }, [selectedPath])
 
+  React.useEffect(() => {
+    if (!focusedFolder) return
+    const paths = [...getVaultFolderAncestors(focusedFolder), focusedFolder]
+    setExpandedFolders((current) => {
+      const next = new Set(current)
+      let changed = false
+      for (const path of paths) {
+        if (!next.has(path)) {
+          next.add(path)
+          changed = true
+        }
+      }
+      return changed ? next : current
+    })
+  }, [focusedFolder])
+
   const renderEntries = (folder: VaultFolderNode, depth: number): React.ReactNode => (
     <>
       {Array.from(folder.folders.values())
         .sort((left, right) => left.name.localeCompare(right.name, undefined, { numeric: true }))
         .map((child) => {
           const expanded = expandedFolders.has(child.relativePath)
+          const focused = focusedFolder === child.relativePath
           return (
             <React.Fragment key={child.relativePath}>
               <ContextMenu>
@@ -130,6 +152,7 @@ function VaultFileList({
                     aria-expanded={expanded}
                     aria-label={`${expanded ? '收起' : '展开'}文件夹 ${child.name}`}
                     onClick={() => {
+                      onFocusFolder(child.relativePath)
                       setExpandedFolders((current) => {
                         const next = new Set(current)
                         if (next.has(child.relativePath)) next.delete(child.relativePath)
@@ -137,7 +160,10 @@ function VaultFileList({
                         return next
                       })
                     }}
-                    className="flex h-8 w-full min-w-0 items-center gap-1 rounded-md pr-2 text-left text-[13px] text-foreground/80 transition-colors hover:bg-muted/70 hover:text-foreground"
+                    className={cn(
+                      'flex h-8 w-full min-w-0 items-center gap-1 rounded-md pr-2 text-left text-[13px] transition-colors hover:bg-muted/70 hover:text-foreground',
+                      focused ? 'bg-accent text-accent-foreground shadow-sm' : 'text-foreground/80',
+                    )}
                     style={{ paddingLeft: `${10 + Math.min(depth, 6) * 14}px` }}
                   >
                     {expanded ? <ChevronDown size={14} className="shrink-0 text-muted-foreground" /> : <ChevronRight size={14} className="shrink-0 text-muted-foreground" />}
@@ -439,6 +465,7 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
   const [loading, setLoading] = React.useState(true)
   const [fileLoading, setFileLoading] = React.useState(false)
   const [selectedFile, setSelectedFile] = useAtom(selectedVaultFileAtom)
+  const [focusedFolder, setFocusedFolder] = useAtom(focusedVaultFolderAtom)
   const [readResult, setReadResult] = useAtom(vaultReadResultAtom)
   const [refreshToken, setRefreshToken] = useAtom(vaultRefreshTokenAtom)
   const [vaultHelpOpen, setVaultHelpOpen] = React.useState(false)
@@ -454,6 +481,8 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
   const [skillDetail, setSkillDetail] = React.useState<{ skill: SkillMeta; isBuiltin: boolean; skillsDir: string } | null>(null)
   const [skillUpdating, setSkillUpdating] = React.useState(false)
   const selectedFileRef = React.useRef(selectedFile)
+  // Start from wall-clock time so a remounted workspace tab still supersedes an older IPC snapshot.
+  const focusSequenceRef = React.useRef(Date.now())
   const readRequestRef = React.useRef(0)
   const initialRefreshRef = React.useRef(true)
 
@@ -491,18 +520,23 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
     document.addEventListener('mouseup', cleanup)
   }, [])
 
+  const updateAgentFocus = React.useCallback((focus: Omit<VaultFocus, 'sequence'> | null): void => {
+    if (!sessionId) return
+    const next = focus ? { ...focus, sequence: ++focusSequenceRef.current } : null
+    void window.electronAPI.setVaultUserContext(sessionId, next, true)
+  }, [sessionId])
+
   React.useEffect(() => {
     if (!sessionId) return
-    void window.electronAPI.setVaultUserContext(sessionId, selectedFileRef.current, true)
     return () => {
       void window.electronAPI.setVaultUserContext(sessionId, null, false)
     }
   }, [sessionId])
 
   React.useEffect(() => {
-    if (!sessionId) return
-    void window.electronAPI.setVaultUserContext(sessionId, selectedFile, true)
-  }, [selectedFile, sessionId])
+    if (!selectedFile) return
+    updateAgentFocus({ kind: 'file', relativePath: selectedFile })
+  }, [selectedFile, updateAgentFocus])
 
   const refresh = React.useCallback(async ({ showLoading = false }: { showLoading?: boolean } = {}): Promise<void> => {
     if (showLoading) setLoading(true)
@@ -835,7 +869,9 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
               <VaultFileList
                 files={files}
                 selectedPath={selectedFile}
-                onSelect={(path) => { void openFile(path) }}
+                focusedFolder={focusedFolder}
+                onSelect={(path) => { setFocusedFolder(null); void openFile(path) }}
+                onFocusFolder={(relativePath) => { setFocusedFolder(relativePath); updateAgentFocus({ kind: 'folder', relativePath }) }}
                 onDelete={setDeleteTarget}
                 onCreateNote={(folderPath) => { void createNoteInFolder(folderPath) }}
                 onCreateFolder={openCreateFolderDialog}

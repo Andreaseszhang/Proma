@@ -69,7 +69,7 @@ import { exitPlanService, type ExitPlanPermissionResult } from './agent-exit-pla
 import { validateToolInput } from './agent-tool-input-validator'
 import { estimateTokenCount, WRITE_CONTENT_TOKEN_THRESHOLD } from './agent-tool-token-estimator'
 import { buildPiBuiltinTools } from './adapters/pi-builtin-tools'
-import { getVaultUserContext } from './vault-service'
+import { getAgentVaultRoots, getVaultUserContext } from './vault-service'
 import { buildPiMcpTools } from './adapters/pi-mcp-tools'
 import { buildAgentRuntimeEnv, type AgentRuntimeEnv } from './agent-runtime-env'
 import { isVisibleRunMessage } from './agent-run-message-visibility'
@@ -589,6 +589,7 @@ export class AgentOrchestrator {
     userMessage: string,
     createdAt = Date.now(),
     uuid?: string,
+    vaultFocus?: import('@proma/shared').VaultFocusAttribution,
   ): string {
     const persistedUuid = uuid ?? randomUUID()
     const userSDKMsg: SDKMessage = {
@@ -599,6 +600,7 @@ export class AgentOrchestrator {
       },
       parent_tool_use_id: null,
       _createdAt: createdAt,
+      ...(vaultFocus ? { _vaultFocus: vaultFocus } : {}),
     } as unknown as SDKMessage
     appendSDKMessages(sessionId, [userSDKMsg])
     return persistedUuid
@@ -693,6 +695,8 @@ export class AgentOrchestrator {
     extensions: { piCustomTools?: ToolDefinition[] } = {},
   ): Promise<void> {
     const { sessionId, userMessage, rawUserMessage, userMessageUuid, channelId, modelId, workspaceId: requestedWorkspaceId, additionalDirectories, permissionModeOverride, mentionedSkills, mentionedMcpServers, mentionedSessionIds, mentionedTodoIds, mentionedCalendarEventIds, automationContext, retryOfErrorUuid } = input
+    // Capture the focus once per turn. Later UI focus changes must not rewrite this reply's attribution.
+    const initialVaultFocus = getVaultUserContext(sessionId)
     const streamStartedAt = input.startedAt ?? Date.now()
     let userMessagePersisted = false
     let initialUserMessageUuid: string | undefined
@@ -719,6 +723,11 @@ export class AgentOrchestrator {
         rawUserMessage ?? userMessage,
         Date.now(),
         userMessageUuid,
+        initialVaultFocus ? {
+          displayName: initialVaultFocus.displayName,
+          rootPath: initialVaultFocus.rootPath,
+          focus: initialVaultFocus.focus,
+        } : undefined,
       )
       userMessagePersisted = true
     }
@@ -1017,7 +1026,7 @@ export class AgentOrchestrator {
       })
       const allAdditionalDirectories = resolveRuntimeAdditionalDirectories(
         attachedDirectories,
-        vaultUserContext,
+        getAgentVaultRoots(),
       )
       const browserAllowedRoots = [...new Set([
         workspaceId ? agentCwd : undefined,
@@ -2390,6 +2399,13 @@ export class AgentOrchestrator {
         },
         parent_tool_use_id: null,
         _createdAt: Date.now(),
+        ...(userVaultContext ? {
+          _vaultFocus: {
+            displayName: userVaultContext.displayName,
+            rootPath: userVaultContext.rootPath,
+            focus: userVaultContext.focus,
+          },
+        } : {}),
       } as unknown as SDKMessage
       appendSDKMessages(sessionId, [persistMsg])
       this.flushPendingUserSkillActivations(sessionId, uuid)

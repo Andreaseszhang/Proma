@@ -118,6 +118,7 @@ import type {
   VaultCandidate,
   VaultDeleteInput,
   VaultFileEntry,
+  VaultFocus,
   VaultReadResult,
   VaultRenameInput,
   VaultSearchResult,
@@ -498,7 +499,7 @@ export interface ElectronAPI {
   deleteVaultFile: (input: VaultDeleteInput) => Promise<void>
   searchVault: (query: string, limit?: number) => Promise<VaultSearchResult[]>
   appendVaultSource: (input: { relativePath: string; expectedSha256?: string; source: VaultSourceSnapshot }) => Promise<VaultWriteResult>
-  setVaultUserContext: (sessionId: string, relativePath: string | null, open?: boolean) => Promise<void>
+  setVaultUserContext: (sessionId: string, focus: VaultFocus | null, open?: boolean) => Promise<void>
 
   // ===== 应用图标切换 =====
 
@@ -1757,7 +1758,7 @@ const electronAPI: ElectronAPI = {
   deleteVaultFile: (input: VaultDeleteInput) => ipcRenderer.invoke(VAULT_IPC_CHANNELS.DELETE_FILE, input),
   searchVault: (query: string, limit?: number) => ipcRenderer.invoke(VAULT_IPC_CHANNELS.SEARCH, query, limit),
   appendVaultSource: (input: { relativePath: string; expectedSha256?: string; source: VaultSourceSnapshot }) => ipcRenderer.invoke(VAULT_IPC_CHANNELS.APPEND_SOURCE, input),
-  setVaultUserContext: (sessionId: string, relativePath: string | null, open = true) => ipcRenderer.invoke(VAULT_IPC_CHANNELS.SET_USER_CONTEXT, sessionId, relativePath, open),
+  setVaultUserContext: (sessionId: string, focus: VaultFocus | null, open = true) => ipcRenderer.invoke(VAULT_IPC_CHANNELS.SET_USER_CONTEXT, sessionId, focus, open),
 
   // 应用图标切换
   setAppIcon: (variantId: string) => {

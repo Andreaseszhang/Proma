@@ -20,6 +20,7 @@ import type {
   VaultConfig,
   VaultDeleteInput,
   VaultFileEntry,
+  VaultFocus,
   VaultReadResult,
   VaultRenameInput,
   VaultSearchResult,
@@ -170,25 +171,48 @@ function createFileExclusively(filePath: string, content: string): boolean {
 export interface VaultUserContextSnapshot {
   rootPath: string
   displayName: string
-  relativePath: string | null
-  allowAgentWrites: boolean
+  focus: VaultFocus
   openedAt: number
 }
 
 const vaultUserContextBySession = new Map<string, VaultUserContextSnapshot>()
 
-export function setVaultUserContext(sessionId: string, relativePath: string | null): void {
+function normalizeVaultFocus(rootPath: string, focus: VaultFocus): VaultFocus {
+  if (!focus || (focus.kind !== 'file' && focus.kind !== 'folder') || !Number.isSafeInteger(focus.sequence) || focus.sequence < 0) {
+    throw new Error('Vault focus 非法')
+  }
+  const target = focus.kind === 'file'
+    ? getSafeVaultTarget(rootPath, focus.relativePath)
+    : getSafeVaultFolderTarget(rootPath, focus.relativePath)
+  if (!existsSync(target.absolutePath)) throw new Error('Vault focus 目标不存在')
+  const stats = lstatSync(target.absolutePath)
+  if (focus.kind === 'file' ? !stats.isFile() : !stats.isDirectory()) {
+    throw new Error(`Vault focus 目标不是${focus.kind === 'file' ? ' Markdown 文件' : '文件夹'}`)
+  }
+  return { kind: focus.kind, relativePath: target.relativePath, sequence: focus.sequence }
+}
+
+/**
+ * The renderer provides only a relative focus path. Main resolves it against the
+ * configured root and rejects stale IPC so one session can never overwrite another.
+ */
+export function setVaultUserContext(sessionId: string, focus: VaultFocus | null): void {
   if (!sessionId) return
+  if (!focus) {
+    vaultUserContextBySession.delete(sessionId)
+    return
+  }
   const config = getVaultConfig()
   if (!config) {
     vaultUserContextBySession.delete(sessionId)
     return
   }
+  const previous = vaultUserContextBySession.get(sessionId)
+  if (previous && focus.sequence < previous.focus.sequence) return
   vaultUserContextBySession.set(sessionId, {
     rootPath: config.rootPath,
     displayName: config.displayName,
-    relativePath: relativePath?.trim() || null,
-    allowAgentWrites: config.allowAgentWrites,
+    focus: normalizeVaultFocus(config.rootPath, focus),
     openedAt: Date.now(),
   })
 }
@@ -199,13 +223,22 @@ export function clearVaultUserContext(sessionId: string): void {
 
 export function getVaultUserContext(sessionId: string): VaultUserContextSnapshot | null {
   const context = vaultUserContextBySession.get(sessionId)
+  if (!context) return null
+  // A later switch to another configured Vault invalidates the previous focus.
   const config = getVaultConfig()
-  if (!context || !config) return null
-  return {
-    ...context,
-    rootPath: config.rootPath,
-    displayName: config.displayName,
-    allowAgentWrites: config.allowAgentWrites,
+  if (!config || config.rootPath !== context.rootPath) {
+    vaultUserContextBySession.delete(sessionId)
+    return null
+  }
+  try {
+    return {
+      ...context,
+      focus: normalizeVaultFocus(context.rootPath, context.focus),
+      displayName: config.displayName,
+    }
+  } catch {
+    vaultUserContextBySession.delete(sessionId)
+    return null
   }
 }
 
@@ -610,6 +643,28 @@ export function discoverVaultCandidates(): VaultCandidate[] {
     ? [{ path: managedRoot, displayName: 'Proma Vault', isObsidianVault: existsSync(join(managedRoot, '.obsidian')), isPromaManaged: true }]
     : []
   return [...candidates, ...discoverObsidianVaultCandidates()]
+}
+
+/**
+ * All valid Vault roots are ambient local-file permissions for an Agent run.
+ * Obsidian's registry is the source of truth; the selected Proma Vault is also
+ * retained for users that have not installed Obsidian.
+ */
+export function getAgentVaultRoots(): string[] {
+  const roots = new Map<string, string>()
+  const add = (path: string): void => {
+    try {
+      const root = assertVaultRoot(path)
+      const key = process.platform === 'win32' ? root.toLowerCase() : root
+      roots.set(key, root)
+    } catch {
+      // A stale registry/config entry must never block an Agent run.
+    }
+  }
+  const configured = getVaultConfig()
+  if (configured) add(configured.rootPath)
+  for (const candidate of discoverVaultCandidates()) add(candidate.path)
+  return [...roots.values()]
 }
 
 export function discoverObsidianVaultCandidates(): VaultCandidate[] {

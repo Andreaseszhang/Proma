@@ -30,6 +30,21 @@ export interface VaultFileEntry {
   modifiedAt: number
 }
 
+/** A user-selected location in a Vault. Paths are always relative to its authorized root. */
+export interface VaultFocus {
+  kind: 'file' | 'folder'
+  relativePath: string
+  /** Monotonic per-renderer sequence; the main process ignores stale focus IPC. */
+  sequence: number
+}
+
+/** Durable turn metadata used to render the post-response Obsidian context chip. */
+export interface VaultFocusAttribution {
+  displayName: string
+  rootPath: string
+  focus: VaultFocus
+}
+
 export interface VaultRenameInput {
   relativePath: string
   name: string

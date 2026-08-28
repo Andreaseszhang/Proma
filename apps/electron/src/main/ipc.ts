@@ -6001,16 +6001,26 @@ export function registerIpcHandlers(): void {
     })
   })
 
-  ipcMain.handle(VAULT_IPC_CHANNELS.SET_USER_CONTEXT, async (_, sessionId: unknown, relativePath: unknown, open: unknown): Promise<void> => {
+  ipcMain.handle(VAULT_IPC_CHANNELS.SET_USER_CONTEXT, async (_, sessionId: unknown, focus: unknown, open: unknown): Promise<void> => {
     if (typeof sessionId !== 'string' || sessionId.trim().length === 0) throw new Error('Vault 会话 ID 非法')
-    if (open === false) {
+    if (open === false || focus === null || focus === undefined) {
       clearVaultUserContext(sessionId)
       return
     }
-    if (relativePath !== null && relativePath !== undefined && typeof relativePath !== 'string') {
-      throw new Error('Vault relativePath 非法')
+    if (!focus || typeof focus !== 'object') throw new Error('Vault focus 非法')
+    const value = focus as Record<string, unknown>
+    if (
+      (value.kind !== 'file' && value.kind !== 'folder')
+      || typeof value.relativePath !== 'string'
+      || !Number.isSafeInteger(value.sequence)
+    ) {
+      throw new Error('Vault focus 非法')
     }
-    setVaultUserContext(sessionId, typeof relativePath === 'string' ? relativePath : null)
+    setVaultUserContext(sessionId, {
+      kind: value.kind,
+      relativePath: value.relativePath,
+      sequence: value.sequence as number,
+    })
   })
 
   // ===== Windows Agent Island =====

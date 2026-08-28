@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
-import { BookOpen, ChevronDown, ChevronRight, ChevronsUpDown, CircleHelp, Folder, FolderOpen, Loader2, PanelLeftClose, PanelLeftOpen, Plus, RefreshCw, Save, Trash2 } from 'lucide-react'
+import { BookOpen, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, CircleHelp, Folder, FolderOpen, Loader2, Plus, RefreshCw, Save, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { VaultCandidate, VaultFileEntry, VaultReadResult, VaultSummary, SkillMeta } from '@proma/shared'
 import { Button } from '@/components/ui/button'
@@ -33,7 +33,6 @@ import {
 } from './vault-reference-utils'
 import { getVaultEditorKey, shouldAdoptVaultReadContent } from './vault-editor-lifecycle'
 import { getVaultEditorHeaderActions } from './vault-editor-header-actions'
-import { getVaultSidebarLayout } from './vault-sidebar-layout'
 import { buildVaultTree, getInitialVaultExpandedFolders, getVaultFolderAncestors, hasSameVaultTreeEntries, type VaultFolderNode } from './vault-tree-model'
 
 const VAULT_NAME = 'Vault'
@@ -63,16 +62,34 @@ function VaultFileList({
   selectedPath,
   onSelect,
   onDelete,
+  treeAction,
 }: {
   files: VaultFileEntry[]
   selectedPath: string | null
   onSelect: (relativePath: string) => void
   onDelete: (file: VaultFileEntry) => void
+  treeAction: { type: 'expand' | 'collapse'; version: number }
 }): React.ReactElement {
   const tree = React.useMemo(() => buildVaultTree(files), [files])
+  const allFolderPaths = React.useMemo(() => {
+    const paths: string[] = []
+    const visit = (folder: VaultFolderNode): void => {
+      for (const child of folder.folders.values()) {
+        paths.push(child.relativePath)
+        visit(child)
+      }
+    }
+    visit(tree)
+    return paths
+  }, [tree])
   // Start collapsed: this prevents a large nested Vault from mounting every file
   // row and its Tooltip tree on first paint. Expanded paths survive list refreshes.
   const [expandedFolders, setExpandedFolders] = React.useState<ReadonlySet<string>>(getInitialVaultExpandedFolders)
+
+  React.useEffect(() => {
+    if (treeAction.version === 0) return
+    setExpandedFolders(treeAction.type === 'expand' ? new Set(allFolderPaths) : new Set())
+  }, [allFolderPaths, treeAction])
 
   React.useEffect(() => {
     if (!selectedPath) return
@@ -472,8 +489,7 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
   const [vaultHelpOpen, setVaultHelpOpen] = React.useState(false)
   const [deleteTarget, setDeleteTarget] = React.useState<VaultFileEntry | null>(null)
   const [deleting, setDeleting] = React.useState(false)
-  const [vaultSidebarCollapsed, setVaultSidebarCollapsed] = React.useState(false)
-  const vaultSidebarLayout = getVaultSidebarLayout(vaultSidebarCollapsed, embedded)
+  const [vaultTreeAction, setVaultTreeAction] = React.useState<{ type: 'expand' | 'collapse'; version: number }>({ type: 'collapse', version: 0 })
   const [skillDetail, setSkillDetail] = React.useState<{ skill: SkillMeta; isBuiltin: boolean; skillsDir: string } | null>(null)
   const [skillUpdating, setSkillUpdating] = React.useState(false)
   const selectedFileRef = React.useRef(selectedFile)
@@ -809,23 +825,7 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
       <main className={cn('flex h-full min-h-0 flex-col bg-muted/25', embedded && 'bg-content-area')}>
         {!embedded && <div className="relative z-10 h-[100px] shrink-0 border-b border-border/60 bg-muted/25" />}
         <div className="relative flex min-h-0 flex-1">
-          {vaultSidebarLayout.renderExpandButton && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  aria-label={`展开 ${VAULT_NAME} 文件树`}
-                  onClick={() => setVaultSidebarCollapsed(false)}
-                  className="titlebar-no-drag absolute left-2 top-2 z-20 flex size-7 items-center justify-center rounded-md bg-background/90 text-muted-foreground shadow-sm hover:bg-muted hover:text-foreground"
-                >
-                  <PanelLeftOpen size={15} />
-                </button>
-              </TooltipTrigger>
-              <TooltipContent side="right">展开 {VAULT_NAME} 文件树</TooltipContent>
-            </Tooltip>
-          )}
-          {vaultSidebarLayout.renderSidebar && (
-            <aside className={cn('flex shrink-0 flex-col bg-muted/25 shadow-[1px_0_0_hsl(var(--border)/0.45)]', vaultSidebarLayout.widthClass)}>
+          <aside className={cn('flex shrink-0 flex-col bg-muted/25 shadow-[1px_0_0_hsl(var(--border)/0.45)]', embedded ? 'w-[200px]' : 'w-[280px]')}>
               <header className={cn('flex h-14 items-center gap-2 px-3', embedded ? 'titlebar-no-drag' : 'titlebar-drag-region')}>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[13px] font-medium text-foreground">{config?.displayName ?? '选择 Vault'}</p>
@@ -833,11 +833,29 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
                 <div className="flex items-center gap-0.5 titlebar-no-drag">
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <button type="button" aria-label={`折叠 ${VAULT_NAME} 文件树`} onClick={() => setVaultSidebarCollapsed(true)} className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
-                        <PanelLeftClose size={15} />
+                      <button
+                        type="button"
+                        aria-label="全部展开文件树"
+                        onClick={() => setVaultTreeAction((current) => ({ type: 'expand', version: current.version + 1 }))}
+                        className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                      >
+                        <ChevronsUpDown size={15} />
                       </button>
                     </TooltipTrigger>
-                    <TooltipContent>折叠 {VAULT_NAME} 文件树</TooltipContent>
+                    <TooltipContent>全部展开</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label="全部折叠文件树"
+                        onClick={() => setVaultTreeAction((current) => ({ type: 'collapse', version: current.version + 1 }))}
+                        className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                      >
+                        <ChevronsDownUp size={15} />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>全部折叠</TooltipContent>
                   </Tooltip>
                   {config && (
                     <Tooltip>
@@ -856,6 +874,7 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
                 selectedPath={selectedFile}
                 onSelect={(path) => { void openFile(path) }}
                 onDelete={setDeleteTarget}
+                treeAction={vaultTreeAction}
               />
               <div className="titlebar-no-drag flex shrink-0 items-center border-t border-border/50 p-2">
                 <Popover
@@ -918,8 +937,7 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
                   </PopoverContent>
                 </Popover>
               </div>
-            </aside>
-          )}
+          </aside>
           <VaultMarkdownPane
             readResult={readResult}
             files={files}

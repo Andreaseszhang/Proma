@@ -10,7 +10,7 @@
 
 import { existsSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
-import { getFetchFn } from './proxy-fetch'
+import { createManagedProxyFetch } from './proxy-fetch'
 import { getEffectiveProxyUrl } from './proxy-settings-service'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
@@ -72,9 +72,11 @@ export async function validateMcpServer(
   let transport: StdioClientTransport | SSEClientTransport | StreamableHTTPClientTransport | undefined
   const timeoutMs = Math.max(1, entry.timeout ?? 30) * 1000
 
+  let proxyFetch: ReturnType<typeof createManagedProxyFetch> | undefined
+
   try {
-    const proxyFetch = (type === 'http' || type === 'sse')
-      ? getFetchFn(await getEffectiveProxyUrl())
+    proxyFetch = (type === 'http' || type === 'sse')
+      ? createManagedProxyFetch(await getEffectiveProxyUrl())
       : undefined
 
     if (type === 'stdio') {
@@ -87,8 +89,8 @@ export async function validateMcpServer(
       const oauthHeaders = workspaceSlug ? await getMcpOAuthHeaders(workspaceSlug, name, entry.url!) : undefined
       const headers = { ...(entry.headers ?? {}), ...(oauthHeaders ?? {}) }
       const requestInit = Object.keys(headers).length > 0 ? { headers } : undefined
-      if (type === 'http') transport = new StreamableHTTPClientTransport(new URL(entry.url!), { requestInit, fetch: proxyFetch })
-      else transport = new SSEClientTransport(new URL(entry.url!), { requestInit, fetch: proxyFetch })
+      if (type === 'http') transport = new StreamableHTTPClientTransport(new URL(entry.url!), { requestInit, fetch: proxyFetch?.fetch })
+      else transport = new SSEClientTransport(new URL(entry.url!), { requestInit, fetch: proxyFetch?.fetch })
     }
 
     await client.connect(transport, { timeout: timeoutMs })
@@ -98,6 +100,7 @@ export async function validateMcpServer(
     return { name, valid: false, reason: error instanceof Error ? error.message : 'MCP 握手或工具发现失败' }
   } finally {
     try { await transport?.close() } catch { /* 验证结束时忽略关闭错误 */ }
+    await proxyFetch?.close()
   }
 }
 

@@ -17,13 +17,14 @@ import type { AgentToolResult } from '@earendil-works/pi-agent-core'
 import type { TextContent, ImageContent } from '@earendil-works/pi-ai'
 import type { TSchema } from 'typebox'
 import { Type } from 'typebox'
-import { getFetchFn } from '../proxy-fetch'
+import { createManagedProxyFetch, type ManagedProxyFetch } from '../proxy-fetch'
 import { sanitizeToolResultImageContent } from '../image-content-validation'
 
 const DEFAULT_MCP_REQUEST_TIMEOUT_MS = 60_000
 const DEFAULT_MCP_STARTUP_TIMEOUT_MS = 30_000
 const OPTIONAL_MCP_BOOTSTRAP_TIMEOUT_MS = 500
 const HTTP_SESSION_REJECTION_PATTERN = /missing session id|no valid session id provided|mcp-session-id header is required/i
+const transportProxyFetches = new WeakMap<Transport, ManagedProxyFetch>()
 
 interface PiMcpServerConfig {
   type?: unknown
@@ -48,6 +49,7 @@ interface McpConnection {
   client: Client
   transport: Transport
   close: () => Promise<void>
+  proxyFetch?: ManagedProxyFetch
   tools?: McpToolInfo[]
   toolsPromise?: Promise<McpToolInfo[]>
 }
@@ -114,9 +116,9 @@ function getTimeoutMs(config: PiMcpServerConfig): number {
   return timeoutSec * 1000
 }
 
-function getProxyFetch(config: PiMcpServerConfig): typeof globalThis.fetch | undefined {
+function getProxyFetch(config: PiMcpServerConfig): ManagedProxyFetch | undefined {
   return typeof config.proxyUrl === 'string' && config.proxyUrl.trim()
-    ? getFetchFn(config.proxyUrl)
+    ? createManagedProxyFetch(config.proxyUrl)
     : undefined
 }
 
@@ -145,10 +147,12 @@ function createTransport(name: string, config: PiMcpServerConfig): Transport | u
     }
     const headers = getHeaders(config)
     const proxyFetch = getProxyFetch(config)
-    return new StreamableHTTPClientTransport(new URL(config.url), {
+    const transport = new StreamableHTTPClientTransport(new URL(config.url), {
       requestInit: headers ? { headers } : undefined,
-      fetch: proxyFetch,
+      fetch: proxyFetch?.fetch,
     })
+    if (proxyFetch) transportProxyFetches.set(transport, proxyFetch)
+    return transport
   }
 
   if (type === 'sse') {
@@ -158,21 +162,21 @@ function createTransport(name: string, config: PiMcpServerConfig): Transport | u
     }
     const headers = getHeaders(config)
     const proxyFetch = getProxyFetch(config)
-    return new SSEClientTransport(new URL(config.url), {
+    const transport = new SSEClientTransport(new URL(config.url), {
       requestInit: headers ? { headers } : undefined,
-      fetch: proxyFetch,
+      fetch: proxyFetch?.fetch,
       eventSourceInit: headers || proxyFetch
         ? ({
-          fetch: (input: RequestInfo | URL, init?: RequestInit) => (proxyFetch ?? fetch)(input, {
-            ...init,
-            headers: {
-              ...(init?.headers as Record<string, string> | undefined),
-              ...headers,
-            },
-          }),
+          fetch: (input: RequestInfo | URL, init?: RequestInit) => {
+            const mergedHeaders = new Headers(init?.headers)
+            for (const [key, value] of Object.entries(headers ?? {})) mergedHeaders.set(key, value)
+            return (proxyFetch?.fetch ?? fetch)(input, { ...init, headers: mergedHeaders })
+          },
         } as any)
         : undefined,
     })
+    if (proxyFetch) transportProxyFetches.set(transport, proxyFetch)
+    return transport
   }
 
   console.warn(`[Pi MCP] MCP 服务器 ${name} 使用暂不支持的类型 ${String(type)}，已跳过`)
@@ -426,9 +430,16 @@ class PiMcpClientManager {
   ): Promise<McpConnection> {
     const transport = createTransport(serverName, config)
     if (!transport) throw new Error(`无法创建 MCP transport: ${serverName}`)
+    const proxyFetch = transportProxyFetches.get(transport)
 
     const client = new Client({ name: 'proma-pi-agent-mcp-bridge', version: '0.1.0' }, { capabilities: {} })
-    await client.connect(transport, { timeout: getTimeoutMs(config) })
+    try {
+      await client.connect(transport, { timeout: getTimeoutMs(config) })
+    } catch (error) {
+      try { await transport.close() } catch { /* connection setup already failed */ }
+      await proxyFetch?.close()
+      throw error
+    }
 
     let closing = false
 
@@ -451,7 +462,11 @@ class PiMcpClientManager {
       transport,
       close: async () => {
         closing = true
-        await transport.close()
+        try {
+          await transport.close()
+        } finally {
+          await proxyFetch?.close()
+        }
       },
     }
   }

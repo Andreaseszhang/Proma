@@ -1021,6 +1021,11 @@ export interface McpOAuthStartResult {
   expiresAt?: number
 }
 
+export interface SaveWorkspaceMcpConfigOptions {
+  /** Names explicitly disabled by a user action; cancels any in-flight validation. */
+  explicitlyDisabledServerNames?: string[]
+}
+
 /** Store a static MCP token in Keychain-backed safeStorage; never persisted in mcp.json. */
 export interface SaveMcpApiKeyInput {
   workspaceSlug: string

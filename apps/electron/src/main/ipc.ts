@@ -2850,7 +2850,10 @@ export function registerIpcHandlers(): void {
   // card toggle before they can become enabled.
   ipcMain.handle(
     AGENT_IPC_CHANNELS.SAVE_MCP_CONFIG,
-    async (_, workspaceSlug: string, config: WorkspaceMcpConfig): Promise<void> => {
+    async (_, workspaceSlug: string, config: WorkspaceMcpConfig, options?: import('@proma/shared').SaveWorkspaceMcpConfigOptions): Promise<void> => {
+      for (const name of options?.explicitlyDisabledServerNames ?? []) {
+        clearWorkspaceMcpPendingValidation(workspaceSlug, name)
+      }
       const pendingValidations: Array<{ name: string; candidate: import('@proma/shared').McpServerEntry }> = []
       const servers: WorkspaceMcpConfig['servers'] = {}
 

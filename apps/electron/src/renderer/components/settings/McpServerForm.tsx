@@ -128,6 +128,11 @@ export function McpServerForm({ server, workspaceSlug, onSaved, onChanged, onCan
   const [name, setName] = React.useState(server?.name ?? '')
   const [transportType, setTransportType] = React.useState<McpTransportType>(server?.entry.type ?? 'stdio')
   const [enabled, setEnabled] = React.useState(server?.entry.enabled ?? false) // 默认关闭
+  const explicitlyDisabledRef = React.useRef(false)
+  const handleEnabledChange = React.useCallback((nextEnabled: boolean): void => {
+    if (!nextEnabled) explicitlyDisabledRef.current = true
+    setEnabled(nextEnabled)
+  }, [])
 
   // stdio 字段
   const [command, setCommand] = React.useState(server?.entry.command ?? '')
@@ -213,7 +218,10 @@ export function McpServerForm({ server, workspaceSlug, onSaved, onChanged, onCan
       const newConfig: WorkspaceMcpConfig = {
         servers: { ...config.servers, [serverName]: entry },
       }
-      await window.electronAPI.saveWorkspaceMcpConfig(workspaceSlug, newConfig)
+      const options = explicitlyDisabledRef.current && !entry.enabled
+        ? { explicitlyDisabledServerNames: [serverName] }
+        : undefined
+      await window.electronAPI.saveWorkspaceMcpConfig(workspaceSlug, newConfig, options)
       if (generation === saveGenerationRef.current && mountedRef.current) {
         // 编辑抽屉外的 MCP 卡片使用独立快照；每次持久化后通知其局部重读，
         // 让测试结果无需离开再进入页面即可同步显示。
@@ -577,7 +585,7 @@ export function McpServerForm({ server, workspaceSlug, onSaved, onChanged, onCan
                 : '关闭时该 MCP 不会在 Agent 会话中加载。'
             }
             checked={enabled}
-            onCheckedChange={setEnabled}
+            onCheckedChange={handleEnabledChange}
           />
         </SettingsCard>
       </SettingsSection>

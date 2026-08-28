@@ -656,8 +656,8 @@ export interface ElectronAPI {
   /** 获取工作区 MCP 配置 */
   getWorkspaceMcpConfig: (workspaceSlug: string) => Promise<WorkspaceMcpConfig>
 
-  /** 保存工作区 MCP 配置 */
-  saveWorkspaceMcpConfig: (workspaceSlug: string, config: WorkspaceMcpConfig) => Promise<void>
+  /** 保存工作区 MCP 配置；显式关闭的条目会取消进行中的验证。 */
+  saveWorkspaceMcpConfig: (workspaceSlug: string, config: WorkspaceMcpConfig, options?: import('@proma/shared').SaveWorkspaceMcpConfigOptions) => Promise<void>
 
   /** 刷新并持久化工作区 MCP 真实连接状态 */
   refreshMcpConnections: (workspaceSlug: string) => Promise<WorkspaceMcpConfig>
@@ -1947,8 +1947,8 @@ const electronAPI: ElectronAPI = {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.GET_MCP_CONFIG, workspaceSlug)
   },
 
-  saveWorkspaceMcpConfig: (workspaceSlug: string, config: WorkspaceMcpConfig) => {
-    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.SAVE_MCP_CONFIG, workspaceSlug, config)
+  saveWorkspaceMcpConfig: (workspaceSlug: string, config: WorkspaceMcpConfig, options?: import('@proma/shared').SaveWorkspaceMcpConfigOptions) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.SAVE_MCP_CONFIG, workspaceSlug, config, options)
   },
 
   refreshMcpConnections: (workspaceSlug: string) => {

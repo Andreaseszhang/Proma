@@ -151,5 +151,5 @@ export const LiveMarkdownEditor = React.forwardRef<LiveMarkdownEditorHandle, Liv
     instance.update(value)
   }, [value])
 
-  return <div ref={hostRef} className={cn('h-full min-h-0', className)} />
+  return <div ref={hostRef} className={cn('live-markdown-editor vault-ink-mde h-full min-h-0', className)} />
 })

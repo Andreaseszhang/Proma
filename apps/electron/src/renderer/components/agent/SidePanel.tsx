@@ -1713,6 +1713,7 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
               handleWorkspaceTabChange(component)
             }}
             onOpenVault={() => {
+              setWorkspaceComponentTabs((previous) => previous.includes('vault') ? previous : [...previous, 'vault'])
               setIsOpen(true)
               handleWorkspaceTabChange('vault')
             }}

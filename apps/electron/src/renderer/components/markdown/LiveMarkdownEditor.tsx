@@ -4,6 +4,7 @@ import { Prec, RangeSetBuilder, StateEffect, StateField, type EditorState, type 
 import { Decoration, EditorView, ViewPlugin, keymap, type DecorationSet } from '@codemirror/view'
 import ink, { type Instance } from 'ink-mde'
 import { cn } from '@/lib/utils'
+import { liveMarkdownBlockPreview } from './LiveMarkdownPreview'
 
 export interface LiveMarkdownEditorHandle {
   focus: () => void
@@ -181,6 +182,7 @@ export const LiveMarkdownEditor = React.forwardRef<LiveMarkdownEditorHandle, Liv
           return { destroy: () => { if (viewRef.current === view) viewRef.current = null } }
         }),
         ...markdownSyntaxVisibility,
+        liveMarkdownBlockPreview,
         ...extensions,
       ].map((extension) => ({ type: 'default' as const, value: extension })),
       search: false,

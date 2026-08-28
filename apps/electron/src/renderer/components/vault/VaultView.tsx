@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
-import { BookOpen, ChevronDown, ChevronRight, CircleHelp, Folder, FolderOpen, Loader2, PanelLeftClose, PanelLeftOpen, Plus, RefreshCw, Save, Trash2 } from 'lucide-react'
+import { BookOpen, ChevronDown, ChevronRight, ChevronsUpDown, CircleHelp, Folder, FolderOpen, Loader2, PanelLeftClose, PanelLeftOpen, Plus, RefreshCw, Save, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { VaultCandidate, VaultFileEntry, VaultReadResult, VaultSummary, SkillMeta } from '@proma/shared'
 import { Button } from '@/components/ui/button'
@@ -8,6 +8,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { Input } from '@/components/ui/input'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { VaultLiveMarkdownEditor, type VaultLiveMarkdownEditorHandle } from './VaultLiveMarkdownEditor'
 import { VaultReferencePicker } from './VaultReferencePicker'
@@ -377,6 +378,7 @@ function VaultMarkdownPane({
   readResult,
   files,
   loading,
+  hasVault,
   workspaceSlug,
   refreshing,
   onRefresh,
@@ -389,6 +391,7 @@ function VaultMarkdownPane({
   readResult: VaultReadResult | null
   files: VaultFileEntry[]
   loading: boolean
+  hasVault: boolean
   workspaceSlug: string | null
   refreshing: boolean
   onRefresh: () => void
@@ -403,7 +406,7 @@ function VaultMarkdownPane({
       <section className="flex min-w-0 flex-1 flex-col bg-muted/25">
         <div className="mx-auto flex h-full w-full max-w-5xl flex-col px-5 py-5">
           <div className="titlebar-no-drag flex min-w-0 items-center gap-2">
-            <p className="min-w-0 flex-1 truncate px-4 text-sm text-muted-foreground">{loading ? '正在加载笔记' : '选择一篇笔记开始编辑'}</p>
+            <p className="min-w-0 flex-1 truncate px-4 text-sm text-muted-foreground">{loading ? '正在加载笔记' : hasVault ? '选择一篇笔记开始编辑' : '从左下角选择或创建 Vault'}</p>
             <VaultRefreshButton refreshing={refreshing} onRefresh={onRefresh} />
           </div>
           {loading && (
@@ -452,7 +455,8 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
   )
   const [config, setConfig] = React.useState<VaultSummary | null>(null)
   const [candidates, setCandidates] = React.useState<VaultCandidate[]>([])
-  const [vaultDiscoveryComplete, setVaultDiscoveryComplete] = React.useState(false)
+  const [vaultSwitcherOpen, setVaultSwitcherOpen] = React.useState(false)
+  const [candidatesLoading, setCandidatesLoading] = React.useState(false)
   const [files, setFiles] = React.useState<VaultFileEntry[]>([])
   const [loading, setLoading] = React.useState(true)
   const [refreshing, setRefreshing] = React.useState(false)
@@ -497,7 +501,7 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
     if (showLoading) setLoading(true)
     if (userInitiated) setRefreshing(true)
     try {
-      const nextConfig = await window.electronAPI.ensureDefaultVault()
+      const nextConfig = await window.electronAPI.getVaultConfig()
       setConfig(nextConfig)
       const nextFiles = nextConfig ? await window.electronAPI.listVaultFiles() : []
       setFiles((current) => hasSameVaultTreeEntries(current, nextFiles) ? current : nextFiles)
@@ -539,13 +543,20 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
     setQuoteDialogOpen(true)
   }, [config, files, pendingQuote, selectedFile])
 
+  const refreshVaultCandidates = React.useCallback(async (): Promise<void> => {
+    setCandidatesLoading(true)
+    try {
+      setCandidates(await window.electronAPI.listVaultCandidates())
+    } catch {
+      setCandidates([])
+    } finally {
+      setCandidatesLoading(false)
+    }
+  }, [])
+
   React.useEffect(() => {
-    if (config || vaultDiscoveryComplete) return
-    void window.electronAPI.listVaultCandidates()
-      .then(setCandidates)
-      .catch(() => setCandidates([]))
-      .finally(() => setVaultDiscoveryComplete(true))
-  }, [config, vaultDiscoveryComplete])
+    void refreshVaultCandidates()
+  }, [refreshVaultCandidates])
 
   const openFile = React.useCallback(async (relativePath: string): Promise<void> => {
     const requestId = ++readRequestRef.current
@@ -621,29 +632,20 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
     const selected = await window.electronAPI.selectVault({ inboxPath: 'Proma Inbox', allowAgentWrites: false })
     if (!selected) return
     setConfig(selected)
-    setCandidates([])
-    setVaultDiscoveryComplete(true)
+    setVaultSwitcherOpen(false)
     setRefreshToken((value) => value + 1)
     toast.success(`已连接 ${selected.displayName}`)
   }
 
-  const switchVault = async (): Promise<void> => {
-    setVaultDiscoveryComplete(false)
-    setCandidates([])
+  const createPromaVault = async (): Promise<void> => {
     try {
-      const discovered = await window.electronAPI.listVaultCandidates()
-      setCandidates(discovered)
-      if (discovered.length > 0) {
-        setSelectedFile(null)
-        setReadResult(null)
-        setConfig(null)
-      } else {
-        await selectVaultManually()
-      }
+      const selected = await window.electronAPI.selectDefaultVault()
+      setConfig(selected)
+      setVaultSwitcherOpen(false)
+      setRefreshToken((value) => value + 1)
+      toast.success(`已创建 ${selected.displayName}`)
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : `无法扫描 ${VAULT_NAME}`)
-    } finally {
-      setVaultDiscoveryComplete(true)
+      toast.error(error instanceof Error ? error.message : `无法创建 ${PROMA_MANAGED_VAULT_DISPLAY_NAME}`)
     }
   }
 
@@ -653,6 +655,7 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
         ? await window.electronAPI.selectDefaultVault()
         : await window.electronAPI.authorizeDiscoveredVault(candidate.path, { inboxPath: 'Proma Inbox', allowAgentWrites: false })
       setConfig(selected)
+      setVaultSwitcherOpen(false)
       setRefreshToken((value) => value + 1)
       toast.success(`已连接 ${selected.displayName}`)
     } catch (error) {
@@ -800,45 +803,6 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
     return <div className="flex h-full items-center justify-center text-muted-foreground"><Loader2 className="size-5 animate-spin" /></div>
   }
 
-  if (!config) {
-    return (
-      <main className="flex h-full items-center justify-center px-6">
-        <div className="w-full max-w-md text-center">
-          <div className="mx-auto flex size-12 items-center justify-center rounded-lg bg-muted text-muted-foreground shadow-sm">
-            <BookOpen size={22} />
-          </div>
-          <h1 className="mt-5 text-lg font-semibold text-foreground">连接 {VAULT_NAME}</h1>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">Proma 只保存你授权的 {VAULT_NAME} 路径。笔记正文始终保留在自己的 Markdown 文件中。</p>
-          {!vaultDiscoveryComplete ? (
-            <div className="mt-6 flex justify-center text-muted-foreground"><Loader2 className="size-5 animate-spin" /></div>
-          ) : candidates.length > 0 ? (
-            <div className="mt-7 text-left">
-              <p className="mb-2 text-xs font-medium text-muted-foreground">检测到 {VAULT_NAME}</p>
-              <div className="space-y-1">
-                {candidates.map((candidate) => (
-                  <button
-                    key={candidate.path}
-                    type="button"
-                    onClick={() => { void connectDiscoveredVault(candidate) }}
-                    className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-foreground transition-colors hover:bg-muted"
-                  >
-                    <BookOpen size={15} className="shrink-0 text-primary" />
-                    <span className="truncate">{getVaultCandidateDisplayName(candidate)}</span>
-                    {candidate.isPromaManaged && <span className="ml-auto shrink-0 text-[10px] text-muted-foreground">{PROMA_SELF_MANAGED_VAULT_LABEL}</span>}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <Button className="mt-6 gap-2" onClick={() => { void selectVaultManually() }}>
-              <FolderOpen size={16} />
-              选择 {VAULT_NAME} 文件夹
-            </Button>
-          )}
-        </div>
-      </main>
-    )
-  }
 
   return (
     <>
@@ -865,7 +829,7 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
               <header className={cn('flex h-14 items-center gap-2 px-3', embedded ? 'titlebar-no-drag' : 'titlebar-drag-region')}>
                 <BookOpen size={17} className="shrink-0 text-primary" />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-[13px] font-medium text-foreground">{config.displayName}</p>
+                  <p className="truncate text-[13px] font-medium text-foreground">{config?.displayName ?? '选择 Vault'}</p>
                 </div>
                 <div className="flex items-center gap-0.5 titlebar-no-drag">
                   <Tooltip>
@@ -876,14 +840,16 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
                     </TooltipTrigger>
                     <TooltipContent>折叠 {VAULT_NAME} 文件树</TooltipContent>
                   </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button type="button" aria-label="新建笔记" onClick={() => { void createNote() }} className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
-                        <Plus size={16} />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent>新建笔记</TooltipContent>
-                  </Tooltip>
+                  {config && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button type="button" aria-label="新建笔记" onClick={() => { void createNote() }} className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground">
+                          <Plus size={16} />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>新建笔记</TooltipContent>
+                    </Tooltip>
+                  )}
                 </div>
               </header>
               <VaultFileList
@@ -892,15 +858,67 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
                 onSelect={(path) => { void openFile(path) }}
                 onDelete={setDeleteTarget}
               />
-              <div className="titlebar-no-drag flex shrink-0 items-center border-t border-border/50 px-2 py-2">
-                <button
-                  type="button"
-                  onClick={() => { void switchVault() }}
-                  className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              <div className="titlebar-no-drag flex shrink-0 items-center border-t border-border/50 p-2">
+                <Popover
+                  open={vaultSwitcherOpen}
+                  onOpenChange={(open) => {
+                    setVaultSwitcherOpen(open)
+                    if (open) void refreshVaultCandidates()
+                  }}
                 >
-                  <FolderOpen size={14} className="shrink-0" />
-                  <span className="truncate">切换 {VAULT_NAME}</span>
-                </button>
+                  <PopoverTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label="切换 Vault"
+                      className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                    >
+                      <BookOpen size={14} className="shrink-0 text-primary" />
+                      <span className="min-w-0 flex-1 truncate">{config?.displayName ?? '选择 Vault'}</span>
+                      <ChevronsUpDown size={14} className="shrink-0 text-muted-foreground" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent side="top" align="start" className="w-72 p-1.5">
+                    <p className="px-2 py-1.5 text-xs font-medium text-muted-foreground">Vault</p>
+                    <div className="max-h-64 overflow-y-auto scrollbar-thin">
+                      {candidatesLoading ? (
+                        <div className="flex items-center justify-center py-5 text-muted-foreground"><Loader2 className="size-4 animate-spin" /></div>
+                      ) : candidates.length > 0 ? (
+                        candidates.map((candidate) => (
+                          <button
+                            key={candidate.path}
+                            type="button"
+                            onClick={() => { void connectDiscoveredVault(candidate) }}
+                            className="flex w-full min-w-0 items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-foreground transition-colors hover:bg-muted"
+                          >
+                            <BookOpen size={15} className="shrink-0 text-primary" />
+                            <span className="min-w-0 flex-1 truncate">{getVaultCandidateDisplayName(candidate)}</span>
+                            {candidate.isPromaManaged && <span className="shrink-0 text-[10px] text-muted-foreground">{PROMA_SELF_MANAGED_VAULT_LABEL}</span>}
+                          </button>
+                        ))
+                      ) : (
+                        <p className="px-2 py-4 text-center text-xs leading-relaxed text-muted-foreground">未发现本机 Obsidian Vault</p>
+                      )}
+                    </div>
+                    <div className="mt-1 border-t border-border/60 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => { void createPromaVault() }}
+                        className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-foreground transition-colors hover:bg-muted"
+                      >
+                        <Plus size={15} className="shrink-0 text-muted-foreground" />
+                        创建 Proma Vault
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => { void selectVaultManually() }}
+                        className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-foreground transition-colors hover:bg-muted"
+                      >
+                        <FolderOpen size={15} className="shrink-0 text-muted-foreground" />
+                        打开本地仓库
+                      </button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
               </div>
             </aside>
           )}
@@ -908,6 +926,7 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
             readResult={readResult}
             files={files}
             loading={fileLoading}
+            hasVault={config !== null}
             workspaceSlug={workspaceSlug}
             refreshing={refreshing}
             onRefresh={() => { void refresh({ userInitiated: true }) }}
@@ -953,7 +972,7 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
               {files.map((file) => <option key={file.relativePath} value={file.relativePath}>{file.relativePath}</option>)}
             </select>
             {quoteTarget === '__new__' && (
-              <Input value={quoteNewPath} onChange={(event) => setQuoteNewPath(event.target.value)} aria-label="新笔记路径" placeholder={`${config.inboxPath}/Quote.md`} />
+              <Input value={quoteNewPath} onChange={(event) => setQuoteNewPath(event.target.value)} aria-label="新笔记路径" placeholder={`${config?.inboxPath ?? 'Proma Inbox'}/Quote.md`} />
             )}
           </div>
           <DialogFooter>

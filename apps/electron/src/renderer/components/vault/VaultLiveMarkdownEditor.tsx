@@ -12,6 +12,8 @@ import {
   type DecorationSet,
 } from '@codemirror/view'
 import type { VaultFileEntry } from '@proma/shared'
+import { highlightCode, highlightToTokens } from '@proma/core'
+import type { HighlightTokensResult } from '@proma/core'
 import ink, { type Instance } from 'ink-mde'
 import { MermaidBlock } from '@proma/ui'
 import { CalendarDays, ListTodo, MessageSquareText, Server, Sparkles } from 'lucide-react'
@@ -114,6 +116,210 @@ const markdownSyntaxVisibility = [
       view.dispatch({ effects: markdownSyntaxFocusEffect.of(false) })
       return false
     },
+  }),
+]
+
+const vaultShikiRefreshEffect = StateEffect.define<string>()
+const vaultShikiTokenCache = new Map<string, HighlightTokensResult>()
+const VAULT_SHIKI_TOKEN_CACHE_LIMIT = 160
+const VAULT_SHIKI_REFRESH_DELAY_MS = 120
+
+type VaultFencedCodeBlock = {
+  language: string
+  code: string
+  from: number
+  to: number
+}
+
+type VaultShikiDecorations = {
+  decorations: DecorationSet
+}
+
+/** Finds closed fences so Shiki can decorate only editable code, not fence syntax. */
+export function findVaultFencedCodeBlocks(markdown: string): VaultFencedCodeBlock[] {
+  const lines = markdown.split('\n')
+  const lineStarts: number[] = []
+  let offset = 0
+  for (const line of lines) {
+    lineStarts.push(offset)
+    offset += line.length + 1
+  }
+
+  const blocks: VaultFencedCodeBlock[] = []
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const openingLine = lines[lineIndex] ?? ''
+    const opening = openingLine.match(/^ {0,3}(`{3,}|~{3,})(.*)$/)
+    if (!opening) continue
+
+    const marker = opening[1]?.[0] ?? '`'
+    const markerLength = opening[1]?.length ?? 0
+    let closingIndex = lineIndex + 1
+    while (closingIndex < lines.length) {
+      const candidate = lines[closingIndex] ?? ''
+      if (new RegExp(`^ {0,3}\\${marker}{${markerLength},}\\s*$`).test(candidate)) break
+      closingIndex += 1
+    }
+    if (closingIndex >= lines.length) continue
+
+    const language = opening[2]?.trim().split(/\s+/)[0] ?? ''
+    const from = lineStarts[lineIndex + 1] ?? lineStarts[closingIndex] ?? markdown.length
+    const closingFrom = lineStarts[closingIndex] ?? markdown.length
+    const to = Math.max(from, closingFrom - 1)
+    blocks.push({
+      language,
+      code: markdown.slice(from, to),
+      from,
+      to,
+    })
+    lineIndex = closingIndex
+  }
+  return blocks
+}
+
+function getVaultShikiTheme(): string {
+  return document.documentElement.classList.contains('dark') ? 'github-dark' : 'github-light'
+}
+
+function shouldLoadVaultShikiLanguage(requestedLanguage: string, result: HighlightTokensResult | null): boolean {
+  return requestedLanguage !== 'text' && (!result || result.language === 'text')
+}
+
+function getCachedVaultShikiTokens(code: string, language: string, theme: string): HighlightTokensResult | null {
+  const key = `${theme}\u0000${language}\u0000${code}`
+  const cached = vaultShikiTokenCache.get(key)
+  if (cached) {
+    vaultShikiTokenCache.delete(key)
+    vaultShikiTokenCache.set(key, cached)
+    return cached
+  }
+
+  const result = highlightToTokens({ code, language, theme })
+  if (!result || shouldLoadVaultShikiLanguage(language, result)) return result
+
+  vaultShikiTokenCache.set(key, result)
+  if (vaultShikiTokenCache.size > VAULT_SHIKI_TOKEN_CACHE_LIMIT) {
+    const oldestKey = vaultShikiTokenCache.keys().next().value
+    if (oldestKey) vaultShikiTokenCache.delete(oldestKey)
+  }
+  return result
+}
+
+function buildVaultShikiDecorations(state: EditorState, theme: string): DecorationSet {
+  const builder = new RangeSetBuilder<Decoration>()
+  const blocks = findVaultFencedCodeBlocks(state.doc.toString())
+
+  for (const block of blocks) {
+    const language = block.language || 'text'
+    // Mermaid is replaced by the shared interactive widget, so its hidden source
+    // does not need token work beneath the block decoration.
+    if (shouldRenderMermaidCodeBlock(block.language ? `language-${block.language}` : undefined, block.code)) continue
+
+    const result = getCachedVaultShikiTokens(block.code, language, theme)
+    if (!result) continue
+
+    let offset = block.from
+    for (const [lineIndex, line] of result.lines.entries()) {
+      for (const token of line) {
+        const from = offset
+        const to = Math.min(from + token.content.length, block.to)
+        if (token.color && from < to) {
+          builder.add(from, to, Decoration.mark({ attributes: { style: `color: ${token.color}` } }))
+        }
+        offset = to
+      }
+      if (lineIndex < result.lines.length - 1 && offset < block.to) offset += 1
+    }
+  }
+
+  return builder.finish()
+}
+
+function requestVaultShikiLanguages(view: EditorView, theme: string, pending: Set<string>, isActive: () => boolean): void {
+  const languages = new Set(
+    findVaultFencedCodeBlocks(view.state.doc.toString())
+      .filter((block) => !shouldRenderMermaidCodeBlock(block.language ? `language-${block.language}` : undefined, block.code))
+      .map((block) => block.language || 'text'),
+  )
+
+  const requests: Array<Promise<unknown>> = []
+  for (const language of languages) {
+    const result = highlightToTokens({ code: '', language, theme })
+    // A null result means the shared highlighter itself is not ready yet,
+    // including unlabelled (`text`) blocks, so it must still be initialized.
+    if (result && !shouldLoadVaultShikiLanguage(language, result)) continue
+
+    const key = `${theme}:${language}`
+    if (pending.has(key)) continue
+    pending.add(key)
+    requests.push(highlightCode({ code: '', language, theme }).catch((error) => {
+      console.error('[VaultLiveMarkdownEditor] Shiki language load failed:', error)
+    }).finally(() => pending.delete(key)))
+  }
+
+  if (requests.length === 0) return
+  void Promise.all(requests).then(() => {
+    if (isActive()) view.dispatch({ effects: vaultShikiRefreshEffect.of(theme) })
+  })
+}
+
+const vaultShikiDecorationsField = StateField.define<VaultShikiDecorations>({
+  create: () => ({ decorations: Decoration.none }),
+  update: (value, transaction) => {
+    const refresh = transaction.effects.find((effect) => effect.is(vaultShikiRefreshEffect))
+    if (refresh) return { decorations: buildVaultShikiDecorations(transaction.state, refresh.value) }
+    return { decorations: value.decorations.map(transaction.changes) }
+  },
+  provide: (field) => EditorView.decorations.from(field, (value) => value.decorations),
+})
+
+/**
+ * Same Shiki token pipeline as Markdown preview and Agent responses. Full token
+ * work runs only after a debounced document change; every keystroke maps the
+ * existing ranges, preserving CodeMirror's immediate editing responsiveness.
+ */
+const vaultShikiCodeHighlight = [
+  vaultShikiDecorationsField,
+  ViewPlugin.fromClass(class {
+    private pending = new Set<string>()
+    private scheduleHandle: ReturnType<typeof setTimeout> | null = null
+    private destroyed = false
+    private theme = getVaultShikiTheme()
+    private themeObserver: MutationObserver
+
+    constructor(private readonly view: EditorView) {
+      this.themeObserver = new MutationObserver(() => {
+        const nextTheme = getVaultShikiTheme()
+        if (nextTheme === this.theme) return
+        this.theme = nextTheme
+        this.refreshNow()
+      })
+      this.themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
+      this.scheduleRefresh(0)
+    }
+
+    update(update: { docChanged: boolean }): void {
+      if (update.docChanged) this.scheduleRefresh(VAULT_SHIKI_REFRESH_DELAY_MS)
+    }
+
+    destroy(): void {
+      this.destroyed = true
+      this.themeObserver.disconnect()
+      if (this.scheduleHandle !== null) clearTimeout(this.scheduleHandle)
+    }
+
+    private scheduleRefresh(delay: number): void {
+      if (this.scheduleHandle !== null) clearTimeout(this.scheduleHandle)
+      this.scheduleHandle = setTimeout(() => {
+        this.scheduleHandle = null
+        this.refreshNow()
+      }, delay)
+    }
+
+    private refreshNow(): void {
+      if (this.destroyed) return
+      requestVaultShikiLanguages(this.view, this.theme, this.pending, () => !this.destroyed)
+      this.view.dispatch({ effects: vaultShikiRefreshEffect.of(this.theme) })
+    }
   }),
 ]
 
@@ -1165,6 +1371,7 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
           setSuggestion((previous) => previous ? { ...previous, query, left, top } : previous)
         }),
         ...markdownSyntaxVisibility,
+        ...vaultShikiCodeHighlight,
         ...createVaultReferenceExtension({
           onActivateReference: (reference) => onActivateReferenceRef.current(reference),
           onOpenWikiLink: (target) => onOpenWikiLinkRef.current(target),

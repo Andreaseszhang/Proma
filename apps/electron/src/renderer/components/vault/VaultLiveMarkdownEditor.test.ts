@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
-import { createVaultEditorMeasureScheduler, detectVaultBlockKinds, shouldRebuildVaultDocumentIndex, shouldReuseVaultDecorations } from './VaultLiveMarkdownEditor'
+import { createVaultEditorMeasureScheduler, detectVaultBlockKinds, findVaultFencedCodeBlocks, shouldRebuildVaultDocumentIndex, shouldReuseVaultDecorations } from './VaultLiveMarkdownEditor'
 
 describe('Vault CodeMirror layout measurement', () => {
   test('coalesces side-panel resize and transition invalidations until after layout', () => {
@@ -75,6 +75,26 @@ describe('Vault CodeMirror block-widget layout', () => {
     expect(stylesheet).toMatch(/\.vault-ink-mde \.vault-horizontal-rule \{\n  width: 100%;\n  padding-block: 1\.35rem;/)
     expect(propertiesBlock?.[1]).toContain('padding: 1.5rem 0 1.95rem')
     expect(propertiesBlock?.[1]).not.toMatch(/\bmargin(?:-block|-top|-bottom)?\s*:/)
+  })
+})
+
+describe('Vault Shiki fenced-code ranges', () => {
+  test('returns only editable code content and language for closed fences', () => {
+    const markdown = '正文\n```typescript title="example"\nconst value = 1\n```\n\n```python\nprint(value)\n```'
+    const blocks = findVaultFencedCodeBlocks(markdown)
+
+    expect(blocks.map(({ language, code }) => ({ language, code }))).toEqual([
+      { language: 'typescript', code: 'const value = 1' },
+      { language: 'python', code: 'print(value)' },
+    ])
+    expect(blocks.every((block) => markdown.slice(block.from, block.to) === block.code)).toBe(true)
+  })
+
+  test('does not decorate incomplete fences while a user is still typing', () => {
+    expect(findVaultFencedCodeBlocks('```ts\nconst incomplete = true')).toEqual([])
+    expect(findVaultFencedCodeBlocks('```\n```')).toEqual([
+      { language: '', code: '', from: 4, to: 4 },
+    ])
   })
 })
 

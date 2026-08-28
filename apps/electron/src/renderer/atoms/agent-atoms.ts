@@ -250,12 +250,12 @@ export function isActivityGroup(item: ActivityGroup | ToolActivity): item is Act
 }
 
 
-/** 待自动发送的 Agent 提示（从设置页"对话完成配置"触发） */
+/** 待预填到新 Agent 会话输入框的提示词；仅由用户手动发送。 */
 export interface AgentPendingPrompt {
   sessionId: string
   message: string
   additionalDirectories?: string[]
-  /** 自动发送时注入的 Todo 引用，确保 Agent 读取最新记录而非仅依赖提示文本。 */
+  /** 保留调用方关联的 Todo 引用元数据，发送时由用户确认。 */
   mentionedTodoIds?: string[]
 }
 

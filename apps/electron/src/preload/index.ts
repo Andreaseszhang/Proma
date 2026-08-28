@@ -656,11 +656,33 @@ export interface ElectronAPI {
   /** 获取工作区 MCP 配置 */
   getWorkspaceMcpConfig: (workspaceSlug: string) => Promise<WorkspaceMcpConfig>
 
-  /** 保存工作区 MCP 配置 */
-  saveWorkspaceMcpConfig: (workspaceSlug: string, config: WorkspaceMcpConfig) => Promise<void>
+  /** 保存工作区 MCP 配置；显式关闭的条目会取消进行中的验证。 */
+  saveWorkspaceMcpConfig: (workspaceSlug: string, config: WorkspaceMcpConfig, options?: import('@proma/shared').SaveWorkspaceMcpConfigOptions) => Promise<void>
+
+  /** 刷新并持久化工作区 MCP 真实连接状态 */
+  refreshMcpConnections: (workspaceSlug: string) => Promise<WorkspaceMcpConfig>
+
+  /** 原子切换 MCP 启用状态，并在启用时条件持久化验证结果。 */
+  setMcpEnabledAndValidate: (workspaceSlug: string, name: string, enabled: boolean) => Promise<import('@proma/shared').McpConnectionMutationResult>
+
+  /** 原子新增 MCP，并在初始启用时条件持久化验证结果。 */
+  installMcpAndValidate: (workspaceSlug: string, name: string, entry: import('@proma/shared').McpServerEntry) => Promise<import('@proma/shared').McpInstallMutationResult>
+  startMcpOAuth: (input: import('@proma/shared').StartMcpOAuthInput) => Promise<import('@proma/shared').McpOAuthStartResult>
+
+  /** 将静态 MCP API Key / Token 加密保存到系统 Keychain。 */
+  saveMcpApiKey: (input: import('@proma/shared').SaveMcpApiKeyInput) => Promise<void>
+
+  /** 删除工作区 MCP 对应的系统安全凭据；不返回任何认证值。 */
+  deleteMcpCredential: (workspaceSlug: string, serverName: string) => Promise<void>
+
+  /** 查询本机 CLI 集成状态；不返回任何认证值。 */
+  getCliIntegrationStatuses: (workspaceSlug: string) => Promise<import('@proma/shared').CliIntegrationStatus[]>
+
+  /** 仅切换 Proma 对工作区 CLI 集成的使用权限；绝不登出或撤销第三方授权。 */
+  setCliIntegrationEnabled: (workspaceSlug: string, id: string, enabled: boolean) => Promise<import('@proma/shared').CliIntegrationStatus[]>
 
   /** 测试 MCP 服务器连接 */
-  testMcpServer: (name: string, entry: import('@proma/shared').McpServerEntry) => Promise<{ success: boolean; message: string }>
+  testMcpServer: (workspaceSlug: string, name: string, entry: import('@proma/shared').McpServerEntry) => Promise<{ success: boolean; message: string }>
 
   /** 启用或关闭 Proma 内置 MCP */
   setBuiltinMcpEnabled: (workspaceSlug: string, id: string, enabled: boolean) => Promise<WorkspaceCapabilities>
@@ -1925,12 +1947,44 @@ const electronAPI: ElectronAPI = {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.GET_MCP_CONFIG, workspaceSlug)
   },
 
-  saveWorkspaceMcpConfig: (workspaceSlug: string, config: WorkspaceMcpConfig) => {
-    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.SAVE_MCP_CONFIG, workspaceSlug, config)
+  saveWorkspaceMcpConfig: (workspaceSlug: string, config: WorkspaceMcpConfig, options?: import('@proma/shared').SaveWorkspaceMcpConfigOptions) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.SAVE_MCP_CONFIG, workspaceSlug, config, options)
   },
 
-  testMcpServer: (name: string, entry: import('@proma/shared').McpServerEntry) => {
-    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.TEST_MCP_SERVER, name, entry) as Promise<{ success: boolean; message: string }>
+  refreshMcpConnections: (workspaceSlug: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.REFRESH_MCP_CONNECTIONS, workspaceSlug) as Promise<WorkspaceMcpConfig>
+  },
+
+  setMcpEnabledAndValidate: (workspaceSlug: string, name: string, enabled: boolean) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.SET_MCP_ENABLED_AND_VALIDATE, workspaceSlug, name, enabled) as Promise<import('@proma/shared').McpConnectionMutationResult>
+  },
+
+  installMcpAndValidate: (workspaceSlug: string, name: string, entry: import('@proma/shared').McpServerEntry) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.INSTALL_MCP_AND_VALIDATE, workspaceSlug, name, entry) as Promise<import('@proma/shared').McpInstallMutationResult>
+  },
+
+  startMcpOAuth: (input: import('@proma/shared').StartMcpOAuthInput) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.START_MCP_OAUTH, input)
+  },
+
+  saveMcpApiKey: (input: import('@proma/shared').SaveMcpApiKeyInput) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.SAVE_MCP_API_KEY, input)
+  },
+
+  deleteMcpCredential: (workspaceSlug: string, serverName: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.DELETE_MCP_CREDENTIAL, workspaceSlug, serverName) as Promise<void>
+  },
+
+  getCliIntegrationStatuses: (workspaceSlug: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.GET_CLI_INTEGRATION_STATUSES, workspaceSlug) as Promise<import('@proma/shared').CliIntegrationStatus[]>
+  },
+
+  setCliIntegrationEnabled: (workspaceSlug: string, id: string, enabled: boolean) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.SET_CLI_INTEGRATION_ENABLED, workspaceSlug, id, enabled) as Promise<import('@proma/shared').CliIntegrationStatus[]>
+  },
+
+  testMcpServer: (workspaceSlug: string, name: string, entry: import('@proma/shared').McpServerEntry) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.TEST_MCP_SERVER, workspaceSlug, name, entry) as Promise<{ success: boolean; message: string }>
   },
 
   setBuiltinMcpEnabled: (workspaceSlug: string, id: string, enabled: boolean) => {

@@ -1036,8 +1036,22 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
       },
       plugins: [
         // A lone `-` beneath text is temporarily parsed as a Setext H2, which makes
-        // the preceding line jump before the user can type the list's space. Insert
-        // the normal list prefix atomically so list entry stays visually stable.
+        // the preceding line jump before the user can type the list's space. Handle
+        // beforeinput (and retain CodeMirror's input handler as fallback) so the
+        // normal list prefix is always inserted atomically.
+        Prec.highest(EditorView.domEventHandlers({
+          beforeinput: (event, view) => {
+            const input = event as InputEvent
+            if (input.inputType !== 'insertText' || input.data !== '-') return false
+            const position = view.state.selection.main.head
+            if (!view.state.selection.main.empty) return false
+            const line = view.state.doc.lineAt(position)
+            if (line.from !== position || line.text !== '') return false
+            event.preventDefault()
+            view.dispatch({ changes: { from: position, insert: '- ' }, selection: { anchor: position + 2 } })
+            return true
+          },
+        })),
         EditorView.inputHandler.of((view, from, to, text) => {
           if (text !== '-' || from !== to || from !== view.state.selection.main.head) return false
           const line = view.state.doc.lineAt(from)

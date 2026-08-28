@@ -2431,16 +2431,16 @@
 }
 /* ink-mde applies a full block padding and a heavy rail to quotes. Keep them
  * visually compact so a one-line quote shares the editor's normal line height. */
-.vault-ink-mde .cm-line.cm-blockquote {
-  background: transparent;
-  border-left: 2px solid hsl(var(--muted-foreground) / 0.5);
-  padding: 0 0 0 0.5rem;
+.vault-ink-mde .ink-mde .cm-line.cm-blockquote {
+  background: transparent !important;
+  border-left: 2px solid hsl(var(--muted-foreground) / 0.5) !important;
+  padding: 0 0 0 0.5rem !important;
 }
-.vault-ink-mde .cm-line.cm-blockquote.cm-blockquote-open,
-.vault-ink-mde .cm-line.cm-blockquote.cm-blockquote-close {
-  border-radius: 0;
-  padding-top: 0;
-  padding-bottom: 0;
+.vault-ink-mde .ink-mde .cm-line.cm-blockquote.cm-blockquote-open,
+.vault-ink-mde .ink-mde .cm-line.cm-blockquote.cm-blockquote-close {
+  border-radius: 0 !important;
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
 }
 .vault-ink-mde .vault-reference-chip {
   display: inline-flex;

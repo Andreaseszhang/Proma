@@ -926,7 +926,7 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
         {!embedded && <div className="relative z-10 h-[100px] shrink-0 border-b border-border/60 bg-muted/25" />}
         <div className="relative flex min-h-0 flex-1">
           <aside
-            className="relative flex shrink-0 flex-col bg-muted/25"
+            className="relative flex shrink-0 flex-col border-r border-border/50 bg-muted/25"
             style={{ width: vaultSidebarWidth }}
           >
               <header className={cn('flex h-14 items-center gap-2 px-3', embedded ? 'titlebar-no-drag' : 'titlebar-drag-region')}>

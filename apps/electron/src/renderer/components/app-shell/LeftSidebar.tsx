@@ -96,6 +96,7 @@ import { useOpenSession } from '@/hooks/useOpenSession'
 import { useSyncActiveTabSideEffects } from '@/hooks/useSyncActiveTabSideEffects'
 import { sessionHoverPreviewEnabledAtom } from '@/atoms/ui-preferences'
 import { CollapsedWorkspacePopover } from '@/components/agent/CollapsedWorkspacePopover'
+import { ObsidianIcon } from '@/components/obsidian/obsidian-brand'
 import { VirtualSidebarList, type VirtualSidebarRow } from '@/components/ui/virtual-sidebar-list'
 import { LocalProjectBadge } from '@/components/agent/LocalProjectBadge'
 import { MoveSessionDialog } from '@/components/agent/MoveSessionDialog'
@@ -1088,6 +1089,16 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     setActiveView('conversations')
     openWorkspaceComponent(component)
   }, [currentAgentSessionId, mode, openWorkspaceComponent, setAutomationForm, setActiveView, setPlanningTab])
+
+  /** Obsidian 在 Chat 中占用主内容区，在有 Agent 会话时复用右侧项目级工作区。 */
+  const handleOpenVault = React.useCallback((): void => {
+    if (mode !== 'agent' || !currentAgentSessionId) {
+      setActiveView('vault')
+      return
+    }
+    setActiveView('conversations')
+    openWorkspaceComponent('vault')
+  }, [currentAgentSessionId, mode, openWorkspaceComponent, setActiveView])
 
   const handleOpenCapabilityComponent = React.useCallback((component: 'skills' | 'mcp' | 'memory'): void => {
     if (mode !== 'agent' || !currentAgentSessionId) {
@@ -3160,6 +3171,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       "skills",
       "mcp",
       "memory",
+      "vault",
     ].some((component) =>
       isWorkspaceComponentActive(component as WorkspaceComponentTab),
     );
@@ -3374,6 +3386,14 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                 日程
               </DropdownMenuItem>
               <DropdownMenuItem
+                aria-current={isWorkspaceComponentActive("vault") ? "page" : undefined}
+                className={cn(isWorkspaceComponentActive("vault") && "bg-accent/70 text-accent-foreground")}
+                onSelect={handleOpenVault}
+              >
+                <ObsidianIcon size={16} />
+                Obsidian
+              </DropdownMenuItem>
+              <DropdownMenuItem
                 aria-current={isWorkspaceComponentActive("automations") ? "page" : undefined}
                 className={cn(isWorkspaceComponentActive("automations") && "bg-accent/70 text-accent-foreground")}
                 onSelect={() => handleOpenPlanningComponent("automations")}
@@ -3547,6 +3567,12 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
           icon={<CalendarDays size={16} />}
           active={isWorkspaceComponentActive('calendar')}
           onClick={() => handleOpenPlanningComponent('calendar')}
+        />
+        <WorkspaceComponentSidebarEntry
+          label="Obsidian"
+          icon={<ObsidianIcon size={16} />}
+          active={mode === 'chat' ? activeView === 'vault' : isWorkspaceComponentActive('vault')}
+          onClick={handleOpenVault}
         />
       </div>
 

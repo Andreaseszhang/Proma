@@ -827,7 +827,6 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
           {vaultSidebarLayout.renderSidebar && (
             <aside className={cn('flex shrink-0 flex-col bg-muted/25 shadow-[1px_0_0_hsl(var(--border)/0.45)]', vaultSidebarLayout.widthClass)}>
               <header className={cn('flex h-14 items-center gap-2 px-3', embedded ? 'titlebar-no-drag' : 'titlebar-drag-region')}>
-                <BookOpen size={17} className="shrink-0 text-primary" />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[13px] font-medium text-foreground">{config?.displayName ?? '选择 Vault'}</p>
                 </div>
@@ -872,9 +871,8 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
                       aria-label="切换 Vault"
                       className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                     >
-                      <BookOpen size={14} className="shrink-0 text-primary" />
-                      <span className="min-w-0 flex-1 truncate">{config?.displayName ?? '选择 Vault'}</span>
                       <ChevronsUpDown size={14} className="shrink-0 text-muted-foreground" />
+                      <span className="min-w-0 flex-1 truncate">{config?.displayName ?? '选择 Vault'}</span>
                     </button>
                   </PopoverTrigger>
                   <PopoverContent side="top" align="start" className="w-72 p-1.5">

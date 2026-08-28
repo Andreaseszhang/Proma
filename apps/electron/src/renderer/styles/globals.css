@@ -2354,7 +2354,8 @@
   --ink-border-radius: 0;
   --ink-block-background-color: transparent;
   --ink-block-background-color-on-hover: transparent;
-  --ink-code-background-color: hsl(var(--muted) / 0.35);
+  /* 与 Markdown 预览及 Agent 历史的 Shiki 代码块共用主题背景。 */
+  --ink-code-background-color: hsl(var(--code-bg));
 }
 .vault-ink-mde .ink-mde,
 .vault-ink-mde .ink-mde-editor,

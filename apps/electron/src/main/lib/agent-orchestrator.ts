@@ -266,7 +266,7 @@ export class AgentOrchestrator {
   /**
    * 构建工作区 MCP 服务器配置
    */
-  private async buildMcpServers(workspaceSlug: string | undefined): Promise<Record<string, Record<string, unknown>>> {
+  private async buildMcpServers(workspaceSlug: string | undefined, proxyUrl?: string): Promise<Record<string, Record<string, unknown>>> {
     const mcpServers: Record<string, Record<string, unknown>> = {}
     if (!workspaceSlug) return mcpServers
 
@@ -301,6 +301,7 @@ export class AgentOrchestrator {
           type,
           url: entry.url,
           ...(Object.keys(headers).length > 0 && { headers }),
+          ...(proxyUrl && { proxyUrl }),
           required: false,
         }
       } else {
@@ -1025,7 +1026,7 @@ export class AgentOrchestrator {
       }
 
       // 10. 构建 MCP 服务器配置 + 记忆工具 + 生图工具 + 自定义工具
-      const mcpServers = await this.buildMcpServers(workspaceSlug)
+      const mcpServers = await this.buildMcpServers(workspaceSlug, proxyUrl)
       let piBuiltinTools: unknown[] = []
       let piMcpTools: unknown[] = []
       const piSdk = await import('@earendil-works/pi-coding-agent')

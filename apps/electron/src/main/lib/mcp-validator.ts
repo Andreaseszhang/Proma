@@ -10,6 +10,8 @@
 
 import { existsSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
+import { getFetchFn } from './proxy-fetch'
+import { getEffectiveProxyUrl } from './proxy-settings-service'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
@@ -71,6 +73,10 @@ export async function validateMcpServer(
   const timeoutMs = Math.max(1, entry.timeout ?? 30) * 1000
 
   try {
+    const proxyFetch = (type === 'http' || type === 'sse')
+      ? getFetchFn(await getEffectiveProxyUrl())
+      : undefined
+
     if (type === 'stdio') {
       const env = {
         ...(process.env.PATH ? { PATH: process.env.PATH } : {}),
@@ -81,8 +87,8 @@ export async function validateMcpServer(
       const oauthHeaders = workspaceSlug ? await getMcpOAuthHeaders(workspaceSlug, name, entry.url!) : undefined
       const headers = { ...(entry.headers ?? {}), ...(oauthHeaders ?? {}) }
       const requestInit = Object.keys(headers).length > 0 ? { headers } : undefined
-      if (type === 'http') transport = new StreamableHTTPClientTransport(new URL(entry.url!), { requestInit })
-      else transport = new SSEClientTransport(new URL(entry.url!), { requestInit })
+      if (type === 'http') transport = new StreamableHTTPClientTransport(new URL(entry.url!), { requestInit, fetch: proxyFetch })
+      else transport = new SSEClientTransport(new URL(entry.url!), { requestInit, fetch: proxyFetch })
     }
 
     await client.connect(transport, { timeout: timeoutMs })

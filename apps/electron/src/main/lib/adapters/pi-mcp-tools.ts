@@ -17,6 +17,7 @@ import type { AgentToolResult } from '@earendil-works/pi-agent-core'
 import type { TextContent, ImageContent } from '@earendil-works/pi-ai'
 import type { TSchema } from 'typebox'
 import { Type } from 'typebox'
+import { getFetchFn } from '../proxy-fetch'
 import { sanitizeToolResultImageContent } from '../image-content-validation'
 
 const DEFAULT_MCP_REQUEST_TIMEOUT_MS = 60_000
@@ -33,6 +34,7 @@ interface PiMcpServerConfig {
   headers?: unknown
   startup_timeout_sec?: unknown
   timeout?: unknown
+  proxyUrl?: unknown
   required?: unknown
 }
 
@@ -112,6 +114,12 @@ function getTimeoutMs(config: PiMcpServerConfig): number {
   return timeoutSec * 1000
 }
 
+function getProxyFetch(config: PiMcpServerConfig): typeof globalThis.fetch | undefined {
+  return typeof config.proxyUrl === 'string' && config.proxyUrl.trim()
+    ? getFetchFn(config.proxyUrl)
+    : undefined
+}
+
 function createTransport(name: string, config: PiMcpServerConfig): Transport | undefined {
   const type = config.type
   if (type === 'stdio') {
@@ -136,8 +144,10 @@ function createTransport(name: string, config: PiMcpServerConfig): Transport | u
       return undefined
     }
     const headers = getHeaders(config)
+    const proxyFetch = getProxyFetch(config)
     return new StreamableHTTPClientTransport(new URL(config.url), {
       requestInit: headers ? { headers } : undefined,
+      fetch: proxyFetch,
     })
   }
 
@@ -147,11 +157,13 @@ function createTransport(name: string, config: PiMcpServerConfig): Transport | u
       return undefined
     }
     const headers = getHeaders(config)
+    const proxyFetch = getProxyFetch(config)
     return new SSEClientTransport(new URL(config.url), {
       requestInit: headers ? { headers } : undefined,
-      eventSourceInit: headers
+      fetch: proxyFetch,
+      eventSourceInit: headers || proxyFetch
         ? ({
-          fetch: (input: RequestInfo | URL, init?: RequestInit) => fetch(input, {
+          fetch: (input: RequestInfo | URL, init?: RequestInit) => (proxyFetch ?? fetch)(input, {
             ...init,
             headers: {
               ...(init?.headers as Record<string, string> | undefined),
@@ -471,12 +483,21 @@ function createPiMcpToolDefinition(binding: McpToolBinding): ToolDefinition {
  * 注意：本函数仅供 Pi runtime 使用；Claude runtime 仍直接把 mcpServers 交给
  * Claude Agent SDK，不经过这里。
  */
-export async function buildPiMcpTools(mcpServers: PiMcpServers): Promise<ToolDefinition[]> {
+export async function buildPiMcpTools(mcpServers: PiMcpServers, proxyUrl?: string): Promise<ToolDefinition[]> {
   const tools: ToolDefinition[] = []
+  const proxiedServers = proxyUrl
+    ? Object.fromEntries(Object.entries(mcpServers).map(([name, config]) => {
+      const type = (config as PiMcpServerConfig).type
+      return [name, {
+        ...config,
+        ...(type === 'http' || type === 'sse' ? { proxyUrl } : {}),
+      }]
+    })) as PiMcpServers
+    : mcpServers
   const seenToolNames = new Set<string>()
 
   // 并行连接所有 MCP 服务器，避免串行等待导致启动慢
-  const entries = Object.entries(mcpServers).filter(([, rawConfig]) => {
+  const entries = Object.entries(proxiedServers).filter(([, rawConfig]) => {
     const type = (rawConfig as PiMcpServerConfig).type
     return type === 'stdio' || type === 'http' || type === 'sse'
   })

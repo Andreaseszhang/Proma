@@ -4,7 +4,7 @@ import { RangeSetBuilder, StateEffect, StateField, type Extension, type EditorSt
 import { Decoration, EditorView, ViewPlugin, WidgetType, type DecorationSet } from '@codemirror/view'
 import { highlightCode, highlightToTokens } from '@proma/core'
 import type { HighlightTokensResult } from '@proma/core'
-import { MermaidBlock } from '@proma/ui'
+import { CodeBlock, MermaidBlock } from '@proma/ui'
 import { shouldRenderMermaidCodeBlock } from '@/lib/mermaid-detection'
 
 type PreviewKind = 'code' | 'table' | 'mermaid' | 'thematic-break' | 'math'
@@ -170,6 +170,7 @@ abstract class LiveMarkdownBlockWidget extends WidgetType {
 }
 
 class CodeBlockWidget extends LiveMarkdownBlockWidget {
+  private root: Root | null = null
   constructor(
     private readonly code: string,
     private readonly language: string,
@@ -180,29 +181,21 @@ class CodeBlockWidget extends LiveMarkdownBlockWidget {
   }
   override toDOM(view: EditorView): HTMLElement {
     const wrapper = document.createElement('div')
-    wrapper.className = 'code-block-wrapper live-markdown-code-block'
+    wrapper.className = 'live-markdown-code-block'
     wrapper.dataset.liveMarkdownBlockFrom = String(this.from)
-    const pre = document.createElement('pre')
-    pre.className = 'shiki'
-    const code = document.createElement('code')
-    const tokens = shikiTokens(this.code, this.language || 'text', currentShikiTheme())
-    if (!tokens) {
-      code.textContent = this.code
-    } else {
-      tokens.lines.forEach((line, lineIndex) => {
-        line.forEach((token) => {
-          const span = document.createElement('span')
-          span.textContent = token.content
-          if (token.color) span.style.color = token.color
-          code.appendChild(span)
-        })
-        if (lineIndex < tokens.lines.length - 1) code.appendChild(document.createTextNode('\n'))
-      })
-    }
-    pre.appendChild(code)
-    wrapper.appendChild(pre)
+    this.root = createRoot(wrapper)
+    this.root.render(
+      <CodeBlock>
+        <code className={this.language ? `language-${this.language}` : undefined}>{this.code}</code>
+      </CodeBlock>,
+    )
     this.observeSize(wrapper, view)
     return wrapper
+  }
+  override destroy(): void {
+    super.destroy()
+    this.root?.unmount()
+    this.root = null
   }
 }
 

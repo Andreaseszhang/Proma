@@ -38,6 +38,7 @@ const markdownSyntaxMarkerNames = new Set([
   'QuoteMark',
 ])
 const hiddenMarkdownSyntax = Decoration.replace({ class: 'vault-markdown-syntax-hidden' })
+const pendingListHeading = Decoration.mark({ class: 'vault-pending-list-heading' })
 
 type MarkdownSyntaxVisibility = {
   focused: boolean
@@ -55,6 +56,17 @@ function markdownSyntaxDecorations(state: EditorState, focused: boolean): Decora
   const builder = new RangeSetBuilder<Decoration>()
   syntaxTree(state).iterate({
     enter: ({ type, from, to }) => {
+      // A trailing `-` is parsed as a Setext H2 until its first list-item
+      // character arrives. Preserve the user's normal list typing by rendering
+      // that transient state at the paragraph font size instead of as a heading.
+      if (type.name === 'SetextHeading2') {
+        const underline = state.doc.lineAt(to)
+        if (underline.to === state.doc.length && /^-\s*$/.test(underline.text)) {
+          const headingLine = state.doc.lineAt(from)
+          builder.add(headingLine.from, headingLine.to, pendingListHeading)
+        }
+      }
+
       if (!markdownSyntaxMarkerNames.has(type.name)) return
       if (activeLines.has(state.doc.lineAt(from).number)) return
       // Lezer's HeaderMark excludes the required space after `#`. Hide it with
@@ -1035,30 +1047,6 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
         toolbar: false,
       },
       plugins: [
-        // A lone `-` beneath text is temporarily parsed as a Setext H2, which makes
-        // the preceding line jump before the user can type the list's space. Handle
-        // beforeinput (and retain CodeMirror's input handler as fallback) so the
-        // normal list prefix is always inserted atomically.
-        Prec.highest(EditorView.domEventHandlers({
-          beforeinput: (event, view) => {
-            const input = event as InputEvent
-            if (input.inputType !== 'insertText' || input.data !== '-') return false
-            const position = view.state.selection.main.head
-            if (!view.state.selection.main.empty) return false
-            const line = view.state.doc.lineAt(position)
-            if (line.from !== position || line.text !== '') return false
-            event.preventDefault()
-            view.dispatch({ changes: { from: position, insert: '- ' }, selection: { anchor: position + 2 } })
-            return true
-          },
-        })),
-        EditorView.inputHandler.of((view, from, to, text) => {
-          if (text !== '-' || from !== to || from !== view.state.selection.main.head) return false
-          const line = view.state.doc.lineAt(from)
-          if (line.from !== from || line.text !== '') return false
-          view.dispatch({ changes: { from, to, insert: '- ' }, selection: { anchor: from + 2 } })
-          return true
-        }),
         Prec.highest(keymap.of([
           {
             key: 'Escape',

@@ -2432,15 +2432,25 @@
 /* ink-mde applies a full block padding and a heavy rail to quotes. Keep them
  * visually compact so a one-line quote shares the editor's normal line height. */
 .vault-ink-mde .ink-mde .cm-line.cm-blockquote {
+  min-height: 0 !important;
+  height: auto !important;
+  line-height: inherit !important;
   background: transparent !important;
   border-left: 2px solid hsl(var(--muted-foreground) / 0.5) !important;
-  padding: 0 0 0 0.5rem !important;
+  padding: 0 0 0 0.375rem !important;
 }
 .vault-ink-mde .ink-mde .cm-line.cm-blockquote.cm-blockquote-open,
 .vault-ink-mde .ink-mde .cm-line.cm-blockquote.cm-blockquote-close {
   border-radius: 0 !important;
   padding-top: 0 !important;
   padding-bottom: 0 !important;
+}
+/* This marker is only added while a terminal `-` is temporarily parsed as a
+ * Setext H2 during list entry. It neutralizes the parser's heading theme. */
+.vault-ink-mde .vault-pending-list-heading,
+.vault-ink-mde .vault-pending-list-heading * {
+  font-size: 1em !important;
+  font-weight: inherit !important;
 }
 .vault-ink-mde .vault-reference-chip {
   display: inline-flex;

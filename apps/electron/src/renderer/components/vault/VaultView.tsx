@@ -36,6 +36,8 @@ import { getVaultEditorHeaderActions } from './vault-editor-header-actions'
 import { buildVaultTree, getInitialVaultExpandedFolders, getVaultFolderAncestors, hasSameVaultTreeEntries, type VaultFolderNode } from './vault-tree-model'
 
 const VAULT_NAME = 'Vault'
+const VAULT_SIDEBAR_MIN_WIDTH = 180
+const VAULT_SIDEBAR_MAX_WIDTH = 520
 const PROMA_MANAGED_VAULT_DISPLAY_NAME = 'Proma Vault'
 const PROMA_SELF_MANAGED_VAULT_LABEL = 'Proma 自建 Vault'
 
@@ -490,6 +492,9 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
   const [deleteTarget, setDeleteTarget] = React.useState<VaultFileEntry | null>(null)
   const [deleting, setDeleting] = React.useState(false)
   const [vaultTreeAction, setVaultTreeAction] = React.useState<{ type: 'expand' | 'collapse'; version: number }>({ type: 'collapse', version: 0 })
+  const [vaultSidebarWidth, setVaultSidebarWidth] = React.useState(embedded ? 200 : 280)
+  const vaultSidebarWidthRef = React.useRef(vaultSidebarWidth)
+  const vaultSidebarDragCleanupRef = React.useRef<(() => void) | null>(null)
   const [skillDetail, setSkillDetail] = React.useState<{ skill: SkillMeta; isBuiltin: boolean; skillsDir: string } | null>(null)
   const [skillUpdating, setSkillUpdating] = React.useState(false)
   const selectedFileRef = React.useRef(selectedFile)
@@ -499,6 +504,36 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
   React.useEffect(() => {
     selectedFileRef.current = selectedFile
   }, [selectedFile])
+
+  React.useEffect(() => {
+    vaultSidebarWidthRef.current = vaultSidebarWidth
+  }, [vaultSidebarWidth])
+
+  React.useEffect(() => () => {
+    vaultSidebarDragCleanupRef.current?.()
+  }, [])
+
+  const handleVaultSidebarResizeStart = React.useCallback((event: React.MouseEvent<HTMLDivElement>): void => {
+    if (event.button !== 0) return
+    event.preventDefault()
+    vaultSidebarDragCleanupRef.current?.()
+    const startX = event.clientX
+    const startWidth = vaultSidebarWidthRef.current
+    const maxWidth = Math.max(VAULT_SIDEBAR_MIN_WIDTH, Math.min(VAULT_SIDEBAR_MAX_WIDTH, window.innerWidth - 320))
+
+    const onMouseMove = (moveEvent: MouseEvent): void => {
+      const nextWidth = Math.min(maxWidth, Math.max(VAULT_SIDEBAR_MIN_WIDTH, startWidth + moveEvent.clientX - startX))
+      setVaultSidebarWidth(nextWidth)
+    }
+    const cleanup = (): void => {
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', cleanup)
+      if (vaultSidebarDragCleanupRef.current === cleanup) vaultSidebarDragCleanupRef.current = null
+    }
+    vaultSidebarDragCleanupRef.current = cleanup
+    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mouseup', cleanup)
+  }, [])
 
   React.useEffect(() => {
     if (!sessionId) return
@@ -825,7 +860,10 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
       <main className={cn('flex h-full min-h-0 flex-col bg-muted/25', embedded && 'bg-content-area')}>
         {!embedded && <div className="relative z-10 h-[100px] shrink-0 border-b border-border/60 bg-muted/25" />}
         <div className="relative flex min-h-0 flex-1">
-          <aside className={cn('flex shrink-0 flex-col bg-muted/25 shadow-[1px_0_0_hsl(var(--border)/0.45)]', embedded ? 'w-[200px]' : 'w-[280px]')}>
+          <aside
+            className="relative flex shrink-0 flex-col bg-muted/25"
+            style={{ width: vaultSidebarWidth }}
+          >
               <header className={cn('flex h-14 items-center gap-2 px-3', embedded ? 'titlebar-no-drag' : 'titlebar-drag-region')}>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[13px] font-medium text-foreground">{config?.displayName ?? '选择 Vault'}</p>
@@ -927,6 +965,11 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
                   </PopoverContent>
                 </Popover>
               </div>
+            <div
+              aria-hidden="true"
+              className="titlebar-no-drag absolute right-0 top-0 bottom-0 z-10 w-3 translate-x-1/2 cursor-col-resize transition-colors hover:bg-primary/10 active:bg-primary/25"
+              onMouseDown={handleVaultSidebarResizeStart}
+            />
           </aside>
           <VaultMarkdownPane
             readResult={readResult}

@@ -1208,7 +1208,7 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
   }, [value])
 
   return (
-    <div ref={hostRef} className="vault-ink-mde relative h-full min-h-0 [&_.ink-mde]:h-full [&_.ink-mde-editor]:min-h-0">
+    <div ref={hostRef} className="vault-ink-mde scrollbar-thin relative h-full min-h-0 [&_.ink-mde]:h-full [&_.ink-mde-editor]:min-h-0">
       {chipTooltip && createPortal(
         <div
           role="tooltip"

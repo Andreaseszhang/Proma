@@ -492,6 +492,8 @@ export interface ElectronAPI {
   writeVaultFile: (input: VaultWriteInput) => Promise<VaultWriteResult>
   createVaultFile: (relativePath: string, content: string) => Promise<VaultWriteResult>
   createUntitledVaultFile: () => Promise<VaultWriteResult>
+  createUntitledVaultFileInFolder: (folderPath: string) => Promise<VaultWriteResult>
+  createVaultFolder: (relativePath: string) => Promise<void>
   renameVaultFile: (input: VaultRenameInput) => Promise<VaultReadResult>
   deleteVaultFile: (input: VaultDeleteInput) => Promise<void>
   searchVault: (query: string, limit?: number) => Promise<VaultSearchResult[]>
@@ -1749,6 +1751,8 @@ const electronAPI: ElectronAPI = {
   writeVaultFile: (input: VaultWriteInput) => ipcRenderer.invoke(VAULT_IPC_CHANNELS.WRITE_FILE, input),
   createVaultFile: (relativePath: string, content: string) => ipcRenderer.invoke(VAULT_IPC_CHANNELS.CREATE_FILE, relativePath, content),
   createUntitledVaultFile: () => ipcRenderer.invoke(VAULT_IPC_CHANNELS.CREATE_UNTITLED_FILE),
+  createUntitledVaultFileInFolder: (folderPath: string) => ipcRenderer.invoke(VAULT_IPC_CHANNELS.CREATE_UNTITLED_FILE_IN_FOLDER, folderPath),
+  createVaultFolder: (relativePath: string) => ipcRenderer.invoke(VAULT_IPC_CHANNELS.CREATE_FOLDER, relativePath),
   renameVaultFile: (input: VaultRenameInput) => ipcRenderer.invoke(VAULT_IPC_CHANNELS.RENAME_FILE, input),
   deleteVaultFile: (input: VaultDeleteInput) => ipcRenderer.invoke(VAULT_IPC_CHANNELS.DELETE_FILE, input),
   searchVault: (query: string, limit?: number) => ipcRenderer.invoke(VAULT_IPC_CHANNELS.SEARCH, query, limit),

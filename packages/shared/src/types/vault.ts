@@ -90,6 +90,8 @@ export const VAULT_IPC_CHANNELS = {
   WRITE_FILE: 'vault:write-file',
   CREATE_FILE: 'vault:create-file',
   CREATE_UNTITLED_FILE: 'vault:create-untitled-file',
+  CREATE_UNTITLED_FILE_IN_FOLDER: 'vault:create-untitled-file-in-folder',
+  CREATE_FOLDER: 'vault:create-folder',
   RENAME_FILE: 'vault:rename-file',
   DELETE_FILE: 'vault:delete-file',
   SEARCH: 'vault:search',

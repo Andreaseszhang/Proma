@@ -8,6 +8,7 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { Input } from '@/components/ui/input'
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from '@/components/ui/context-menu'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { VaultLiveMarkdownEditor, type VaultLiveMarkdownEditorHandle } from './VaultLiveMarkdownEditor'
@@ -64,12 +65,18 @@ function VaultFileList({
   selectedPath,
   onSelect,
   onDelete,
+  onCreateNote,
+  onCreateFolder,
+  canCreate,
   treeAction,
 }: {
   files: VaultFileEntry[]
   selectedPath: string | null
   onSelect: (relativePath: string) => void
   onDelete: (file: VaultFileEntry) => void
+  onCreateNote: (folderPath: string) => void
+  onCreateFolder: (folderPath: string) => void
+  canCreate: boolean
   treeAction: { type: 'expand' | 'collapse'; version: number }
 }): React.ReactElement {
   const tree = React.useMemo(() => buildVaultTree(files), [files])
@@ -87,6 +94,7 @@ function VaultFileList({
   // Start collapsed: this prevents a large nested Vault from mounting every file
   // row and its Tooltip tree on first paint. Expanded paths survive list refreshes.
   const [expandedFolders, setExpandedFolders] = React.useState<ReadonlySet<string>>(getInitialVaultExpandedFolders)
+  const [contextFolderPath, setContextFolderPath] = React.useState('')
 
   React.useEffect(() => {
     if (treeAction.version === 0) return
@@ -110,10 +118,6 @@ function VaultFileList({
     })
   }, [selectedPath])
 
-  if (files.length === 0) {
-    return <p className="px-4 py-6 text-center text-xs leading-relaxed text-muted-foreground">没有可显示的 Markdown 笔记</p>
-  }
-
   const renderEntries = (folder: VaultFolderNode, depth: number): React.ReactNode => (
     <>
       {Array.from(folder.folders.values())
@@ -126,6 +130,7 @@ function VaultFileList({
                 type="button"
                 aria-expanded={expanded}
                 aria-label={`${expanded ? '收起' : '展开'}文件夹 ${child.name}`}
+                onContextMenuCapture={() => setContextFolderPath(child.relativePath)}
                 onClick={() => {
                   setExpandedFolders((current) => {
                     const next = new Set(current)
@@ -162,6 +167,10 @@ function VaultFileList({
           return (
             <div
               key={file.relativePath}
+              onContextMenuCapture={() => {
+                const separatorIndex = file.relativePath.lastIndexOf('/')
+                setContextFolderPath(separatorIndex < 0 ? '' : file.relativePath.slice(0, separatorIndex))
+              }}
               className={cn(
                 'group flex h-8 w-full min-w-0 items-center rounded-md transition-colors',
                 selected ? 'bg-accent text-accent-foreground shadow-sm' : 'text-foreground/70 hover:bg-muted/70 hover:text-foreground',
@@ -195,7 +204,24 @@ function VaultFileList({
     </>
   )
 
-  return <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3 titlebar-no-drag">{renderEntries(tree, 0)}</div>
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div
+          className="min-h-0 flex-1 overflow-y-auto px-2 pb-3 titlebar-no-drag"
+          onContextMenuCapture={() => setContextFolderPath('')}
+        >
+          {files.length === 0
+            ? <p className="px-4 py-6 text-center text-xs leading-relaxed text-muted-foreground">没有可显示的 Markdown 笔记</p>
+            : renderEntries(tree, 0)}
+        </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent className="w-40">
+        <ContextMenuItem disabled={!canCreate} onSelect={() => onCreateNote(contextFolderPath)}>新建笔记</ContextMenuItem>
+        <ContextMenuItem disabled={!canCreate} onSelect={() => onCreateFolder(contextFolderPath)}>新建文件夹</ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  )
 }
 
 function VaultRefreshButton({
@@ -491,6 +517,9 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
   const [vaultHelpOpen, setVaultHelpOpen] = React.useState(false)
   const [deleteTarget, setDeleteTarget] = React.useState<VaultFileEntry | null>(null)
   const [deleting, setDeleting] = React.useState(false)
+  const [newFolderParentPath, setNewFolderParentPath] = React.useState<string | null>(null)
+  const [newFolderName, setNewFolderName] = React.useState('')
+  const [creatingFolder, setCreatingFolder] = React.useState(false)
   const [vaultTreeAction, setVaultTreeAction] = React.useState<{ type: 'expand' | 'collapse'; version: number }>({ type: 'collapse', version: 0 })
   const [vaultSidebarWidth, setVaultSidebarWidth] = React.useState(embedded ? 200 : 280)
   const vaultSidebarWidthRef = React.useRef(vaultSidebarWidth)
@@ -726,6 +755,42 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
     }
   }
 
+  const createNoteInFolder = async (folderPath: string): Promise<void> => {
+    if (!config) return
+    try {
+      const result = await window.electronAPI.createUntitledVaultFileInFolder(folderPath)
+      if (!result.ok) return
+      setRefreshToken((value) => value + 1)
+      await openFile(result.relativePath)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '无法创建笔记')
+    }
+  }
+
+  const openCreateFolderDialog = (folderPath: string): void => {
+    if (!config) return
+    setNewFolderParentPath(folderPath)
+    setNewFolderName('')
+  }
+
+  const createFolder = async (): Promise<void> => {
+    if (newFolderParentPath === null) return
+    const name = newFolderName.trim()
+    if (!name) return
+    setCreatingFolder(true)
+    try {
+      const relativePath = newFolderParentPath ? `${newFolderParentPath}/${name}` : name
+      await window.electronAPI.createVaultFolder(relativePath)
+      setNewFolderParentPath(null)
+      setRefreshToken((value) => value + 1)
+      toast.success(`已创建文件夹 ${name}`)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '无法创建文件夹')
+    } finally {
+      setCreatingFolder(false)
+    }
+  }
+
   const appendPendingQuote = async (): Promise<void> => {
     if (!pendingQuote || !config) return
     const source = pendingQuote.quote
@@ -902,6 +967,9 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
                 selectedPath={selectedFile}
                 onSelect={(path) => { void openFile(path) }}
                 onDelete={setDeleteTarget}
+                onCreateNote={(folderPath) => { void createNoteInFolder(folderPath) }}
+                onCreateFolder={openCreateFolderDialog}
+                canCreate={config !== null}
                 treeAction={vaultTreeAction}
               />
               <div className="titlebar-no-drag flex shrink-0 items-center border-t border-border/50 p-2">
@@ -997,6 +1065,36 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
         loading={deleting}
         onConfirm={deleteNote}
       />
+      <Dialog
+        open={newFolderParentPath !== null}
+        onOpenChange={(open) => {
+          if (!open && !creatingFolder) setNewFolderParentPath(null)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>新建文件夹</DialogTitle>
+            <DialogDescription>在{newFolderParentPath ? ` ${newFolderParentPath}` : ' Vault 根目录'}中创建文件夹。</DialogDescription>
+          </DialogHeader>
+          <Input
+            autoFocus
+            value={newFolderName}
+            onChange={(event) => setNewFolderName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') void createFolder()
+            }}
+            placeholder="文件夹名称"
+            aria-label="文件夹名称"
+          />
+          <DialogFooter>
+            <Button variant="outline" disabled={creatingFolder} onClick={() => setNewFolderParentPath(null)}>取消</Button>
+            <Button disabled={!newFolderName.trim() || creatingFolder} onClick={() => { void createFolder() }}>
+              {creatingFolder && <Loader2 className="mr-2 size-4 animate-spin" />}
+              创建
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Dialog
         open={quoteDialogOpen}
         onOpenChange={(open) => {

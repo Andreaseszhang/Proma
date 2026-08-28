@@ -68,6 +68,22 @@ function isWithinRoot(rootPath: string, targetPath: string): boolean {
   return fromRoot === '' || (!fromRoot.startsWith(`..${sep}`) && fromRoot !== '..' && !isAbsolute(fromRoot))
 }
 
+function normalizeRelativeVaultFolderPath(value: string): string {
+  if (typeof value !== 'string' || value.includes('\0')) {
+    throw new Error('Vault 文件夹路径非法')
+  }
+  const normalized = value.trim().replace(/\\/g, '/').replace(/^\.\//, '').replace(/\/$/, '')
+  if (!normalized) return ''
+  if (isAbsolute(normalized) || isWindowsAbsolutePath(normalized)) {
+    throw new Error('Vault 不接受绝对路径')
+  }
+  const parts = normalized.split('/')
+  if (parts.some((part) => !part || part === '.' || part === '..' || part.startsWith(HIDDEN_DIRECTORY_PREFIX))) {
+    throw new Error('Vault 文件夹路径不能包含隐藏目录、空段或上级目录')
+  }
+  return parts.join('/')
+}
+
 function assertVaultRoot(rootPath: string): string {
   const resolved = realpathSync(resolve(rootPath))
   if (!statSync(resolved).isDirectory()) {
@@ -76,15 +92,14 @@ function assertVaultRoot(rootPath: string): string {
   return resolved
 }
 
-function getSafeVaultTarget(rootPath: string, relativePath: string): { absolutePath: string; relativePath: string } {
-  const normalizedRelativePath = normalizeRelativeMarkdownPath(relativePath)
-  const absolutePath = resolve(rootPath, normalizedRelativePath)
+function getSafeVaultPath(rootPath: string, relativePath: string): { absolutePath: string; relativePath: string } {
+  const absolutePath = resolve(rootPath, relativePath)
   if (!isWithinRoot(rootPath, absolutePath)) {
     throw new Error('Vault 路径超出授权根目录')
   }
 
   let current = rootPath
-  for (const segment of normalizedRelativePath.split('/')) {
+  for (const segment of relativePath.split('/').filter(Boolean)) {
     current = join(current, segment)
     if (!existsSync(current)) continue
     const stats = lstatSync(current)
@@ -93,7 +108,15 @@ function getSafeVaultTarget(rootPath: string, relativePath: string): { absoluteP
     }
   }
 
-  return { absolutePath, relativePath: normalizedRelativePath }
+  return { absolutePath, relativePath }
+}
+
+function getSafeVaultTarget(rootPath: string, relativePath: string): { absolutePath: string; relativePath: string } {
+  return getSafeVaultPath(rootPath, normalizeRelativeMarkdownPath(relativePath))
+}
+
+function getSafeVaultFolderTarget(rootPath: string, relativePath: string): { absolutePath: string; relativePath: string } {
+  return getSafeVaultPath(rootPath, normalizeRelativeVaultFolderPath(relativePath))
 }
 
 function toRelativePath(rootPath: string, absolutePath: string): string {
@@ -191,6 +214,8 @@ export interface VaultFileSystem {
   readFile(relativePath: string): VaultReadResult
   writeFile(input: VaultWriteInput): VaultWriteResult
   createUntitledNote(inboxPath: string, content?: string, now?: Date): VaultWriteResult
+  createUntitledNoteInFolder(folderPath: string, content?: string, now?: Date): VaultWriteResult
+  createFolder(relativePath: string): void
   renameFile(input: VaultRenameInput): VaultReadResult
   deleteFile(input: VaultDeleteInput): void
   search(query: string, limit?: number): VaultSearchResult[]
@@ -296,6 +321,41 @@ export function createVaultFileSystem(rootPath: string): VaultFileSystem {
     throw new Error('Vault 无法分配未命名笔记文件名')
   }
 
+  const createUntitledNoteInFolder = (folderPath: string, content = '', now = new Date()): VaultWriteResult => {
+    if (Buffer.byteLength(content, 'utf-8') > MAX_VAULT_FILE_BYTES) {
+      throw new Error('Vault 写入内容超过 2 MB 限制')
+    }
+    const folder = getSafeVaultFolderTarget(root, folderPath)
+    if (!existsSync(folder.absolutePath) || !lstatSync(folder.absolutePath).isDirectory()) {
+      throw new Error('目标 Vault 文件夹不存在')
+    }
+
+    for (let sequence = 1; sequence <= Number.MAX_SAFE_INTEGER; sequence++) {
+      const relativePath = folder.relativePath
+        ? `${folder.relativePath}/${untitledNoteFilename(now, sequence)}`
+        : untitledNoteFilename(now, sequence)
+      const target = getSafeVaultTarget(root, relativePath)
+      if (!createFileExclusively(target.absolutePath, content)) continue
+      const result = readFile(target.relativePath)
+      return { ok: true, relativePath: result.relativePath, sha256: result.sha256, modifiedAt: result.modifiedAt }
+    }
+
+    throw new Error('Vault 无法分配未命名笔记文件名')
+  }
+
+  const createFolder = (relativePath: string): void => {
+    const target = getSafeVaultFolderTarget(root, relativePath)
+    if (!target.relativePath) throw new Error('不能创建 Vault 根文件夹')
+    if (existsSync(target.absolutePath)) throw new Error('同名文件或文件夹已存在')
+
+    const parent = dirname(target.absolutePath)
+    if (!existsSync(parent) || !lstatSync(parent).isDirectory()) {
+      throw new Error('目标 Vault 父文件夹不存在')
+    }
+    const revalidated = getSafeVaultFolderTarget(root, target.relativePath)
+    mkdirSync(revalidated.absolutePath)
+  }
+
   const renameFile = (input: VaultRenameInput): VaultReadResult => {
     const source = getSafeVaultTarget(root, input.relativePath)
     const current = readFile(source.relativePath)
@@ -367,7 +427,7 @@ export function createVaultFileSystem(rootPath: string): VaultFileSystem {
     return results
   }
 
-  return { listFiles, readFile, writeFile, createUntitledNote, renameFile, deleteFile, search }
+  return { listFiles, readFile, writeFile, createUntitledNote, createUntitledNoteInFolder, createFolder, renameFile, deleteFile, search }
 }
 
 function sanitizeQuoteLabel(value: string): string {
@@ -524,6 +584,18 @@ export function createUntitledVaultFile(): VaultWriteResult {
   const config = getVaultConfig()
   if (!config) throw new Error('尚未选择 Vault')
   return createVaultFileSystem(config.rootPath).createUntitledNote(config.inboxPath)
+}
+
+export function createUntitledVaultFileInFolder(folderPath: string): VaultWriteResult {
+  const config = getVaultConfig()
+  if (!config) throw new Error('尚未选择 Vault')
+  return createVaultFileSystem(config.rootPath).createUntitledNoteInFolder(folderPath)
+}
+
+export function createVaultFolder(relativePath: string): void {
+  const config = getVaultConfig()
+  if (!config) throw new Error('尚未选择 Vault')
+  createVaultFileSystem(config.rootPath).createFolder(relativePath)
 }
 
 export function discoverVaultCandidates(): VaultCandidate[] {

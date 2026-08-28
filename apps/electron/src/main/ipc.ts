@@ -167,6 +167,8 @@ import {
   clearVaultConfig,
   configureVault,
   createUntitledVaultFile,
+  createUntitledVaultFileInFolder,
+  createVaultFolder,
   discoverObsidianVaultCandidates,
   discoverVaultCandidates,
   selectDefaultVault,
@@ -5932,6 +5934,16 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle(VAULT_IPC_CHANNELS.CREATE_UNTITLED_FILE, async () => createUntitledVaultFile())
+
+  ipcMain.handle(VAULT_IPC_CHANNELS.CREATE_UNTITLED_FILE_IN_FOLDER, async (_, folderPath: unknown) => {
+    if (typeof folderPath !== 'string') throw new Error('Vault 文件夹路径非法')
+    return createUntitledVaultFileInFolder(folderPath)
+  })
+
+  ipcMain.handle(VAULT_IPC_CHANNELS.CREATE_FOLDER, async (_, relativePath: unknown): Promise<void> => {
+    if (typeof relativePath !== 'string') throw new Error('Vault 文件夹路径非法')
+    createVaultFolder(relativePath)
+  })
 
   ipcMain.handle(VAULT_IPC_CHANNELS.RENAME_FILE, async (_, input: unknown) => {
     if (!input || typeof input !== 'object') throw new Error('Vault 重命名参数非法')

@@ -6,6 +6,7 @@ import { highlightCode, highlightToTokens } from '@proma/core'
 import type { HighlightTokensResult } from '@proma/core'
 import { CodeBlock, MermaidBlock } from '@proma/ui'
 import { shouldRenderMermaidCodeBlock } from '@/lib/mermaid-detection'
+import { copyTextToClipboard } from '@/lib/clipboard'
 
 type PreviewKind = 'code' | 'table' | 'mermaid' | 'thematic-break' | 'math'
 
@@ -29,6 +30,12 @@ const SHIKI_CACHE_LIMIT = 160
 
 function currentShikiTheme(): string {
   return document.documentElement.classList.contains('dark') ? 'github-dark' : 'github-light'
+}
+
+/** CodeMirror 会在状态事务期间销毁 widget；推迟 React root 卸载避免与并发渲染竞争。 */
+function unmountRootAfterRender(root: Root | null): void {
+  if (!root) return
+  queueMicrotask(() => root.unmount())
 }
 
 function findFencedCodeBlocks(markdown: string): FencedCodeBlock[] {
@@ -185,7 +192,7 @@ class CodeBlockWidget extends LiveMarkdownBlockWidget {
     wrapper.dataset.liveMarkdownBlockFrom = String(this.from)
     this.root = createRoot(wrapper)
     this.root.render(
-      <CodeBlock>
+      <CodeBlock onCopy={copyTextToClipboard}>
         <code className={this.language ? `language-${this.language}` : undefined}>{this.code}</code>
       </CodeBlock>,
     )
@@ -194,7 +201,7 @@ class CodeBlockWidget extends LiveMarkdownBlockWidget {
   }
   override destroy(): void {
     super.destroy()
-    this.root?.unmount()
+    unmountRootAfterRender(this.root)
     this.root = null
   }
 }
@@ -251,7 +258,7 @@ class MermaidWidget extends LiveMarkdownBlockWidget {
   }
   override destroy(): void {
     super.destroy()
-    this.root?.unmount()
+    unmountRootAfterRender(this.root)
     this.root = null
   }
 }

@@ -2340,6 +2340,12 @@
 }
 
 /* Vault uses ink-mde's hybrid editor with the workspace canvas and typography. */
+.vault-note-editor {
+  --vault-editor-horizontal-inset: 1rem;
+}
+.vault-note-editor-titlebar {
+  padding-inline: var(--vault-editor-horizontal-inset);
+}
 .vault-ink-mde {
   --ink-color: hsl(var(--foreground));
   --ink-font-family: inherit;
@@ -2413,7 +2419,7 @@
 }
 .vault-ink-mde .cm-content {
   min-height: 100%;
-  padding: 0.75rem 1rem !important;
+  padding: 0.75rem var(--vault-editor-horizontal-inset, 1rem) !important;
 }
 .vault-ink-mde .cm-selectionBackground,
 .vault-ink-mde .cm-searchMatch,

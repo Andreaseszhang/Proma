@@ -299,10 +299,10 @@ function VaultMarkdownEditor({
     <div
       ref={editorPageRef}
       onWheel={handleEditorPageWheel}
-      className="min-h-0 flex-1 overflow-hidden titlebar-no-drag"
+      className="vault-note-editor min-h-0 flex-1 overflow-hidden titlebar-no-drag"
     >
       <div className="mx-auto flex h-full w-full max-w-5xl flex-col px-5 py-5">
-        <div className="mb-8 flex min-w-0 items-center gap-2">
+        <div className="vault-note-editor-titlebar mb-8 flex min-w-0 items-center gap-2">
           <input
             aria-label="重命名笔记"
             value={filename}
@@ -315,7 +315,7 @@ function VaultMarkdownEditor({
                 event.currentTarget.blur()
               }
             }}
-            className="h-9 min-w-0 flex-1 bg-transparent px-4 text-2xl font-semibold leading-tight text-foreground outline-none placeholder:text-muted-foreground/50"
+            className="h-9 min-w-0 flex-1 bg-transparent px-0 text-2xl font-semibold leading-tight text-foreground outline-none placeholder:text-muted-foreground/50"
           />
           <Tooltip>
             <TooltipTrigger asChild>

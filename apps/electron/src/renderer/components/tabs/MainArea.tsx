@@ -146,7 +146,7 @@ export function MainArea(): React.ReactElement {
 
 
   return (
-    <Panel variant="grow" className={cn('bg-content-area', isClassic && 'rounded-2xl shadow-xl dark:shadow-sm')}>
+    <Panel variant="grow" className="bg-content-area">
       <div className="flex flex-1 min-h-0 overflow-hidden">
         <div className="flex flex-1 flex-col min-w-0 h-full">
           {activeView === 'planning' ? (

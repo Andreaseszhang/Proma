@@ -13,6 +13,7 @@ import { PROMA_DEFAULT_PERMISSION_MODE } from '@proma/shared'
 import { calculateDockBadgeCount, countPendingRequests } from '@/lib/dock-badge-count'
 import type { AgentQueuedMessage } from '@/lib/agent-message-queue'
 import type { SessionFileChange } from '@/lib/session-file-changes'
+import type { RightWorkspaceSplitState } from '@/lib/right-workspace-split'
 
 /** 活动状态 */
 export type ActivityStatus = 'pending' | 'running' | 'completed' | 'error' | 'backgrounded'
@@ -797,6 +798,17 @@ export const agentSessionComponentTabsAtomFamily = atomFamily((sessionId: string
 
 /** 侧面板当前工作区：基础视图或某个浏览器网页（per-session Map）。 */
 export const agentDiffPanelTabAtom = atom<Map<string, AgentSidePanelTab | 'browser' | 'preview'>>(new Map())
+
+/** 当前 renderer 运行期内的右侧双 Pane 状态；动态 Tab 失效时由 SidePanel 主动清理。 */
+export const agentSidePanelSplitMapAtom = atom<Map<string, RightWorkspaceSplitState>>(new Map())
+
+/** 双 Pane 分隔比例按 Session 持久化，但不持久化可能在重启后失效的动态 Tab ID。 */
+export const agentSidePanelSplitRatioMapAtom = atomWithStorage<Record<string, number>>(
+  'proma-agent-workspace-split-ratio-by-session',
+  {},
+  undefined,
+  { getOnInit: true },
+)
 
 /** Agent 历史中的 Skill 引用请求在 Skills Tab 内打开对应详情。 */
 export interface SkillDetailNavigationRequest {

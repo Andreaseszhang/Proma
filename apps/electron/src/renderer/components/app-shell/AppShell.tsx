@@ -165,12 +165,10 @@ export function AppShell(): React.ReactElement {
   const leftSidebarContentWidth = sidebarCollapsed ? COLLAPSED_LEFT_SIDEBAR_WIDTH : clampedLeftSidebarWidth
   // 经典界面已移除，侧栏始终只占内容宽度与分隔线。
   const leftSidebarOccupiedWidth = leftSidebarContentWidth + 1
-  const canUseCollapsedSidebarSpace = sidebarCollapsed && (
-    activeRightPanelSplit !== null || isExpandedRightWorkspace || rightPanelLayout.hasOpenedWideWorkspace
-  )
-  const canAutoCollapseSidebarForRightPanel = !sidebarCollapsed && (
-    activeRightPanelSplit !== null || isExpandedRightWorkspace
-  )
+  // 右侧面板是完整的工作区：不论当前为文件、改动或扩展 Tab，继续向左拖拽时
+  // 都应能收起左侧 Sidebar，并使用释放出的全部宽度；主区域仍由 MIN_MAIN_AREA_WIDTH 兜底。
+  const canUseCollapsedSidebarSpace = sidebarCollapsed
+  const canAutoCollapseSidebarForRightPanel = !sidebarCollapsed
   const clampedRightPanelWidth = clampRightPanelWidth(
     rightPanelLayout.width,
     viewportWidth,

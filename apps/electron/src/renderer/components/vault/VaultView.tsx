@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
-import { BookOpen, ChevronDown, ChevronRight, ChevronsUpDown, CircleHelp, Folder, FolderOpen, Loader2, Plus, RefreshCw, Save, Trash2 } from 'lucide-react'
+import { BookOpen, ChevronDown, ChevronRight, ChevronsUpDown, CircleHelp, Folder, FolderOpen, Loader2, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { VaultCandidate, VaultFileEntry, VaultReadResult, VaultSummary, SkillMeta } from '@proma/shared'
 import { Button } from '@/components/ui/button'
@@ -33,7 +33,6 @@ import {
   type VaultReferenceType,
 } from './vault-reference-utils'
 import { getVaultEditorKey, shouldAdoptVaultReadContent } from './vault-editor-lifecycle'
-import { getVaultEditorHeaderActions } from './vault-editor-header-actions'
 import { buildVaultTree, getInitialVaultExpandedFolders, getVaultFolderAncestors, hasSameVaultTreeEntries, type VaultFolderNode } from './vault-tree-model'
 
 const VAULT_NAME = 'Vault'
@@ -215,37 +214,10 @@ function VaultFileList({
   )
 }
 
-function VaultRefreshButton({
-  refreshing,
-  onRefresh,
-}: {
-  refreshing: boolean
-  onRefresh: () => void
-}): React.ReactElement {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          aria-label={`刷新 ${VAULT_NAME}`}
-          disabled={refreshing}
-          onClick={onRefresh}
-          className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
-        >
-          <RefreshCw size={14} className={cn(refreshing && 'animate-spin')} />
-        </button>
-      </TooltipTrigger>
-      <TooltipContent>刷新 {VAULT_NAME}</TooltipContent>
-    </Tooltip>
-  )
-}
-
 function VaultMarkdownEditor({
   readResult,
   files,
   workspaceSlug,
-  refreshing,
-  onRefresh,
   onSave,
   onRename,
   onOpenWikiLink,
@@ -255,9 +227,7 @@ function VaultMarkdownEditor({
   readResult: VaultReadResult
   files: VaultFileEntry[]
   workspaceSlug: string | null
-  refreshing: boolean
-  onRefresh: () => void
-  onSave: (nextContent: string) => Promise<void>
+  onSave: (nextContent: string, options?: { silent?: boolean }) => Promise<void>
   onRename: (name: string) => Promise<void>
   onOpenWikiLink: (target: string) => void
   onActivateReference: (reference: VaultReferenceRange) => void
@@ -289,15 +259,21 @@ function VaultMarkdownEditor({
     scroller.scrollLeft += event.deltaX
   }
 
-  const save = async (): Promise<void> => {
+  const save = React.useCallback(async (silent = false): Promise<void> => {
     if (saving || draft === readResult.content) return
     setSaving(true)
     try {
-      await onSave(draft)
+      await onSave(draft, { silent })
     } finally {
       setSaving(false)
     }
-  }
+  }, [draft, onSave, readResult.content, saving])
+
+  React.useEffect(() => {
+    if (saving || draft === readResult.content) return
+    const timer = window.setTimeout(() => { void save(true) }, 700)
+    return () => window.clearTimeout(timer)
+  }, [draft, readResult.content, save, saving])
 
   const rename = async (): Promise<void> => {
     const currentName = displayDocumentTitle(readResult.relativePath.split('/').pop() ?? readResult.relativePath)
@@ -339,47 +315,21 @@ function VaultMarkdownEditor({
                 event.currentTarget.blur()
               }
             }}
-            className="h-10 min-w-0 flex-1 bg-transparent px-4 text-3xl font-semibold leading-tight text-foreground outline-none placeholder:text-muted-foreground/50"
+            className="h-9 min-w-0 flex-1 bg-transparent px-4 text-2xl font-semibold leading-tight text-foreground outline-none placeholder:text-muted-foreground/50"
           />
-          <div className="flex shrink-0 items-center gap-1">
-            {getVaultEditorHeaderActions(draft !== readResult.content).map((action) => {
-              if (action === 'refresh') {
-                return <VaultRefreshButton key={action} refreshing={refreshing} onRefresh={onRefresh} />
-              }
-              if (action === 'save') {
-                return (
-                  <Button
-                    key={action}
-                    size="sm"
-                    className="h-8 shrink-0 gap-1.5"
-                    disabled={saving}
-                    onClick={() => { void save() }}
-                  >
-                    {saving ? <Loader2 className="size-3.5 animate-spin" /> : <Save size={14} />}
-                    {saving ? '保存中' : '保存'}
-                  </Button>
-                )
-              }
-              if (action === 'saved-status') {
-                return <span key={action} className="shrink-0 px-1 text-[11px] text-muted-foreground">已保存</span>
-              }
-              return (
-                <Tooltip key={action}>
-                  <TooltipTrigger asChild>
-                    <button
-                      type="button"
-                      aria-label={`${VAULT_NAME} 使用帮助`}
-                      onClick={onOpenTutorial}
-                      className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                    >
-                      <CircleHelp size={16} />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent>{VAULT_NAME} 使用帮助（Cmd/Ctrl + S 保存）</TooltipContent>
-                </Tooltip>
-              )
-            })}
-          </div>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label={`${VAULT_NAME} 使用帮助`}
+                onClick={onOpenTutorial}
+                className="flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <CircleHelp size={16} />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>{VAULT_NAME} 使用帮助（自动保存；Cmd/Ctrl + S 可立即保存）</TooltipContent>
+          </Tooltip>
         </div>
         <div className="min-h-0 flex-1">
           <VaultLiveMarkdownEditor
@@ -416,8 +366,6 @@ function VaultMarkdownPane({
   loading,
   hasVault,
   workspaceSlug,
-  refreshing,
-  onRefresh,
   onSave,
   onRename,
   onOpenWikiLink,
@@ -429,9 +377,7 @@ function VaultMarkdownPane({
   loading: boolean
   hasVault: boolean
   workspaceSlug: string | null
-  refreshing: boolean
-  onRefresh: () => void
-  onSave: (nextContent: string) => Promise<void>
+  onSave: (nextContent: string, options?: { silent?: boolean }) => Promise<void>
   onRename: (name: string) => Promise<void>
   onOpenWikiLink: (target: string) => void
   onActivateReference: (reference: VaultReferenceRange) => void
@@ -443,7 +389,6 @@ function VaultMarkdownPane({
         <div className="mx-auto flex h-full w-full max-w-5xl flex-col px-5 py-5">
           <div className="titlebar-no-drag flex min-w-0 items-center gap-2">
             <p className="min-w-0 flex-1 truncate px-4 text-sm text-muted-foreground">{loading ? '正在加载笔记' : hasVault ? '选择一篇笔记开始编辑' : '从左下角选择或创建 Vault'}</p>
-            <VaultRefreshButton refreshing={refreshing} onRefresh={onRefresh} />
           </div>
           {loading && (
             <div className="flex min-h-0 flex-1 items-center justify-center text-muted-foreground">
@@ -462,8 +407,6 @@ function VaultMarkdownPane({
         readResult={readResult}
         files={files}
         workspaceSlug={workspaceSlug}
-        refreshing={refreshing}
-        onRefresh={onRefresh}
         onSave={onSave}
         onRename={onRename}
         onOpenWikiLink={onOpenWikiLink}
@@ -495,7 +438,6 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
   const [candidatesLoading, setCandidatesLoading] = React.useState(false)
   const [files, setFiles] = React.useState<VaultFileEntry[]>([])
   const [loading, setLoading] = React.useState(true)
-  const [refreshing, setRefreshing] = React.useState(false)
   const [fileLoading, setFileLoading] = React.useState(false)
   const [selectedFile, setSelectedFile] = useAtom(selectedVaultFileAtom)
   const [readResult, setReadResult] = useAtom(vaultReadResultAtom)
@@ -568,9 +510,8 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
     void window.electronAPI.setVaultUserContext(sessionId, selectedFile, true)
   }, [selectedFile, sessionId])
 
-  const refresh = React.useCallback(async ({ showLoading = false, userInitiated = false } = {}): Promise<void> => {
+  const refresh = React.useCallback(async ({ showLoading = false }: { showLoading?: boolean } = {}): Promise<void> => {
     if (showLoading) setLoading(true)
-    if (userInitiated) setRefreshing(true)
     try {
       const nextConfig = await window.electronAPI.getVaultConfig()
       setConfig(nextConfig)
@@ -597,7 +538,6 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
       toast.error(error instanceof Error ? error.message : `无法读取 ${VAULT_NAME}`)
     } finally {
       if (showLoading) setLoading(false)
-      if (userInitiated) setRefreshing(false)
     }
   }, [setReadResult, setSelectedFile])
 
@@ -830,7 +770,7 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
     }
   }
 
-  const save = async (content: string): Promise<void> => {
+  const save = async (content: string, { silent = false }: { silent?: boolean } = {}): Promise<void> => {
     if (!readResult) return
     try {
       const result = await window.electronAPI.writeVaultFile({
@@ -852,7 +792,7 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
       })
       const nextFiles = await window.electronAPI.listVaultFiles()
       setFiles((current) => hasSameVaultTreeEntries(current, nextFiles) ? current : nextFiles)
-      toast.success(`已保存到 ${VAULT_NAME}`)
+      if (!silent) toast.success(`已保存到 ${VAULT_NAME}`)
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '保存失败')
     }
@@ -1036,8 +976,6 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
             loading={fileLoading}
             hasVault={config !== null}
             workspaceSlug={workspaceSlug}
-            refreshing={refreshing}
-            onRefresh={() => { void refresh({ userInitiated: true }) }}
             onSave={save}
             onRename={rename}
             onOpenWikiLink={openWikiLink}
@@ -1131,7 +1069,7 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
           <div className="space-y-4 text-sm leading-6 text-muted-foreground">
             <section>
               <p className="font-medium text-foreground">编辑与保存</p>
-              <p>点击笔记开始编辑；按 Cmd/Ctrl + S 保存。左下角可以切换 {VAULT_NAME}，笔记标题右上角可以刷新文件列表。</p>
+              <p>点击笔记开始编辑，修改会自动保存；按 Cmd/Ctrl + S 可立即保存。左下角可以切换 {VAULT_NAME}。</p>
             </section>
             <section>
               <p className="font-medium text-foreground">双向链接</p>

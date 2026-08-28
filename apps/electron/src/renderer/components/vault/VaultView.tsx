@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { useAtom, useAtomValue, useSetAtom } from 'jotai'
-import { BookOpen, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, CircleHelp, Folder, FolderOpen, Loader2, Plus, RefreshCw, Save, Trash2 } from 'lucide-react'
+import { BookOpen, ChevronDown, ChevronRight, ChevronsUpDown, CircleHelp, Folder, FolderOpen, Loader2, Plus, RefreshCw, Save, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { VaultCandidate, VaultFileEntry, VaultReadResult, VaultSummary, SkillMeta } from '@proma/shared'
 import { Button } from '@/components/ui/button'
@@ -835,27 +835,17 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
                     <TooltipTrigger asChild>
                       <button
                         type="button"
-                        aria-label="全部展开文件树"
-                        onClick={() => setVaultTreeAction((current) => ({ type: 'expand', version: current.version + 1 }))}
+                        aria-label={vaultTreeAction.type === 'expand' ? '全部折叠文件树' : '全部展开文件树'}
+                        onClick={() => setVaultTreeAction((current) => ({
+                          type: current.type === 'expand' ? 'collapse' : 'expand',
+                          version: current.version + 1,
+                        }))}
                         className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
                       >
                         <ChevronsUpDown size={15} />
                       </button>
                     </TooltipTrigger>
-                    <TooltipContent>全部展开</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        aria-label="全部折叠文件树"
-                        onClick={() => setVaultTreeAction((current) => ({ type: 'collapse', version: current.version + 1 }))}
-                        className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-                      >
-                        <ChevronsDownUp size={15} />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent>全部折叠</TooltipContent>
+                    <TooltipContent>{vaultTreeAction.type === 'expand' ? '全部折叠' : '全部展开'}</TooltipContent>
                   </Tooltip>
                   {config && (
                     <Tooltip>

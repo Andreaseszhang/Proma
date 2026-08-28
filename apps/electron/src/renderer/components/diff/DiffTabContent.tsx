@@ -7,7 +7,7 @@
 
 import * as React from 'react'
 import { ChevronRight, Code2, Copy, Check, Eye, FolderOpen, List, Pencil, RotateCw, Save, WrapText, X } from 'lucide-react'
-import { useAtom, useAtomValue, useSetAtom } from 'jotai'
+import { atom, useAtom, useAtomValue, useSetAtom } from 'jotai'
 import DOMPurify from 'dompurify'
 import { File as PierreFile } from '@pierre/diffs/react'
 import { toast } from 'sonner'
@@ -23,7 +23,13 @@ import {
   getExplorationSidePanelTab,
 } from '@/atoms/agent-atoms'
 import { resolvedThemeAtom } from '@/atoms/theme'
-import { previewCodeWrapAtom, quotedSelectionMapAtom } from '@/atoms/preview-atoms'
+import {
+  getPreviewContentRefreshKey,
+  previewCodeWrapAtom,
+  previewContentRefreshVersionAtom,
+  previewResolvedPathAtom,
+  quotedSelectionMapAtom,
+} from '@/atoms/preview-atoms'
 import { markdownTocOpenAtom } from '@/atoms/markdown-toc'
 import { useFocusAgentSessionInput } from '@/hooks/useFocusAgentSessionInput'
 import { useShortcut } from '@/hooks/useShortcut'
@@ -81,8 +87,8 @@ const FILE_FIND_SHORTCUT_OPTIONS = { exclusive: true }
  * 简易 LRU 缓存：保留最近访问的 N 个 entries。
  * key 设计：
  * - diff 模式：`${sessionId}:diff:${filePath}@v${refreshVersion}:${scope}`
- * - preview 模式：`${sessionId}:preview:${filePath}@v${refreshVersion}:${scope}`
- * refreshVersion 变化时（agent 写文件、git 突变）key 自然变化，
+ * - preview 模式：`${sessionId}:preview:${filePath}@v${previewContentVersion}:${scope}`
+ * Diff 使用会话级版本；纯预览使用文件级版本，只在当前文件实际变化时失效。
  * 老 entry 不会被命中，最终被 LRU 淘汰；无需主动失效。
  */
 type CacheEntry = {
@@ -363,10 +369,22 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
   const [findOpen, setFindOpen] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
   const [copied, setCopied] = React.useState(false)
-  const refreshVersionMap = useAtomValue(agentDiffRefreshVersionAtom)
   const setRefreshVersionMap = useSetAtom(agentDiffRefreshVersionAtom)
-  const refreshVersion = refreshVersionMap.get(sessionId) ?? 0
-  const previewContentVersion = previewOnly ? refreshVersion : 0
+  const setPreviewContentRefreshVersionMap = useSetAtom(previewContentRefreshVersionAtom)
+  const setPreviewResolvedPaths = useSetAtom(previewResolvedPathAtom)
+  const previewContentRefreshKey = React.useMemo(
+    () => getPreviewContentRefreshKey(sessionId, { filePath, previewOnly, gitRoot, baseRef }),
+    [baseRef, filePath, gitRoot, previewOnly, sessionId],
+  )
+  // 预览不能订阅会话级 diff 版本：Agent 写入任意其他文件时该版本会变化。
+  // 用派生 atom 只订阅当前模式实际使用的版本，避免无关写入触发整个 Markdown 预览重渲染。
+  const contentRefreshVersionAtom = React.useMemo(() => atom((get) => {
+    if (previewOnly) return get(previewContentRefreshVersionAtom).get(previewContentRefreshKey) ?? 0
+    return get(agentDiffRefreshVersionAtom).get(sessionId) ?? 0
+  }), [previewContentRefreshKey, previewOnly, sessionId])
+  const contentRefreshVersion = useAtomValue(contentRefreshVersionAtom)
+  const refreshVersion = previewOnly ? 0 : contentRefreshVersion
+  const previewContentVersion = previewOnly ? contentRefreshVersion : 0
   const theme = useAtomValue(resolvedThemeAtom)
   const [codeWrap, setCodeWrap] = useAtom(previewCodeWrapAtom)
   const [tocOpen, setTocOpen] = useAtom(markdownTocOpenAtom)
@@ -782,7 +800,7 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
   }, [updateMarkdownEditorViewState])
 
   // 主加载 effect：上下文变化（filePath/dirPath/gitRoot/previewOnly）时触发；
-  // 纯预览模式也跟随 refreshVersion 失效，保证同一文件二次写入后重新读盘。
+  // 纯预览仅在该文件收到 watcher 事件、焦点校验变化或手动刷新时重新读盘。
   // 命中缓存时跳过 loading 闪烁直接渲染；未命中走 IPC 拉取
   React.useEffect(() => {
     let cancelled = false
@@ -853,6 +871,16 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
     }
 
     async function load() {
+      const recordResolvedPreviewPath = (resolvedPath: string | undefined): void => {
+        if (!previewOnly || !resolvedPath) return
+        setPreviewResolvedPaths((previous) => {
+          if (previous.get(previewContentRefreshKey) === resolvedPath) return previous
+          const next = new Map(previous)
+          next.set(previewContentRefreshKey, resolvedPath)
+          return next
+        })
+      }
+
       try {
         let content = cached?.newContent ?? ''
         let old = cached?.oldContent ?? ''
@@ -861,6 +889,11 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
         if (!cached) {
           // 即使从「改动」列表点开，XLSX/PPTX 也应保留原有的 Office 内联预览。
           if (isOfficePreview) {
+            if (previewOnly) {
+              const resolvedPreview = await window.electronAPI.resolveAndReadFile(filePath, fileAccess)
+              if (cancelled) return
+              recordResolvedPreviewPath(resolvedPreview?.resolvedPath)
+            }
             const result = await window.electronAPI.officeToHtml(filePath, fileAccess)
             if (cancelled) return
             const html = DOMPurify.sanitize(result?.html ?? '')
@@ -873,6 +906,12 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
             return
           }
           if (previewOnly) {
+            // 所有纯预览类型先记录主进程实际解析到的路径。相对路径的多个候选根
+            // 中只有这个路径能使 watcher 刷新当前正在展示的文件。
+            const resolvedPreview = await window.electronAPI.resolveAndReadFile(filePath, fileAccess)
+            if (cancelled) return
+            recordResolvedPreviewPath(resolvedPreview?.resolvedPath)
+
             if (isPdf) {
               const result = await window.electronAPI.preparePdfPreview(filePath, fileAccess)
               if (cancelled) return
@@ -898,8 +937,7 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
             if (isLegacyOffice) {
               return
             }
-            const result = await window.electronAPI.resolveAndReadFile(filePath, fileAccess)
-            if (cancelled) return
+            const result = resolvedPreview
             if (result?.isBinary || result?.isTooLarge) {
               const reason = result.isTooLarge
                 ? '此文本文件超过 5 MB，无法安全进行内联预览，请使用默认应用打开。'
@@ -952,7 +990,7 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
     load()
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filePath, dirPath, gitRoot, previewOnly, previewContentVersion, fileAccess, isPdf, isOfficePreview, isLegacyOffice, isImage, isHtml, sessionId, ext, getContentCacheKey])
+  }, [filePath, dirPath, gitRoot, previewOnly, previewContentRefreshKey, previewContentVersion, fileAccess, isPdf, isOfficePreview, isLegacyOffice, isImage, isHtml, sessionId, ext, getContentCacheKey, setPreviewResolvedPaths])
 
   // refreshVersion 触发的静默刷新：仅 diff 模式、内容有变化时才更新 state
   const prevRefreshRef = React.useRef(-1)
@@ -1259,10 +1297,11 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
         lastOldContentRef.current = ''
         setOldContent('')
         setNewContent(draft)
-        cacheSet(getContentCacheKey('preview', refreshVersion + 1), { oldContent: '', newContent: draft })
-        setRefreshVersionMap((prev) => {
+        const nextPreviewContentVersion = previewContentVersion + 1
+        cacheSet(getContentCacheKey('preview', nextPreviewContentVersion), { oldContent: '', newContent: draft })
+        setPreviewContentRefreshVersionMap((prev) => {
           const m = new Map(prev)
-          m.set(sessionId, (prev.get(sessionId) ?? 0) + 1)
+          m.set(previewContentRefreshKey, nextPreviewContentVersion)
           return m
         })
         setAutosaveStatus('saved')
@@ -1275,7 +1314,7 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
     }
 
     return enqueueMarkdownEditorSave(targetSessionId, editorCacheKey, run)
-  }, [componentMountedRef, getContentCacheKey, markdownEditorCacheKey, ownerGeneration, persistMarkdownEditorViewState, refreshVersion, sessionId, setRefreshVersionMap])
+  }, [componentMountedRef, getContentCacheKey, markdownEditorCacheKey, ownerGeneration, persistMarkdownEditorViewState, previewContentRefreshKey, previewContentVersion, setPreviewContentRefreshVersionMap, sessionId])
 
 
   const saveMarkdownEdit = React.useCallback(async () => {
@@ -1320,12 +1359,21 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
   }, [isEditableText, markdownSourceMode, persistMarkdownEditorViewState, readOnly])
 
   const handleManualRefresh = React.useCallback(() => {
+    if (previewOnly) {
+      setPreviewContentRefreshVersionMap((prev) => {
+        const m = new Map(prev)
+        m.set(previewContentRefreshKey, (prev.get(previewContentRefreshKey) ?? 0) + 1)
+        return m
+      })
+      return
+    }
+
     setRefreshVersionMap((prev) => {
       const m = new Map(prev)
       m.set(sessionId, (prev.get(sessionId) ?? 0) + 1)
       return m
     })
-  }, [sessionId, setRefreshVersionMap])
+  }, [previewContentRefreshKey, previewOnly, sessionId, setPreviewContentRefreshVersionMap, setRefreshVersionMap])
 
   const handleAddSelectionToAgent = React.useCallback(() => {
     if (!previewSelection) return

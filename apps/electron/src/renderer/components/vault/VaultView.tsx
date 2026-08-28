@@ -94,7 +94,6 @@ function VaultFileList({
   // Start collapsed: this prevents a large nested Vault from mounting every file
   // row and its Tooltip tree on first paint. Expanded paths survive list refreshes.
   const [expandedFolders, setExpandedFolders] = React.useState<ReadonlySet<string>>(getInitialVaultExpandedFolders)
-  const [contextFolderPath, setContextFolderPath] = React.useState('')
 
   React.useEffect(() => {
     if (treeAction.version === 0) return
@@ -126,26 +125,33 @@ function VaultFileList({
           const expanded = expandedFolders.has(child.relativePath)
           return (
             <React.Fragment key={child.relativePath}>
-              <button
-                type="button"
-                aria-expanded={expanded}
-                aria-label={`${expanded ? '收起' : '展开'}文件夹 ${child.name}`}
-                onContextMenuCapture={() => setContextFolderPath(child.relativePath)}
-                onClick={() => {
-                  setExpandedFolders((current) => {
-                    const next = new Set(current)
-                    if (next.has(child.relativePath)) next.delete(child.relativePath)
-                    else next.add(child.relativePath)
-                    return next
-                  })
-                }}
-                className="flex h-8 w-full min-w-0 items-center gap-1 rounded-md pr-2 text-left text-[13px] text-foreground/80 transition-colors hover:bg-muted/70 hover:text-foreground"
-                style={{ paddingLeft: `${10 + Math.min(depth, 6) * 14}px` }}
-              >
-                {expanded ? <ChevronDown size={14} className="shrink-0 text-muted-foreground" /> : <ChevronRight size={14} className="shrink-0 text-muted-foreground" />}
-                {expanded ? <FolderOpen size={14} className="shrink-0 text-primary/80" /> : <Folder size={14} className="shrink-0 text-primary/80" />}
-                <span className="min-w-0 truncate">{child.name}</span>
-              </button>
+              <ContextMenu>
+                <ContextMenuTrigger asChild>
+                  <button
+                    type="button"
+                    aria-expanded={expanded}
+                    aria-label={`${expanded ? '收起' : '展开'}文件夹 ${child.name}`}
+                    onClick={() => {
+                      setExpandedFolders((current) => {
+                        const next = new Set(current)
+                        if (next.has(child.relativePath)) next.delete(child.relativePath)
+                        else next.add(child.relativePath)
+                        return next
+                      })
+                    }}
+                    className="flex h-8 w-full min-w-0 items-center gap-1 rounded-md pr-2 text-left text-[13px] text-foreground/80 transition-colors hover:bg-muted/70 hover:text-foreground"
+                    style={{ paddingLeft: `${10 + Math.min(depth, 6) * 14}px` }}
+                  >
+                    {expanded ? <ChevronDown size={14} className="shrink-0 text-muted-foreground" /> : <ChevronRight size={14} className="shrink-0 text-muted-foreground" />}
+                    {expanded ? <FolderOpen size={14} className="shrink-0 text-primary/80" /> : <Folder size={14} className="shrink-0 text-primary/80" />}
+                    <span className="min-w-0 truncate">{child.name}</span>
+                  </button>
+                </ContextMenuTrigger>
+                <ContextMenuContent className="w-40">
+                  <ContextMenuItem disabled={!canCreate} onSelect={() => onCreateNote(child.relativePath)}>新建笔记</ContextMenuItem>
+                  <ContextMenuItem disabled={!canCreate} onSelect={() => onCreateFolder(child.relativePath)}>新建文件夹</ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
               {expanded && (
                 <div className="relative">
                   <span
@@ -167,10 +173,6 @@ function VaultFileList({
           return (
             <div
               key={file.relativePath}
-              onContextMenuCapture={() => {
-                const separatorIndex = file.relativePath.lastIndexOf('/')
-                setContextFolderPath(separatorIndex < 0 ? '' : file.relativePath.slice(0, separatorIndex))
-              }}
               className={cn(
                 'group flex h-8 w-full min-w-0 items-center rounded-md transition-colors',
                 selected ? 'bg-accent text-accent-foreground shadow-sm' : 'text-foreground/70 hover:bg-muted/70 hover:text-foreground',
@@ -205,22 +207,11 @@ function VaultFileList({
   )
 
   return (
-    <ContextMenu>
-      <ContextMenuTrigger asChild>
-        <div
-          className="min-h-0 flex-1 overflow-y-auto px-2 pb-3 scrollbar-thin titlebar-no-drag"
-          onContextMenuCapture={() => setContextFolderPath('')}
-        >
-          {files.length === 0
-            ? <p className="px-4 py-6 text-center text-xs leading-relaxed text-muted-foreground">没有可显示的 Markdown 笔记</p>
-            : renderEntries(tree, 0)}
-        </div>
-      </ContextMenuTrigger>
-      <ContextMenuContent className="w-40">
-        <ContextMenuItem disabled={!canCreate} onSelect={() => onCreateNote(contextFolderPath)}>新建笔记</ContextMenuItem>
-        <ContextMenuItem disabled={!canCreate} onSelect={() => onCreateFolder(contextFolderPath)}>新建文件夹</ContextMenuItem>
-      </ContextMenuContent>
-    </ContextMenu>
+    <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3 scrollbar-thin titlebar-no-drag">
+      {files.length === 0
+        ? <p className="px-4 py-6 text-center text-xs leading-relaxed text-muted-foreground">没有可显示的 Markdown 笔记</p>
+        : renderEntries(tree, 0)}
+    </div>
   )
 }
 

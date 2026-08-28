@@ -302,7 +302,7 @@ function VaultMarkdownEditor({
       className="vault-note-editor min-h-0 flex-1 overflow-hidden titlebar-no-drag"
     >
       <div className="mx-auto flex h-full w-full max-w-5xl flex-col px-5 py-5">
-        <div className="vault-note-editor-titlebar mb-8 flex min-w-0 items-center gap-2">
+        <div className="vault-note-editor-titlebar mb-5 flex min-w-0 items-center gap-2">
           <input
             aria-label="重命名笔记"
             value={filename}

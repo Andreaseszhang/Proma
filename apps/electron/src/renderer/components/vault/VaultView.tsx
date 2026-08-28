@@ -1035,7 +1035,7 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
               </div>
             <div
               aria-hidden="true"
-              className="titlebar-no-drag absolute right-0 top-0 bottom-0 z-10 w-3 translate-x-1/2 cursor-col-resize transition-colors hover:bg-primary/10 active:bg-primary/25"
+              className="titlebar-no-drag absolute right-0 top-0 bottom-0 z-10 w-3 translate-x-1/2 cursor-col-resize"
               onMouseDown={handleVaultSidebarResizeStart}
             />
           </aside>

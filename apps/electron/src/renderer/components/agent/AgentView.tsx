@@ -69,7 +69,6 @@ import {
 } from '@/lib/stop-generation-target'
 import { previewFileMapAtom, previewPanelOpenMapAtom, quotedSelectionMapAtom, currentQuotedSelectionAtom } from '@/atoms/preview-atoms'
 import type { QuotedSelection } from '@/atoms/preview-atoms'
-import { pendingVaultQuoteAtom } from '@/atoms/vault-atoms'
 import {
   agentStreamingStatesAtom,
   agentSessionStreamingStateAtomFamily,
@@ -116,7 +115,6 @@ import {
   agentSidePanelOpenAtomFamily,
   agentSideTemporaryAgentMapAtom,
   getExplorationSidePanelTab,
-  openWorkspaceComponentAtom,
 } from '@/atoms/agent-atoms'
 import { settingsOpenAtom } from '@/atoms/settings-tab'
 import { longTextPasteAsAttachmentEnabledAtom } from '@/atoms/ui-preferences'
@@ -715,15 +713,9 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
   const richTextInputRef = React.useRef<RichTextInputHandle>(null)
   const historyQuoteNavigationRequestIdRef = React.useRef(0)
   const [historyQuoteNavigation, setHistoryQuoteNavigation] = React.useState<AgentHistoryQuoteNavigationRequest | null>(null)
-  const setPendingVaultQuote = useSetAtom(pendingVaultQuoteAtom)
-  const openWorkspaceComponent = useSetAtom(openWorkspaceComponentAtom)
   const handleAddHistoryQuote = React.useCallback((quote: QuotedSelection): boolean => {
     return richTextInputRef.current?.insertAgentHistoryQuoteMention(quote) ?? false
   }, [])
-  const handleQuoteHistoryToVault = React.useCallback((quote: QuotedSelection): void => {
-    setPendingVaultQuote({ sessionId, quote })
-    openWorkspaceComponent('vault')
-  }, [openWorkspaceComponent, sessionId, setPendingVaultQuote])
   const handleAgentHistoryQuoteClick = React.useCallback((quote: QuotedSelection): void => {
     if (
       quote.sourceType !== 'agent-history'
@@ -2936,7 +2928,6 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
           onCompact={handleCompact}
           onAddHistoryQuote={handleAddHistoryQuote}
           explorationEnabled={!embedded}
-          onQuoteHistoryToVault={handleQuoteHistoryToVault}
           onAgentHistoryQuoteClick={handleAgentHistoryQuoteClick}
           historyQuoteNavigation={historyQuoteNavigation}
         />

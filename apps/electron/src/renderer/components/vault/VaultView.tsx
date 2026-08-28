@@ -18,7 +18,6 @@ import {
   selectedVaultFileAtom,
   vaultReadResultAtom,
   vaultRefreshTokenAtom,
-  pendingVaultQuoteAtom,
 } from '@/atoms/vault-atoms'
 import { cn } from '@/lib/utils'
 import { agentWorkspacesAtom, agentSessionsAtom, currentAgentWorkspaceIdAtom, workspaceCapabilitiesVersionAtom } from '@/atoms/agent-atoms'
@@ -442,11 +441,6 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
   const [selectedFile, setSelectedFile] = useAtom(selectedVaultFileAtom)
   const [readResult, setReadResult] = useAtom(vaultReadResultAtom)
   const [refreshToken, setRefreshToken] = useAtom(vaultRefreshTokenAtom)
-  const [pendingQuote, setPendingQuote] = useAtom(pendingVaultQuoteAtom)
-  const [quoteDialogOpen, setQuoteDialogOpen] = React.useState(false)
-  const [quoteTarget, setQuoteTarget] = React.useState('')
-  const [quoteNewPath, setQuoteNewPath] = React.useState('')
-  const [quoting, setQuoting] = React.useState(false)
   const [vaultHelpOpen, setVaultHelpOpen] = React.useState(false)
   const [deleteTarget, setDeleteTarget] = React.useState<VaultFileEntry | null>(null)
   const [deleting, setDeleting] = React.useState(false)
@@ -546,13 +540,6 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
     initialRefreshRef.current = false
     void refresh({ showLoading })
   }, [refresh, refreshToken])
-
-  React.useEffect(() => {
-    if (!pendingQuote || !config) return
-    setQuoteTarget(selectedFile ?? files[0]?.relativePath ?? '__new__')
-    setQuoteNewPath(`${config.inboxPath}/Quote ${new Intl.DateTimeFormat('en-CA').format(new Date())}.md`)
-    setQuoteDialogOpen(true)
-  }, [config, files, pendingQuote, selectedFile])
 
   const refreshVaultCandidates = React.useCallback(async (): Promise<void> => {
     setCandidatesLoading(true)
@@ -719,54 +706,6 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
       toast.error(error instanceof Error ? error.message : '无法创建文件夹')
     } finally {
       setCreatingFolder(false)
-    }
-  }
-
-  const appendPendingQuote = async (): Promise<void> => {
-    if (!pendingQuote || !config) return
-    const source = pendingQuote.quote
-    const targetPath = quoteTarget === '__new__' ? quoteNewPath.trim() : quoteTarget
-    if (!targetPath) {
-      toast.error('请选择引用笔记')
-      return
-    }
-
-    setQuoting(true)
-    try {
-      if (quoteTarget === '__new__') {
-        const created = await window.electronAPI.createVaultFile(targetPath, '')
-        if (!created.ok) return
-      }
-      const current = await window.electronAPI.readVaultFile(targetPath)
-      const params = new URLSearchParams()
-      if (source.messageId) params.set('messageId', source.messageId)
-      if (source.turn != null) params.set('turn', String(source.turn))
-      if (source.selectionStart != null) params.set('start', String(source.selectionStart))
-      if (source.selectionEnd != null) params.set('end', String(source.selectionEnd))
-      const result = await window.electronAPI.appendVaultSource({
-        relativePath: current.relativePath,
-        expectedSha256: current.sha256,
-        source: {
-          type: 'agent-history',
-          label: source.sourceLabel ?? 'Agent 历史引用',
-          content: source.text,
-          sourceUri: `proma://session/${pendingQuote.sessionId}${params.size > 0 ? `?${params.toString()}` : ''}`,
-          capturedAt: source.capturedAt,
-        },
-      })
-      if (!result.ok) {
-        toast.error('目标笔记已在外部修改，请重新选择')
-        return
-      }
-      setPendingQuote(null)
-      setQuoteDialogOpen(false)
-      setRefreshToken((value) => value + 1)
-      await openFile(result.relativePath)
-      toast.success(`已引用到 ${VAULT_NAME}`)
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '写入引用失败')
-    } finally {
-      setQuoting(false)
     }
   }
 
@@ -1020,42 +959,6 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
             <Button disabled={!newFolderName.trim() || creatingFolder} onClick={() => { void createFolder() }}>
               {creatingFolder && <Loader2 className="mr-2 size-4 animate-spin" />}
               创建
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      <Dialog
-        open={quoteDialogOpen}
-        onOpenChange={(open) => {
-          setQuoteDialogOpen(open)
-          if (!open) setPendingQuote(null)
-        }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>引用到 {VAULT_NAME}</DialogTitle>
-            <DialogDescription>将会话快照与可回跳来源写入你选择的 Markdown 笔记。</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <label className="block text-xs font-medium text-muted-foreground" htmlFor="vault-quote-target">目标笔记</label>
-            <select
-              id="vault-quote-target"
-              value={quoteTarget}
-              onChange={(event) => setQuoteTarget(event.target.value)}
-              className="flex h-9 w-full rounded-md bg-background px-3 text-sm text-foreground shadow-sm outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <option value="__new__">新建 Inbox 笔记</option>
-              {files.map((file) => <option key={file.relativePath} value={file.relativePath}>{file.relativePath}</option>)}
-            </select>
-            {quoteTarget === '__new__' && (
-              <Input value={quoteNewPath} onChange={(event) => setQuoteNewPath(event.target.value)} aria-label="新笔记路径" placeholder={`${config?.inboxPath ?? 'Proma Inbox'}/Quote.md`} />
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setQuoteDialogOpen(false); setPendingQuote(null) }}>取消</Button>
-            <Button disabled={quoting} onClick={() => { void appendPendingQuote() }}>
-              {quoting && <Loader2 className="mr-2 size-4 animate-spin" />}
-              写入引用
             </Button>
           </DialogFooter>
         </DialogContent>

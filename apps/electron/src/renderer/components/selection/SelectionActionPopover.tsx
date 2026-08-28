@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { BookOpen, Bot, MessageSquarePlus } from 'lucide-react'
+import { Bot, MessageSquarePlus } from 'lucide-react'
 
 interface SelectionActionPopoverProps {
   x: number
@@ -11,7 +11,6 @@ interface SelectionActionPopoverProps {
   onOpenTemporaryAgent?: () => void | Promise<void>
   /** 兼容尚未迁移的文件 / Scratch 选区入口。 */
   onOpenChat?: () => void | Promise<void>
-  onQuoteToVault?: () => void
 }
 
 export function SelectionActionPopover({
@@ -21,7 +20,6 @@ export function SelectionActionPopover({
   onOpenExplorationBranch,
   onOpenTemporaryAgent,
   onOpenChat,
-  onQuoteToVault,
 }: SelectionActionPopoverProps): React.ReactElement {
   const openSideAssistant = onOpenExplorationBranch ?? onOpenTemporaryAgent ?? onOpenChat
   return (
@@ -50,16 +48,6 @@ export function SelectionActionPopover({
           >
             <MessageSquarePlus className="size-4" />
             {onOpenExplorationBranch ? '探索此分支' : onOpenTemporaryAgent ? '打开临时 Agent' : '打开右侧问答'}
-          </button>
-        )}
-        {onQuoteToVault && (
-          <button
-            type="button"
-            className="inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-medium transition-colors hover:bg-muted"
-            onClick={onQuoteToVault}
-          >
-            <BookOpen className="size-4" />
-            引用到 Vault
           </button>
         )}
       </div>

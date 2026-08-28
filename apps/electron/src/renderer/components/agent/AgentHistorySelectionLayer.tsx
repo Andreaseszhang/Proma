@@ -43,8 +43,6 @@ interface AgentHistorySelectionLayerProps {
   onAddToAgent?: (quote: QuotedSelection) => boolean
   /** 嵌入的探索分支自身不能继续在没有 SidePanel 容器的位置嵌套分叉。 */
   explorationEnabled?: boolean
-  /** 将显式历史选区交给 Vault 页面保存为可追溯 Markdown 引用。 */
-  onQuoteToVault?: (quote: QuotedSelection) => void
 }
 
 function getElementFromNode(node: Node | null): Element | null {
@@ -203,7 +201,6 @@ export function AgentHistorySelectionLayer({
   rootRef,
   onAddToAgent,
   explorationEnabled = true,
-  onQuoteToVault,
 }: AgentHistorySelectionLayerProps): React.ReactElement | null {
   const setQuotedSelectionMap = useSetAtom(quotedSelectionMapAtom)
   const agentSessions = useAtomValue(agentSessionsAtom)
@@ -452,20 +449,12 @@ export function AgentHistorySelectionLayer({
   }, [agentSessions, clearSelection, createQuotedSelection, sessionId, setAgentSessions, setQuotedSelectionMap, setSidePanelOpen, setSidePanelTabMap, setSideTemporaryAgentMap])
 
   const canExplore = explorationEnabled && selection?.messageRole === 'assistant' && Boolean(selection.messageId)
-  const handleQuoteToVault = React.useCallback((): void => {
-    const candidate = selectionRef.current
-    if (!candidate || !onQuoteToVault) return
-    onQuoteToVault(createQuotedSelection(candidate))
-    window.getSelection()?.removeAllRanges()
-    clearSelection()
-  }, [clearSelection, createQuotedSelection, onQuoteToVault])
   return selection && (
     <SelectionActionPopover
       x={selection.x}
       y={selection.y}
       onAddToAgent={handleAddToAgent}
       {...(canExplore ? { onOpenExplorationBranch: handleOpenExplorationBranch } : {})}
-      onQuoteToVault={onQuoteToVault ? handleQuoteToVault : undefined}
     />
   )
 }

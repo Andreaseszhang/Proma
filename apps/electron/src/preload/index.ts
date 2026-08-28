@@ -121,8 +121,6 @@ import type {
   VaultFocus,
   VaultReadResult,
   VaultRenameInput,
-  VaultSearchResult,
-  VaultSourceSnapshot,
   VaultSummary,
   VaultWriteInput,
   VaultWriteResult,
@@ -480,25 +478,18 @@ export interface ElectronAPI {
   // ===== 用户授权的 Markdown Vault =====
 
   getVaultConfig: () => Promise<VaultSummary | null>
-  ensureDefaultVault: () => Promise<VaultSummary>
   selectDefaultVault: () => Promise<VaultSummary>
-  discoverObsidianVaults: () => Promise<VaultCandidate[]>
   listVaultCandidates: () => Promise<VaultCandidate[]>
   selectVault: (options?: { inboxPath?: string; allowAgentWrites?: boolean }) => Promise<VaultSummary | null>
   authorizeDiscoveredVault: (rootPath: string, options?: { inboxPath?: string; allowAgentWrites?: boolean }) => Promise<VaultSummary>
-  updateVaultConfig: (options: { inboxPath?: string; allowAgentWrites?: boolean }) => Promise<VaultSummary>
-  clearVault: () => Promise<void>
   listVaultFiles: () => Promise<VaultFileEntry[]>
   readVaultFile: (relativePath: string) => Promise<VaultReadResult>
   writeVaultFile: (input: VaultWriteInput) => Promise<VaultWriteResult>
-  createVaultFile: (relativePath: string, content: string) => Promise<VaultWriteResult>
   createUntitledVaultFile: () => Promise<VaultWriteResult>
   createUntitledVaultFileInFolder: (folderPath: string) => Promise<VaultWriteResult>
   createVaultFolder: (relativePath: string) => Promise<void>
   renameVaultFile: (input: VaultRenameInput) => Promise<VaultReadResult>
   deleteVaultFile: (input: VaultDeleteInput) => Promise<void>
-  searchVault: (query: string, limit?: number) => Promise<VaultSearchResult[]>
-  appendVaultSource: (input: { relativePath: string; expectedSha256?: string; source: VaultSourceSnapshot }) => Promise<VaultWriteResult>
   setVaultUserContext: (sessionId: string, focus: VaultFocus | null, open?: boolean) => Promise<void>
 
   // ===== 应用图标切换 =====
@@ -1739,25 +1730,18 @@ const electronAPI: ElectronAPI = {
 
   // 用户授权的 Markdown Vault
   getVaultConfig: () => ipcRenderer.invoke(VAULT_IPC_CHANNELS.GET_CONFIG),
-  ensureDefaultVault: () => ipcRenderer.invoke(VAULT_IPC_CHANNELS.ENSURE_DEFAULT),
   selectDefaultVault: () => ipcRenderer.invoke(VAULT_IPC_CHANNELS.SELECT_DEFAULT),
-  discoverObsidianVaults: () => ipcRenderer.invoke(VAULT_IPC_CHANNELS.DISCOVER),
   listVaultCandidates: () => ipcRenderer.invoke(VAULT_IPC_CHANNELS.LIST_CANDIDATES),
   selectVault: (options?: { inboxPath?: string; allowAgentWrites?: boolean }) => ipcRenderer.invoke(VAULT_IPC_CHANNELS.SELECT, options),
   authorizeDiscoveredVault: (rootPath: string, options?: { inboxPath?: string; allowAgentWrites?: boolean }) => ipcRenderer.invoke(VAULT_IPC_CHANNELS.AUTHORIZE_CANDIDATE, rootPath, options),
-  updateVaultConfig: (options: { inboxPath?: string; allowAgentWrites?: boolean }) => ipcRenderer.invoke(VAULT_IPC_CHANNELS.UPDATE_CONFIG, options),
-  clearVault: () => ipcRenderer.invoke(VAULT_IPC_CHANNELS.CLEAR),
   listVaultFiles: () => ipcRenderer.invoke(VAULT_IPC_CHANNELS.LIST_FILES),
   readVaultFile: (relativePath: string) => ipcRenderer.invoke(VAULT_IPC_CHANNELS.READ_FILE, relativePath),
   writeVaultFile: (input: VaultWriteInput) => ipcRenderer.invoke(VAULT_IPC_CHANNELS.WRITE_FILE, input),
-  createVaultFile: (relativePath: string, content: string) => ipcRenderer.invoke(VAULT_IPC_CHANNELS.CREATE_FILE, relativePath, content),
   createUntitledVaultFile: () => ipcRenderer.invoke(VAULT_IPC_CHANNELS.CREATE_UNTITLED_FILE),
   createUntitledVaultFileInFolder: (folderPath: string) => ipcRenderer.invoke(VAULT_IPC_CHANNELS.CREATE_UNTITLED_FILE_IN_FOLDER, folderPath),
   createVaultFolder: (relativePath: string) => ipcRenderer.invoke(VAULT_IPC_CHANNELS.CREATE_FOLDER, relativePath),
   renameVaultFile: (input: VaultRenameInput) => ipcRenderer.invoke(VAULT_IPC_CHANNELS.RENAME_FILE, input),
   deleteVaultFile: (input: VaultDeleteInput) => ipcRenderer.invoke(VAULT_IPC_CHANNELS.DELETE_FILE, input),
-  searchVault: (query: string, limit?: number) => ipcRenderer.invoke(VAULT_IPC_CHANNELS.SEARCH, query, limit),
-  appendVaultSource: (input: { relativePath: string; expectedSha256?: string; source: VaultSourceSnapshot }) => ipcRenderer.invoke(VAULT_IPC_CHANNELS.APPEND_SOURCE, input),
   setVaultUserContext: (sessionId: string, focus: VaultFocus | null, open = true) => ipcRenderer.invoke(VAULT_IPC_CHANNELS.SET_USER_CONTEXT, sessionId, focus, open),
 
   // 应用图标切换

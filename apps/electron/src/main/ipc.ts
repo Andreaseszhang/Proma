@@ -164,7 +164,6 @@ import { getUnstagedChanges, invalidateGitDiffCache, getFileDiff, getUntrackedCo
 import { registerPromaDirectoryPath, registerPromaFilePath } from './lib/local-file-protocol'
 import {
   authorizeDiscoveredVault,
-  clearVaultConfig,
   configureVault,
   createUntitledVaultFile,
   createUntitledVaultFileInFolder,
@@ -172,13 +171,10 @@ import {
   discoverObsidianVaultCandidates,
   discoverVaultCandidates,
   selectDefaultVault,
-  ensureDefaultVault,
-  formatVaultSourceBlock,
   getConfiguredVaultFileSystem,
   getVaultSummary,
   setVaultUserContext,
   clearVaultUserContext,
-  updateVaultConfig,
 } from './lib/vault-service'
 import { registerUpdaterIpc } from './lib/updater/updater-ipc'
 import {
@@ -5863,11 +5859,7 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(VAULT_IPC_CHANNELS.GET_CONFIG, async () => getVaultSummary())
 
-  ipcMain.handle(VAULT_IPC_CHANNELS.ENSURE_DEFAULT, async () => ensureDefaultVault())
-
   ipcMain.handle(VAULT_IPC_CHANNELS.SELECT_DEFAULT, async () => selectDefaultVault())
-
-  ipcMain.handle(VAULT_IPC_CHANNELS.DISCOVER, async () => discoverObsidianVaultCandidates())
 
   ipcMain.handle(VAULT_IPC_CHANNELS.LIST_CANDIDATES, async () => discoverVaultCandidates())
 
@@ -5894,18 +5886,6 @@ export function registerIpcHandlers(): void {
     })
   })
 
-  ipcMain.handle(VAULT_IPC_CHANNELS.UPDATE_CONFIG, async (_, options: unknown) => {
-    if (!options || typeof options !== 'object') throw new Error('Vault 设置参数非法')
-    const input = options as Record<string, unknown>
-    if (input.inboxPath !== undefined && typeof input.inboxPath !== 'string') throw new Error('Vault inboxPath 非法')
-    if (input.allowAgentWrites !== undefined && typeof input.allowAgentWrites !== 'boolean') throw new Error('Vault allowAgentWrites 非法')
-    return updateVaultConfig({
-      inboxPath: typeof input.inboxPath === 'string' ? input.inboxPath : undefined,
-      allowAgentWrites: typeof input.allowAgentWrites === 'boolean' ? input.allowAgentWrites : undefined,
-    })
-  })
-
-  ipcMain.handle(VAULT_IPC_CHANNELS.CLEAR, async (): Promise<void> => clearVaultConfig())
 
   ipcMain.handle(VAULT_IPC_CHANNELS.LIST_FILES, async () => getConfiguredVaultFileSystem().listFiles())
 
@@ -5928,10 +5908,6 @@ export function registerIpcHandlers(): void {
     })
   })
 
-  ipcMain.handle(VAULT_IPC_CHANNELS.CREATE_FILE, async (_, relativePath: unknown, content: unknown) => {
-    if (typeof relativePath !== 'string' || typeof content !== 'string') throw new Error('Vault 新建笔记参数非法')
-    return getConfiguredVaultFileSystem().writeFile({ relativePath, content, createOnly: true })
-  })
 
   ipcMain.handle(VAULT_IPC_CHANNELS.CREATE_UNTITLED_FILE, async () => createUntitledVaultFile())
 
@@ -5968,38 +5944,7 @@ export function registerIpcHandlers(): void {
     })
   })
 
-  ipcMain.handle(VAULT_IPC_CHANNELS.SEARCH, async (_, query: unknown, limit?: unknown) => {
-    if (typeof query !== 'string') throw new Error('Vault 搜索关键词必填')
-    return getConfiguredVaultFileSystem().search(query, typeof limit === 'number' ? limit : undefined)
-  })
 
-  ipcMain.handle(VAULT_IPC_CHANNELS.APPEND_SOURCE, async (_, input: unknown) => {
-    if (!input || typeof input !== 'object') throw new Error('Vault 引用参数非法')
-    const value = input as Record<string, unknown>
-    const source = value.source
-    if (!source || typeof source !== 'object' || typeof value.relativePath !== 'string') {
-      throw new Error('Vault 引用目标或来源缺失')
-    }
-    const sourceValue = source as Record<string, unknown>
-    if (
-      !['agent-history', 'skill', 'mcp', 'project-file'].includes(String(sourceValue.type))
-      || typeof sourceValue.label !== 'string'
-      || typeof sourceValue.content !== 'string'
-      || typeof sourceValue.sourceUri !== 'string'
-      || typeof sourceValue.capturedAt !== 'number'
-    ) {
-      throw new Error('Vault 引用来源非法')
-    }
-    const vault = getConfiguredVaultFileSystem()
-    const current = vault.readFile(value.relativePath)
-    const sourceBlock = formatVaultSourceBlock(sourceValue as unknown as import('@proma/shared').VaultSourceSnapshot)
-    const separator = current.content.length === 0 ? '' : current.content.endsWith('\n') ? '\n' : '\n\n'
-    return vault.writeFile({
-      relativePath: current.relativePath,
-      content: `${current.content}${separator}${sourceBlock}\n`,
-      expectedSha256: typeof value.expectedSha256 === 'string' ? value.expectedSha256 : current.sha256,
-    })
-  })
 
   ipcMain.handle(VAULT_IPC_CHANNELS.SET_USER_CONTEXT, async (_, sessionId: unknown, focus: unknown, open: unknown): Promise<void> => {
     if (typeof sessionId !== 'string' || sessionId.trim().length === 0) throw new Error('Vault 会话 ID 非法')

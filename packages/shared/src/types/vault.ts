@@ -1,5 +1,3 @@
-export type VaultSourceType = 'agent-history' | 'skill' | 'mcp' | 'project-file'
-
 export interface VaultConfig {
   rootPath: string
   displayName: string
@@ -74,42 +72,19 @@ export type VaultWriteResult =
   | { ok: true; relativePath: string; sha256: string; modifiedAt: number }
   | { ok: false; reason: 'conflict'; currentSha256: string; currentModifiedAt: number }
 
-export interface VaultSearchResult {
-  relativePath: string
-  title: string
-  snippet: string
-  line: number
-  modifiedAt: number
-}
-
-export interface VaultSourceSnapshot {
-  type: VaultSourceType
-  label: string
-  content: string
-  sourceUri: string
-  capturedAt: number
-}
-
 export const VAULT_IPC_CHANNELS = {
   GET_CONFIG: 'vault:get-config',
-  ENSURE_DEFAULT: 'vault:ensure-default',
   SELECT_DEFAULT: 'vault:select-default',
-  DISCOVER: 'vault:discover',
   LIST_CANDIDATES: 'vault:list-candidates',
   SELECT: 'vault:select',
   AUTHORIZE_CANDIDATE: 'vault:authorize-candidate',
-  UPDATE_CONFIG: 'vault:update-config',
-  CLEAR: 'vault:clear',
   LIST_FILES: 'vault:list-files',
   READ_FILE: 'vault:read-file',
   WRITE_FILE: 'vault:write-file',
-  CREATE_FILE: 'vault:create-file',
   CREATE_UNTITLED_FILE: 'vault:create-untitled-file',
   CREATE_UNTITLED_FILE_IN_FOLDER: 'vault:create-untitled-file-in-folder',
   CREATE_FOLDER: 'vault:create-folder',
   RENAME_FILE: 'vault:rename-file',
   DELETE_FILE: 'vault:delete-file',
-  SEARCH: 'vault:search',
-  APPEND_SOURCE: 'vault:append-source',
   SET_USER_CONTEXT: 'vault:set-user-context',
 } as const

@@ -23,8 +23,6 @@ import type {
   VaultFocus,
   VaultReadResult,
   VaultRenameInput,
-  VaultSearchResult,
-  VaultSourceSnapshot,
   VaultSummary,
   VaultWriteInput,
   VaultWriteResult,
@@ -124,23 +122,7 @@ function toRelativePath(rootPath: string, absolutePath: string): string {
   return relative(rootPath, absolutePath).split(/[/\\]/).join('/')
 }
 
-function titleForMarkdown(content: string, fallback: string): string {
-  const heading = content.split(/\r?\n/).find((line) => /^#{1,6}\s+/.test(line))
-  return heading ? heading.replace(/^#{1,6}\s+/, '').trim() : fallback
-}
 
-function readableSnippet(content: string, query: string): { snippet: string; line: number } | null {
-  const lowerQuery = query.toLowerCase()
-  const lines = content.split(/\r?\n/)
-  for (let index = 0; index < lines.length; index++) {
-    if (lines[index]!.toLowerCase().includes(lowerQuery)) {
-      const start = Math.max(0, index - 1)
-      const end = Math.min(lines.length, index + 2)
-      return { snippet: lines.slice(start, end).join(' ').trim().slice(0, 320), line: index + 1 }
-    }
-  }
-  return null
-}
 
 function formatLocalDate(date: Date): string {
   const year = date.getFullYear()
@@ -251,7 +233,6 @@ export interface VaultFileSystem {
   createFolder(relativePath: string): void
   renameFile(input: VaultRenameInput): VaultReadResult
   deleteFile(input: VaultDeleteInput): void
-  search(query: string, limit?: number): VaultSearchResult[]
 }
 
 /** Creates a bounded filesystem facade for one already-authorized Vault root. */
@@ -432,58 +413,9 @@ export function createVaultFileSystem(rootPath: string): VaultFileSystem {
     unlinkSync(revalidated.absolutePath)
   }
 
-  const search = (query: string, limit = 20): VaultSearchResult[] => {
-    const normalizedQuery = query.trim().toLowerCase()
-    if (!normalizedQuery) return []
-    const boundedLimit = Math.max(1, Math.min(limit, 50))
-    const results: VaultSearchResult[] = []
-    for (const entry of listFiles()) {
-      if (results.length >= boundedLimit) break
-      let content: string
-      try {
-        content = readFile(entry.relativePath).content
-      } catch {
-        // 单个超限、不可访问或暂时变化的文件不得阻断后续搜索。
-        continue
-      }
-      const match = readableSnippet(content, normalizedQuery)
-      const nameMatch = entry.name.toLowerCase().includes(normalizedQuery)
-      if (!match && !nameMatch) continue
-      results.push({
-        relativePath: entry.relativePath,
-        title: titleForMarkdown(content, entry.name.replace(/\.md$/i, '')),
-        snippet: match?.snippet ?? entry.relativePath,
-        line: match?.line ?? 1,
-        modifiedAt: entry.modifiedAt,
-      })
-    }
-    return results
-  }
-
-  return { listFiles, readFile, writeFile, createUntitledNote, createUntitledNoteInFolder, createFolder, renameFile, deleteFile, search }
+  return { listFiles, readFile, writeFile, createUntitledNote, createUntitledNoteInFolder, createFolder, renameFile, deleteFile }
 }
 
-function sanitizeQuoteLabel(value: string): string {
-  return value.replace(/[\r\n]+/g, ' ').trim().replace(/\]/g, '\\]')
-}
-
-function toQuoteLine(value: string): string {
-  return `> ${value}`
-}
-
-/** Formats a portable Obsidian-compatible callout instead of Proma's prompt-only XML quote format. */
-export function formatVaultSourceBlock(source: VaultSourceSnapshot): string {
-  const timestamp = new Date(source.capturedAt).toISOString()
-  const contentLines = source.content.replace(/\r\n/g, '\n').split('\n')
-  const quotedContent = contentLines.map((line) => toQuoteLine(line)).join('\n')
-  return [
-    `> [!quote]- ${sanitizeQuoteLabel(source.label)}`,
-    quotedContent,
-    '>',
-    `> Source: ${source.sourceUri}`,
-    `> Captured: ${timestamp}`,
-  ].join('\n')
-}
 
 function parseVaultConfig(value: unknown): VaultConfig | null {
   if (!value || typeof value !== 'object') return null
@@ -556,23 +488,11 @@ export function configureVault(rootPath: string, options: { inboxPath?: string; 
   return configureVaultAt(rootPath, getVaultConfigPath(), options)
 }
 
-export function ensureDefaultVaultAt(configPath: string, rootPath: string): VaultSummary {
-  const current = parseVaultConfig(readJsonFileSafe<unknown>(configPath))
-  if (current) return vaultSummary(current)
-  return configureVaultAt(rootPath, configPath, { inboxPath: 'Proma Inbox', allowAgentWrites: false })
-}
 
 export function selectDefaultVault(): VaultSummary {
   return configureVault(getDefaultVaultDir(), { inboxPath: 'Proma Inbox', allowAgentWrites: false })
 }
 
-/** 确保 Vault 页面可直接使用 Proma 管理的本地 Markdown 目录，且不改变已有选择。 */
-export function ensureDefaultVault(): VaultSummary {
-  const managedRoot = getDefaultVaultDir()
-  const current = getVaultConfig()
-  if (current) return vaultSummary(current)
-  return ensureDefaultVaultAt(getVaultConfigPath(), managedRoot)
-}
 
 export function authorizeDiscoveredVault(rootPath: string, options: { inboxPath?: string; allowAgentWrites?: boolean } = {}): VaultSummary {
   const candidate = discoverObsidianVaultCandidates().find((item) => item.path === rootPath)
@@ -580,31 +500,6 @@ export function authorizeDiscoveredVault(rootPath: string, options: { inboxPath?
   return configureVault(candidate.path, options)
 }
 
-export function updateVaultConfig(options: { inboxPath?: string; allowAgentWrites?: boolean }): VaultSummary {
-  const current = getVaultConfig()
-  if (!current) throw new Error('尚未选择 Vault')
-  const inboxPath = options.inboxPath === undefined
-    ? current.inboxPath
-    : normalizeRelativeMarkdownPath(join(options.inboxPath, 'placeholder.md')).replace(/\/placeholder\.md$/, '')
-  const config: VaultConfig = {
-    ...current,
-    inboxPath,
-    allowAgentWrites: options.allowAgentWrites ?? current.allowAgentWrites,
-  }
-  writeJsonFileAtomic(getVaultConfigPath(), config)
-  return {
-    displayName: config.displayName,
-    inboxPath: config.inboxPath,
-    allowAgentWrites: config.allowAgentWrites,
-    configuredAt: config.configuredAt,
-  }
-}
-
-export function clearVaultConfig(): void {
-  const path = getVaultConfigPath()
-  if (existsSync(path)) unlinkSync(path)
-  vaultUserContextBySession.clear()
-}
 
 export function getConfiguredVaultFileSystem(): VaultFileSystem {
   const config = getVaultConfig()

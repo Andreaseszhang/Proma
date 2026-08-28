@@ -1,19 +1,16 @@
 import * as React from 'react'
-import { useAtom, useAtomValue, useSetAtom } from 'jotai'
+import { useAtom } from 'jotai'
 import { BookOpen, ChevronDown, ChevronRight, ChevronsUpDown, CircleHelp, Folder, FolderOpen, Loader2, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import type { VaultCandidate, VaultFileEntry, VaultFocus, VaultReadResult, VaultSummary, SkillMeta } from '@proma/shared'
+import type { VaultCandidate, VaultFileEntry, VaultFocus, VaultReadResult, VaultSummary } from '@proma/shared'
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { Input } from '@/components/ui/input'
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from '@/components/ui/context-menu'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { VaultLiveMarkdownEditor, type VaultLiveMarkdownEditorHandle } from './VaultLiveMarkdownEditor'
-import { VaultReferencePicker } from './VaultReferencePicker'
-import { SkillDetailView } from '@/components/agent-skills/SkillDetailView'
+import { VaultLiveMarkdownEditor } from './VaultLiveMarkdownEditor'
 import {
   focusedVaultFolderAtom,
   selectedVaultFileAtom,
@@ -21,17 +18,6 @@ import {
   vaultRefreshTokenAtom,
 } from '@/atoms/vault-atoms'
 import { cn } from '@/lib/utils'
-import { agentWorkspacesAtom, agentSessionsAtom, currentAgentWorkspaceIdAtom, workspaceCapabilitiesVersionAtom } from '@/atoms/agent-atoms'
-import { activeViewAtom, agentSkillsTabAtom } from '@/atoms/active-view'
-import { planningSelectedCalendarEventIdAtom, planningSelectedTodoIdAtom, planningTabAtom } from '@/atoms/planning-atoms'
-import { useOpenSession } from '@/hooks/useOpenSession'
-import {
-  resolveVaultWikiLink,
-  serializeVaultReference,
-  type VaultReference,
-  type VaultReferenceRange,
-  type VaultReferenceType,
-} from './vault-reference-utils'
 import { getVaultEditorKey, shouldAdoptVaultReadContent } from './vault-editor-lifecycle'
 import { buildVaultTree, getInitialVaultExpandedFolders, getVaultFolderAncestors, hasSameVaultTreeEntries, type VaultFolderNode } from './vault-tree-model'
 
@@ -47,16 +33,6 @@ function getVaultCandidateDisplayName(candidate: VaultCandidate): string {
 
 function displayDocumentTitle(filename: string): string {
   return filename.replace(/\.md$/i, '')
-}
-
-function replaceVaultFrontmatterProperties(markdown: string, entries: Array<{ key: string; value: string }>): string {
-  const newline = markdown.includes('\r\n') ? '\r\n' : '\n'
-  const lines = markdown.replace(/\r\n?/g, '\n').split('\n')
-  if (lines[0]?.replace(/^\uFEFF/, '') !== '---') return markdown
-  const closingIndex = lines.findIndex((line, index) => index > 0 && line.trim() === '---')
-  if (closingIndex < 0) return markdown
-  const propertyLines = entries.map(({ key, value }) => `${key}: ${value}`)
-  return [...lines.slice(0, 1), ...propertyLines, ...lines.slice(closingIndex)].join(newline)
 }
 
 function VaultFileList({
@@ -241,30 +217,20 @@ function VaultFileList({
 
 function VaultMarkdownEditor({
   readResult,
-  files,
-  workspaceSlug,
   onSave,
   onRename,
-  onOpenWikiLink,
-  onActivateReference,
   onOpenTutorial,
 }: {
   readResult: VaultReadResult
-  files: VaultFileEntry[]
-  workspaceSlug: string | null
   onSave: (nextContent: string, options?: { silent?: boolean }) => Promise<void>
   onRename: (name: string) => Promise<void>
-  onOpenWikiLink: (target: string) => void
-  onActivateReference: (reference: VaultReferenceRange) => void
   onOpenTutorial: () => void
 }): React.ReactElement {
   const [draft, setDraft] = React.useState(readResult.content)
   const previousReadContentRef = React.useRef(readResult.content)
   const [saving, setSaving] = React.useState(false)
   const [filename, setFilename] = React.useState(displayDocumentTitle(readResult.relativePath.split('/').pop() ?? readResult.relativePath))
-  const [referencePicker, setReferencePicker] = React.useState<{ reference?: VaultReference; range?: VaultReferenceRange; type?: VaultReferenceType } | null>(null)
   const editorPageRef = React.useRef<HTMLDivElement>(null)
-  const editorRef = React.useRef<VaultLiveMarkdownEditorHandle>(null)
   React.useEffect(() => {
     const previousReadContent = previousReadContentRef.current
     previousReadContentRef.current = readResult.content
@@ -272,9 +238,6 @@ function VaultMarkdownEditor({
     setDraft(readResult.content)
   }, [draft, readResult.content])
 
-  const updateProperties = React.useCallback((entries: Array<{ key: string; value: string }>): void => {
-    setDraft((current) => replaceVaultFrontmatterProperties(current, entries))
-  }, [])
 
   const handleEditorPageWheel = (event: React.WheelEvent<HTMLDivElement>): void => {
     if ((event.target as HTMLElement).closest('.vault-ink-mde')) return
@@ -309,16 +272,6 @@ function VaultMarkdownEditor({
     await onRename(filename.trim())
   }
 
-  const selectReference = (reference: VaultReference): void => {
-    const edit = referencePicker
-    const marker = serializeVaultReference(reference)
-    if (edit?.range) {
-      setDraft((current) => current.slice(0, edit.range!.from) + marker + current.slice(edit.range!.to))
-    } else {
-      editorRef.current?.insertReference(reference)
-    }
-    setReferencePicker(null)
-  }
 
   return (
     <div
@@ -358,54 +311,29 @@ function VaultMarkdownEditor({
         </div>
         <div className="min-h-0 flex-1">
           <VaultLiveMarkdownEditor
-            ref={editorRef}
             value={draft}
-            files={files}
-            workspaceSlug={workspaceSlug}
             onChange={setDraft}
             onSave={() => { void save() }}
-            onOpenWikiLink={onOpenWikiLink}
-            onActivateReference={onActivateReference}
-            onChangeProperties={updateProperties}
-            onEditReference={(reference) => setReferencePicker({ reference, range: reference })}
           />
         </div>
       </div>
-      <VaultReferencePicker
-        open={referencePicker !== null}
-        workspaceSlug={workspaceSlug}
-        initialType={referencePicker?.type}
-        initialReference={referencePicker?.reference}
-        onOpenChange={(open) => {
-          if (!open) setReferencePicker(null)
-        }}
-        onSelect={selectReference}
-      />
     </div>
   )
 }
 
 function VaultMarkdownPane({
   readResult,
-  files,
   loading,
   hasVault,
-  workspaceSlug,
   onSave,
   onRename,
-  onOpenWikiLink,
-  onActivateReference,
   onOpenTutorial,
 }: {
   readResult: VaultReadResult | null
-  files: VaultFileEntry[]
   loading: boolean
   hasVault: boolean
-  workspaceSlug: string | null
   onSave: (nextContent: string, options?: { silent?: boolean }) => Promise<void>
   onRename: (name: string) => Promise<void>
-  onOpenWikiLink: (target: string) => void
-  onActivateReference: (reference: VaultReferenceRange) => void
   onOpenTutorial: () => void
 }): React.ReactElement {
   if (loading || !readResult) {
@@ -430,12 +358,8 @@ function VaultMarkdownPane({
       <VaultMarkdownEditor
         key={getVaultEditorKey(readResult.relativePath)}
         readResult={readResult}
-        files={files}
-        workspaceSlug={workspaceSlug}
         onSave={onSave}
         onRename={onRename}
-        onOpenWikiLink={onOpenWikiLink}
-        onActivateReference={onActivateReference}
         onOpenTutorial={onOpenTutorial}
       />
     </section>
@@ -443,20 +367,6 @@ function VaultMarkdownPane({
 }
 
 export function VaultView({ embedded = false, sessionId }: { embedded?: boolean; sessionId?: string }): React.ReactElement {
-  const workspaces = useAtomValue(agentWorkspacesAtom)
-  const sessions = useAtomValue(agentSessionsAtom)
-  const currentWorkspaceId = useAtomValue(currentAgentWorkspaceIdAtom)
-  const setActiveView = useSetAtom(activeViewAtom)
-  const setSkillsTab = useSetAtom(agentSkillsTabAtom)
-  const bumpCapabilities = useSetAtom(workspaceCapabilitiesVersionAtom)
-  const setPlanningTab = useSetAtom(planningTabAtom)
-  const setSelectedTodoId = useSetAtom(planningSelectedTodoIdAtom)
-  const setSelectedCalendarEventId = useSetAtom(planningSelectedCalendarEventIdAtom)
-  const openSession = useOpenSession()
-  const workspaceSlug = React.useMemo(
-    () => workspaces.find((workspace) => workspace.id === currentWorkspaceId)?.slug ?? null,
-    [currentWorkspaceId, workspaces],
-  )
   const [config, setConfig] = React.useState<VaultSummary | null>(null)
   const [candidates, setCandidates] = React.useState<VaultCandidate[]>([])
   const [vaultSwitcherOpen, setVaultSwitcherOpen] = React.useState(false)
@@ -478,8 +388,6 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
   const [vaultSidebarWidth, setVaultSidebarWidth] = React.useState(embedded ? 200 : 280)
   const vaultSidebarWidthRef = React.useRef(vaultSidebarWidth)
   const vaultSidebarDragCleanupRef = React.useRef<(() => void) | null>(null)
-  const [skillDetail, setSkillDetail] = React.useState<{ skill: SkillMeta; isBuiltin: boolean; skillsDir: string } | null>(null)
-  const [skillUpdating, setSkillUpdating] = React.useState(false)
   const selectedFileRef = React.useRef(selectedFile)
   // Start from wall-clock time so a remounted workspace tab still supersedes an older IPC snapshot.
   const focusSequenceRef = React.useRef(Date.now())
@@ -606,59 +514,6 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
       if (requestId === readRequestRef.current) setFileLoading(false)
     }
   }, [setReadResult, setSelectedFile])
-
-  const openSkillDetail = React.useCallback(async (slug: string): Promise<void> => {
-    if (!workspaceSlug) {
-      toast.message('请先在 Agent 模式下选择项目，再打开 Skill')
-      return
-    }
-    try {
-      const [skills, defaultSlugs, skillsDir] = await Promise.all([
-        window.electronAPI.getWorkspaceSkills(workspaceSlug),
-        window.electronAPI.getDefaultSkillSlugs(),
-        window.electronAPI.getWorkspaceSkillsDir(workspaceSlug),
-      ])
-      const skill = skills.find((item) => item.slug === slug)
-      if (!skill) {
-        toast.message(`当前项目未找到 Skill：${slug}`)
-        return
-      }
-      setSkillDetail({ skill, isBuiltin: defaultSlugs.includes(slug), skillsDir })
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '无法打开 Skill 详情')
-    }
-  }, [workspaceSlug])
-
-  const activateReference = React.useCallback((reference: VaultReferenceRange): void => {
-    if (reference.type === 'session') {
-      const session = sessions.find((item) => item.id === reference.id)
-      openSession('agent', reference.id, session?.title ?? reference.label)
-      return
-    }
-    if (reference.type === 'skill') {
-      // Keep the current note open and reveal the Skill editor beside it.
-      void openSkillDetail(reference.id)
-      return
-    }
-    if (reference.type === 'todo' || reference.type === 'calendar_event') {
-      setPlanningTab(reference.type === 'todo' ? 'todos' : 'calendar')
-      if (reference.type === 'todo') setSelectedTodoId(reference.id)
-      else setSelectedCalendarEventId(reference.id)
-      setActiveView('planning')
-      return
-    }
-    setSkillsTab('mcp')
-    setActiveView('agent-skills')
-  }, [openSession, openSkillDetail, sessions, setActiveView, setPlanningTab, setSelectedCalendarEventId, setSelectedTodoId, setSkillsTab])
-
-  const openWikiLink = React.useCallback((target: string): void => {
-    const relativePath = resolveVaultWikiLink(target, files)
-    if (!relativePath) {
-      toast.message(`未找到唯一的 ${VAULT_NAME} 笔记：${target}`)
-      return
-    }
-    void openFile(relativePath)
-  }, [files, openFile])
 
   const selectVaultManually = async (): Promise<void> => {
     const selected = await window.electronAPI.selectVault({ inboxPath: 'Proma Inbox', allowAgentWrites: false })
@@ -947,14 +802,10 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
           </aside>
           <VaultMarkdownPane
             readResult={readResult}
-            files={files}
             loading={fileLoading}
             hasVault={config !== null}
-            workspaceSlug={workspaceSlug}
             onSave={save}
             onRename={rename}
-            onOpenWikiLink={openWikiLink}
-            onActivateReference={activateReference}
             onOpenTutorial={() => setVaultHelpOpen(true)}
           />
         </div>
@@ -1018,97 +869,12 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
               <p className="font-medium text-foreground">编辑与自动保存</p>
               <p>输入停止 700ms 后会自动保存；按 Cmd/Ctrl + S 可立即保存。直接编辑标题并按 Enter 或移开焦点即可重命名笔记。</p>
             </section>
-            <section>
-              <p className="font-medium text-foreground">双向链接</p>
-              <p>输入 <code className="rounded bg-muted px-1 py-0.5 text-foreground">[[笔记名]]</code>，点击链接文字可在当前 {VAULT_NAME} 中打开对应笔记。</p>
-            </section>
-            <section>
-              <p className="font-medium text-foreground">Proma 引用</p>
-              <p>在行首或空格后输入 <code className="rounded bg-muted px-1 py-0.5 text-foreground">/</code>、<code className="rounded bg-muted px-1 py-0.5 text-foreground">#</code>、<code className="rounded bg-muted px-1 py-0.5 text-foreground">&amp;</code>、<code className="rounded bg-muted px-1 py-0.5 text-foreground">~</code> 或 <code className="rounded bg-muted px-1 py-0.5 text-foreground">*</code>，会在光标旁显示建议；符号本身仍会正常写入笔记。继续输入可过滤，方向键选择，Enter 插入引用，Esc 关闭建议并保留已输入的符号。</p>
-            </section>
           </div>
           <DialogFooter>
             <Button onClick={() => setVaultHelpOpen(false)}>知道了</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <VaultSkillDetailSheet
-        skill={skillDetail?.skill ?? null}
-        workspaceSlug={workspaceSlug ?? ''}
-        isBuiltin={skillDetail?.isBuiltin ?? false}
-        updating={skillUpdating}
-        onOpenChange={(open) => { if (!open) setSkillDetail(null) }}
-        onToggle={(enabled) => {
-          const slug = skillDetail?.skill.slug
-          if (!slug || !workspaceSlug) return
-          void window.electronAPI.toggleWorkspaceSkill(workspaceSlug, slug, enabled)
-            .then(() => {
-              setSkillDetail((current) => current ? { ...current, skill: { ...current.skill, enabled } } : current)
-              bumpCapabilities((version) => version + 1)
-            })
-            .catch(() => toast.error('切换 Skill 状态失败'))
-        }}
-        onUpdate={() => {
-          const slug = skillDetail?.skill.slug
-          if (!slug || !workspaceSlug || skillUpdating) return
-          setSkillUpdating(true)
-          void window.electronAPI.updateSkillFromSource(workspaceSlug, slug)
-            .then((updated) => {
-              setSkillDetail((current) => current ? { ...current, skill: updated } : current)
-              bumpCapabilities((version) => version + 1)
-              toast.success(`已同步更新 Skill：${updated.name}`)
-            })
-            .catch((error) => toast.error(error instanceof Error ? error.message : '更新 Skill 失败'))
-            .finally(() => setSkillUpdating(false))
-        }}
-        onRequestDelete={() => {
-          setSkillDetail(null)
-          setSkillsTab('skills')
-          setActiveView('agent-skills')
-          toast.message('请在技能中心确认删除 Skill')
-        }}
-        onOpenFolder={() => {
-          if (skillDetail?.skillsDir) window.electronAPI.openFile(`${skillDetail.skillsDir}/${skillDetail.skill.slug}`)
-        }}
-        onChanged={() => bumpCapabilities((version) => version + 1)}
-      />
     </>
-  )
-}
-
-interface VaultSkillDetailSheetProps {
-  skill: SkillMeta | null
-  workspaceSlug: string
-  isBuiltin: boolean
-  updating: boolean
-  onOpenChange: (open: boolean) => void
-  onToggle: (enabled: boolean) => void
-  onUpdate: () => void
-  onRequestDelete: () => void
-  onOpenFolder: () => void
-  onChanged: () => void
-}
-
-/** Adapts the canonical full-page Skill view for Vault's contextual sheet. */
-function VaultSkillDetailSheet({ skill, onOpenChange, ...props }: VaultSkillDetailSheetProps): React.ReactElement {
-  return (
-    <Sheet open={skill !== null} onOpenChange={onOpenChange}>
-      <SheetContent
-        hideClose
-        side="right"
-        className="w-[62vw] min-w-[680px] max-w-[1100px] gap-0 p-0 sm:max-w-[1100px]"
-        aria-describedby={undefined}
-      >
-        <SheetTitle className="sr-only">Skill 详情</SheetTitle>
-        {skill && (
-          <SkillDetailView
-            key={skill.slug}
-            skill={skill}
-            {...props}
-            onBack={() => onOpenChange(false)}
-          />
-        )}
-      </SheetContent>
-    </Sheet>
   )
 }

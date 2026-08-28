@@ -57,7 +57,10 @@ function markdownSyntaxDecorations(state: EditorState, focused: boolean): Decora
     enter: ({ type, from, to }) => {
       if (!markdownSyntaxMarkerNames.has(type.name)) return
       if (activeLines.has(state.doc.lineAt(from).number)) return
-      builder.add(from, to, hiddenMarkdownSyntax)
+      // Lezer's HeaderMark excludes the required space after `#`. Hide it with
+      // the marker so rendered ATX headings align with ordinary paragraph text.
+      const markerEnd = type.name === 'HeaderMark' && state.doc.sliceString(to, to + 1) === ' ' ? to + 1 : to
+      builder.add(from, markerEnd, hiddenMarkdownSyntax)
     },
   })
   return builder.finish()

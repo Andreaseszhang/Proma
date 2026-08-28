@@ -14,6 +14,8 @@ import {
 import type { VaultFileEntry } from '@proma/shared'
 import ink, { type Instance } from 'ink-mde'
 import { MermaidBlock } from '@proma/ui'
+import { CalendarDays, ListTodo, MessageSquareText, Server, Sparkles } from 'lucide-react'
+import { MentionList, type MentionListRef } from '@/components/agent/MentionList'
 import { shouldRenderMermaidCodeBlock } from '../../lib/mermaid-detection'
 import { loadVaultReferenceChoices, type VaultReferenceChoice } from './VaultReferencePicker'
 import { createLatestDebouncedRequest } from './vault-reference-query'
@@ -815,6 +817,43 @@ const vaultReferenceOpenHints: Record<VaultReferenceType, string> = {
   calendar_event: '点击定位到对应日程',
 }
 
+const vaultReferenceMenuLabels: Record<VaultReferenceType | 'all', string> = {
+  skill: '调用 skill',
+  mcp: 'MCP 服务',
+  session: '会话',
+  todo: '待办',
+  calendar_event: '日程',
+  all: 'Proma 引用',
+}
+
+function renderVaultReferenceChoice(choice: VaultReferenceChoice): React.ReactNode {
+  const Icon = choice.reference.type === 'skill'
+    ? Sparkles
+    : choice.reference.type === 'mcp'
+      ? Server
+      : choice.reference.type === 'session'
+        ? MessageSquareText
+        : choice.reference.type === 'todo'
+          ? ListTodo
+          : CalendarDays
+  const iconClass = choice.reference.type === 'skill'
+    ? 'text-violet-500'
+    : choice.reference.type === 'mcp'
+      ? 'text-primary'
+      : choice.reference.type === 'session'
+        ? 'text-sky-500'
+        : choice.reference.type === 'todo'
+          ? 'text-amber-600'
+          : 'text-cyan-600'
+  return (
+    <>
+      <Icon className={`size-3.5 shrink-0 ${iconClass}`} />
+      <span className="min-w-0 flex-1 truncate font-medium">{choice.reference.label}</span>
+      <span className="max-w-[120px] truncate text-[10px] text-muted-foreground/50">{choice.description}</span>
+    </>
+  )
+}
+
 const vaultReferenceTriggers: VaultReferenceTrigger[] = ['/', '#', '&', '~', '～', '*']
 
 /** Triggers only fire at a word start so ordinary Markdown typing is untouched. */
@@ -899,14 +938,10 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
   const workspaceSlugRef = React.useRef(workspaceSlug)
   const [suggestion, setSuggestion] = React.useState<{ trigger: VaultReferenceTrigger; type: VaultReferenceType | 'all'; query: string; from: number; left: number; top: number } | null>(null)
   const [suggestionItems, setSuggestionItems] = React.useState<VaultReferenceChoice[]>([])
-  const [suggestionIndex, setSuggestionIndex] = React.useState(0)
+  const suggestionListRef = React.useRef<MentionListRef>(null)
   const [chipTooltip, setChipTooltip] = React.useState<{ title: string; hint: string; left: number; top: number } | null>(null)
   const suggestionRef = React.useRef(suggestion)
-  const suggestionItemsRef = React.useRef(suggestionItems)
-  const suggestionIndexRef = React.useRef(suggestionIndex)
   suggestionRef.current = suggestion
-  suggestionItemsRef.current = suggestionItems
-  suggestionIndexRef.current = suggestionIndex
   const filesRef = React.useRef(files)
   const wikiResolverRef = React.useRef<VaultWikiLinkResolver | null>(null)
   valueRef.current = value
@@ -961,7 +996,6 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
       setSuggestionItems([])
       return
     }
-    setSuggestionIndex(0)
     suggestionRequestRef.current.request(
       { type: suggestion.type, query: suggestion.query, workspaceSlug: workspaceSlugRef.current },
       setSuggestionItems,
@@ -1060,7 +1094,7 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
             key: 'ArrowDown',
             run: () => {
               if (!suggestionRef.current) return false
-              setSuggestionIndex((current) => nextSuggestionIndex(current, suggestionItemsRef.current.length, 1))
+              suggestionListRef.current?.onKeyDown({ event: { key: 'ArrowDown' } as KeyboardEvent })
               return true
             },
           },
@@ -1068,26 +1102,22 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
             key: 'ArrowUp',
             run: () => {
               if (!suggestionRef.current) return false
-              setSuggestionIndex((current) => nextSuggestionIndex(current, suggestionItemsRef.current.length, -1))
+              suggestionListRef.current?.onKeyDown({ event: { key: 'ArrowUp' } as KeyboardEvent })
               return true
             },
           },
           {
             key: 'Enter',
             run: () => {
-              const choice = suggestionItemsRef.current[suggestionIndexRef.current]
-              if (!suggestionRef.current || !choice) return false
-              selectSuggestion(choice)
-              return true
+              if (!suggestionRef.current) return false
+              return suggestionListRef.current?.onKeyDown({ event: { key: 'Enter' } as KeyboardEvent }) ?? false
             },
           },
           {
             key: 'Tab',
             run: () => {
-              const choice = suggestionItemsRef.current[suggestionIndexRef.current]
-              if (!suggestionRef.current || !choice) return false
-              selectSuggestion(choice)
-              return true
+              if (!suggestionRef.current) return false
+              return suggestionListRef.current?.onKeyDown({ event: { key: 'Enter' } as KeyboardEvent }) ?? false
             },
           },
         ])),
@@ -1236,37 +1266,16 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
         document.body,
       )}
       {suggestion && createPortal(
-        <div
-          className="fixed z-[100] w-[300px] overflow-hidden rounded-lg bg-popover shadow-lg ring-1 ring-border/60"
-          style={{ left: suggestion.left, top: suggestion.top }}
-          role="listbox"
-          aria-label={`${suggestion.trigger} 引用建议`}
-        >
-          <div className="flex items-center justify-between border-b border-border/50 bg-primary/10 px-2.5 py-1.5 text-[11px] font-medium text-primary">
-            <span>{suggestion.trigger} {suggestion.type === 'all' ? 'Proma 引用' : suggestion.type}</span>
-            <span className="font-normal text-muted-foreground">Esc 关闭 · Enter 选中</span>
-          </div>
-          <div className="max-h-[240px] overflow-y-auto">
-            {suggestionItems.length === 0 ? (
-              <div className="p-2 text-[11px] text-muted-foreground">没有匹配的引用</div>
-            ) : suggestionItems.map((choice, index) => (
-              <button
-                key={`${choice.reference.type}:${choice.reference.id}`}
-                type="button"
-                role="option"
-                aria-selected={index === suggestionIndex}
-                className={`flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-xs transition-colors hover:bg-accent ${index === suggestionIndex ? 'bg-accent text-accent-foreground' : ''}`}
-                onMouseDown={(event) => {
-                  event.preventDefault()
-                  selectSuggestion(choice)
-                }}
-              >
-                <span className="w-4 shrink-0 text-center text-muted-foreground">{choice.reference.type === 'skill' ? '/' : choice.reference.type === 'mcp' ? '#' : choice.reference.type === 'session' ? '&' : '~'}</span>
-                <span className="min-w-0 flex-1 truncate font-medium">{choice.reference.label}</span>
-                <span className="max-w-[110px] truncate text-[10px] text-muted-foreground">{choice.description}</span>
-              </button>
-            ))}
-          </div>
+        <div className="fixed z-[100]" style={{ left: suggestion.left, top: suggestion.top }}>
+          <MentionList
+            ref={suggestionListRef}
+            items={suggestionItems}
+            onSelect={selectSuggestion}
+            emptyText="没有匹配的引用"
+            headerLabel={vaultReferenceMenuLabels[suggestion.type]}
+            keyExtractor={(choice) => `${choice.reference.type}:${choice.reference.id}`}
+            renderItem={renderVaultReferenceChoice}
+          />
         </div>,
         document.body,
       )}

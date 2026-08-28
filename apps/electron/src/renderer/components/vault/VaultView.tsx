@@ -208,7 +208,7 @@ function VaultFileList({
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <div
-          className="min-h-0 flex-1 overflow-y-auto px-2 pb-3 titlebar-no-drag"
+          className="min-h-0 flex-1 overflow-y-auto px-2 pb-3 scrollbar-thin titlebar-no-drag"
           onContextMenuCapture={() => setContextFolderPath('')}
         >
           {files.length === 0

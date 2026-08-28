@@ -1032,6 +1032,16 @@ export const VaultLiveMarkdownEditor = React.forwardRef<VaultLiveMarkdownEditorH
         toolbar: false,
       },
       plugins: [
+        // A lone `-` beneath text is temporarily parsed as a Setext H2, which makes
+        // the preceding line jump before the user can type the list's space. Insert
+        // the normal list prefix atomically so list entry stays visually stable.
+        EditorView.inputHandler.of((view, from, to, text) => {
+          if (text !== '-' || from !== to || from !== view.state.selection.main.head) return false
+          const line = view.state.doc.lineAt(from)
+          if (line.from !== from || line.text !== '') return false
+          view.dispatch({ changes: { from, to, insert: '- ' }, selection: { anchor: from + 2 } })
+          return true
+        }),
         Prec.highest(keymap.of([
           {
             key: 'Escape',

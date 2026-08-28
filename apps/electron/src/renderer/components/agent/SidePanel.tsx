@@ -25,6 +25,8 @@ import type { RightWorkspaceTabDragState, WorkspacePanelTab } from '@/components
 import { DiffChangesList } from '@/components/diff/DiffChangesList'
 import { ChatView } from '@/components/chat/ChatView'
 import { AgentView } from '@/components/agent/AgentView'
+import { VaultView } from '@/components/vault/VaultView'
+import { OBSIDIAN_NAME, ObsidianIcon } from '@/components/obsidian/obsidian-brand'
 import {
   currentSessionSidePanelOpenAtom,
   agentFileSourceFilterMapAtom,
@@ -1238,6 +1240,7 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
         skills: { label: 'Skills', icon: <Blocks className="size-3.5" /> },
         mcp: { label: 'MCP', icon: <ServerCog className="size-3.5" /> },
         memory: { label: '项目记忆', icon: <Brain className="size-3.5" /> },
+        vault: { label: OBSIDIAN_NAME, icon: <ObsidianIcon className="size-3.5" /> },
       }
       return { id: component, ...meta[component], closable: true }
     }),
@@ -1582,6 +1585,8 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
       ) : (
         <div className="flex flex-1 items-center justify-center text-xs text-muted-foreground">等待项目初始化...</div>
       )
+    ) : paneTab === 'vault' ? (
+      <div className="min-h-0 flex-1 overflow-hidden"><VaultView embedded sessionId={sessionId} /></div>
     ) : paneTab === 'changes' ? (
       sessionPath ? (
         <DiffChangesList
@@ -1742,6 +1747,11 @@ export function SidePanel({ sessionId, sessionPath, activeTab, onTabChange, widt
             onOpenWorkspaceComponent={(component) => {
               setWorkspaceComponentTabs((previous) => previous.includes(component) ? previous : [...previous, component])
               handleWorkspaceTabChange(component)
+            }}
+            onOpenVault={() => {
+              setWorkspaceComponentTabs((previous) => previous.includes('vault') ? previous : [...previous, 'vault'])
+              setIsOpen(true)
+              handleWorkspaceTabChange('vault')
             }}
             visibleTabs={split ? { left: split.leftTab, right: split.rightTab } : undefined}
             focusedPane={split?.focusedPane}

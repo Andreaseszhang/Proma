@@ -6,7 +6,7 @@
  */
 
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, AGENT_ISLAND_IPC_CHANNELS, TERMINAL_IPC_CHANNELS } from '@proma/shared'
+import { IPC_CHANNELS, CHANNEL_IPC_CHANNELS, CHAT_IPC_CHANNELS, AGENT_IPC_CHANNELS, ENVIRONMENT_IPC_CHANNELS, INSTALLER_IPC_CHANNELS, PROXY_IPC_CHANNELS, GITHUB_RELEASE_IPC_CHANNELS, SYSTEM_PROMPT_IPC_CHANNELS, CHAT_TOOL_IPC_CHANNELS, FEISHU_IPC_CHANNELS, DINGTALK_IPC_CHANNELS, WECHAT_IPC_CHANNELS, AUTOMATION_IPC_CHANNELS, PLANNING_IPC_CHANNELS, VAULT_IPC_CHANNELS, AGENT_ISLAND_IPC_CHANNELS, TERMINAL_IPC_CHANNELS } from '@proma/shared'
 import { USER_PROFILE_IPC_CHANNELS, SETTINGS_IPC_CHANNELS, SCRATCH_PAD_IPC_CHANNELS, APP_ICON_IPC_CHANNELS, DOCK_BADGE_IPC_CHANNELS, STORAGE_IPC_CHANNELS } from '../types'
 import type {
   RuntimeStatus,
@@ -115,6 +115,15 @@ import type {
   AgentMoveQueuedMessageInput,
   AgentQueuedMessageStatus,
   PendingRequestsSnapshot,
+  VaultCandidate,
+  VaultDeleteInput,
+  VaultFileEntry,
+  VaultFocus,
+  VaultReadResult,
+  VaultRenameInput,
+  VaultSummary,
+  VaultWriteInput,
+  VaultWriteResult,
   NativeAgentIslandSnapshot,
   Automation,
   CreateAutomationInput,
@@ -465,6 +474,23 @@ export interface ElectronAPI {
 
   /** 将图片 data URL 写入系统剪贴板 */
   copyImageToClipboard: (dataUrl: string) => Promise<{ success: boolean; message?: string }>
+
+  // ===== 用户授权的 Markdown Vault =====
+
+  getVaultConfig: () => Promise<VaultSummary | null>
+  selectDefaultVault: () => Promise<VaultSummary>
+  listVaultCandidates: () => Promise<VaultCandidate[]>
+  selectVault: (options?: { inboxPath?: string; allowAgentWrites?: boolean }) => Promise<VaultSummary | null>
+  authorizeDiscoveredVault: (rootPath: string, options?: { inboxPath?: string; allowAgentWrites?: boolean }) => Promise<VaultSummary>
+  listVaultFiles: () => Promise<VaultFileEntry[]>
+  readVaultFile: (relativePath: string) => Promise<VaultReadResult>
+  writeVaultFile: (input: VaultWriteInput) => Promise<VaultWriteResult>
+  createUntitledVaultFile: () => Promise<VaultWriteResult>
+  createUntitledVaultFileInFolder: (folderPath: string) => Promise<VaultWriteResult>
+  createVaultFolder: (relativePath: string) => Promise<void>
+  renameVaultFile: (input: VaultRenameInput) => Promise<VaultReadResult>
+  deleteVaultFile: (input: VaultDeleteInput) => Promise<void>
+  setVaultUserContext: (sessionId: string, focus: VaultFocus | null, open?: boolean) => Promise<void>
 
   // ===== 应用图标切换 =====
 
@@ -1701,6 +1727,22 @@ const electronAPI: ElectronAPI = {
   copyImageToClipboard: (dataUrl: string) => {
     return ipcRenderer.invoke(SCRATCH_PAD_IPC_CHANNELS.COPY_IMAGE, dataUrl)
   },
+
+  // 用户授权的 Markdown Vault
+  getVaultConfig: () => ipcRenderer.invoke(VAULT_IPC_CHANNELS.GET_CONFIG),
+  selectDefaultVault: () => ipcRenderer.invoke(VAULT_IPC_CHANNELS.SELECT_DEFAULT),
+  listVaultCandidates: () => ipcRenderer.invoke(VAULT_IPC_CHANNELS.LIST_CANDIDATES),
+  selectVault: (options?: { inboxPath?: string; allowAgentWrites?: boolean }) => ipcRenderer.invoke(VAULT_IPC_CHANNELS.SELECT, options),
+  authorizeDiscoveredVault: (rootPath: string, options?: { inboxPath?: string; allowAgentWrites?: boolean }) => ipcRenderer.invoke(VAULT_IPC_CHANNELS.AUTHORIZE_CANDIDATE, rootPath, options),
+  listVaultFiles: () => ipcRenderer.invoke(VAULT_IPC_CHANNELS.LIST_FILES),
+  readVaultFile: (relativePath: string) => ipcRenderer.invoke(VAULT_IPC_CHANNELS.READ_FILE, relativePath),
+  writeVaultFile: (input: VaultWriteInput) => ipcRenderer.invoke(VAULT_IPC_CHANNELS.WRITE_FILE, input),
+  createUntitledVaultFile: () => ipcRenderer.invoke(VAULT_IPC_CHANNELS.CREATE_UNTITLED_FILE),
+  createUntitledVaultFileInFolder: (folderPath: string) => ipcRenderer.invoke(VAULT_IPC_CHANNELS.CREATE_UNTITLED_FILE_IN_FOLDER, folderPath),
+  createVaultFolder: (relativePath: string) => ipcRenderer.invoke(VAULT_IPC_CHANNELS.CREATE_FOLDER, relativePath),
+  renameVaultFile: (input: VaultRenameInput) => ipcRenderer.invoke(VAULT_IPC_CHANNELS.RENAME_FILE, input),
+  deleteVaultFile: (input: VaultDeleteInput) => ipcRenderer.invoke(VAULT_IPC_CHANNELS.DELETE_FILE, input),
+  setVaultUserContext: (sessionId: string, focus: VaultFocus | null, open = true) => ipcRenderer.invoke(VAULT_IPC_CHANNELS.SET_USER_CONTEXT, sessionId, focus, open),
 
   // 应用图标切换
   setAppIcon: (variantId: string) => {

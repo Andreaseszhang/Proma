@@ -412,8 +412,12 @@ export const liveMarkdownBlockPreview: Extension = [
   }),
   EditorView.domEventHandlers({
     mousedown: (event, view) => {
-      const block = (event.target as HTMLElement | null)?.closest<HTMLElement>('[data-live-markdown-block-from]')
+      const target = event.target as HTMLElement | null
+      const block = target?.closest<HTMLElement>('[data-live-markdown-block-from]')
       if (!block) return false
+      // CodeBlock 的复制按钮必须在外层选区切换之前收到完整 click 序列。
+      // 否则 mousedown 会把预览切回源码并卸载按钮，导致 click 永远无法触发。
+      if (target?.closest('button, a, input, select, textarea, [role="button"]')) return true
       const from = Number(block.dataset.liveMarkdownBlockFrom)
       if (!Number.isSafeInteger(from)) return false
       event.preventDefault()

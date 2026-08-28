@@ -2401,6 +2401,8 @@
 }
 
 /* Keep Markdown syntax visible only while editing its line, like Obsidian's live preview. */
+.live-markdown-editor .live-markdown-syntax-hidden,
+.live-markdown-editor .live-markdown-syntax-hidden *,
 .vault-ink-mde .vault-markdown-syntax-hidden,
 .vault-ink-mde .vault-markdown-syntax-hidden * {
   display: none !important;
@@ -2447,6 +2449,8 @@
 }
 /* This marker is only added while a terminal `-` is temporarily parsed as a
  * Setext H2 during list entry. It neutralizes the parser's heading theme. */
+.live-markdown-editor .live-markdown-pending-list-heading,
+.live-markdown-editor .live-markdown-pending-list-heading *,
 .vault-ink-mde .vault-pending-list-heading,
 .vault-ink-mde .vault-pending-list-heading * {
   font-size: 1em !important;

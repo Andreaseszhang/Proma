@@ -1,6 +1,7 @@
 import * as React from 'react'
-import { Prec, type Extension } from '@codemirror/state'
-import { EditorView, ViewPlugin, keymap } from '@codemirror/view'
+import { syntaxTree } from '@codemirror/language'
+import { Prec, RangeSetBuilder, StateEffect, StateField, type EditorState, type Extension } from '@codemirror/state'
+import { Decoration, EditorView, ViewPlugin, keymap, type DecorationSet } from '@codemirror/view'
 import ink, { type Instance } from 'ink-mde'
 import { cn } from '@/lib/utils'
 
@@ -22,6 +23,80 @@ interface LiveMarkdownEditorProps {
 interface MeasureView {
   requestMeasure: () => void
 }
+
+const markdownSyntaxFocusEffect = StateEffect.define<boolean>()
+const markdownSyntaxMarkerNames = new Set([
+  'CodeMark',
+  'EmphasisMark',
+  'HeaderMark',
+  'LinkMark',
+  'QuoteMark',
+])
+const hiddenMarkdownSyntax = Decoration.replace({ class: 'live-markdown-syntax-hidden' })
+const pendingListHeading = Decoration.mark({ class: 'live-markdown-pending-list-heading' })
+
+type MarkdownSyntaxVisibility = {
+  focused: boolean
+  decorations: DecorationSet
+}
+
+function activeCursorLines(state: EditorState, focused: boolean): Set<number> {
+  if (!focused) return new Set()
+  return new Set(state.selection.ranges.map((range) => state.doc.lineAt(range.head).number))
+}
+
+/**
+ * Obsidian-style live preview: Markdown markers disappear on inactive lines,
+ * but reappear as soon as the cursor enters that line. The formatted content
+ * remains visible in both states, so users can edit syntax without a mode flip.
+ */
+function markdownSyntaxDecorations(state: EditorState, focused: boolean): DecorationSet {
+  const activeLines = activeCursorLines(state, focused)
+  const builder = new RangeSetBuilder<Decoration>()
+  syntaxTree(state).iterate({
+    enter: ({ type, from, to }) => {
+      if (type.name === 'SetextHeading2') {
+        const underline = state.doc.lineAt(to)
+        if (underline.to === state.doc.length && /^-\s*$/.test(underline.text)) {
+          const headingLine = state.doc.lineAt(from)
+          builder.add(headingLine.from, headingLine.to, pendingListHeading)
+        }
+      }
+      if (!markdownSyntaxMarkerNames.has(type.name)) return
+      if (activeLines.has(state.doc.lineAt(from).number)) return
+      const markerEnd = type.name === 'HeaderMark' && state.doc.sliceString(to, to + 1) === ' ' ? to + 1 : to
+      builder.add(from, markerEnd, hiddenMarkdownSyntax)
+    },
+  })
+  return builder.finish()
+}
+
+const markdownSyntaxVisibilityField = StateField.define<MarkdownSyntaxVisibility>({
+  create: (state) => ({ focused: false, decorations: markdownSyntaxDecorations(state, false) }),
+  update: (value, transaction) => {
+    let focused = value.focused
+    for (const effect of transaction.effects) {
+      if (effect.is(markdownSyntaxFocusEffect)) focused = effect.value
+    }
+    if (!transaction.docChanged && transaction.selection === undefined && focused === value.focused) return value
+    return { focused, decorations: markdownSyntaxDecorations(transaction.state, focused) }
+  },
+  provide: (field) => EditorView.decorations.from(field, (value) => value.decorations),
+})
+
+const markdownSyntaxVisibility: Extension[] = [
+  markdownSyntaxVisibilityField,
+  EditorView.domEventHandlers({
+    focus: (_event, view) => {
+      view.dispatch({ effects: markdownSyntaxFocusEffect.of(true) })
+      return false
+    },
+    blur: (_event, view) => {
+      view.dispatch({ effects: markdownSyntaxFocusEffect.of(false) })
+      return false
+    },
+  }),
+]
 
 function createMeasureScheduler(
   getView: () => MeasureView | null,
@@ -105,6 +180,7 @@ export const LiveMarkdownEditor = React.forwardRef<LiveMarkdownEditorHandle, Liv
           viewRef.current = view
           return { destroy: () => { if (viewRef.current === view) viewRef.current = null } }
         }),
+        ...markdownSyntaxVisibility,
         ...extensions,
       ].map((extension) => ({ type: 'default' as const, value: extension })),
       search: false,

@@ -2489,6 +2489,19 @@
 .vault-ink-mde .vault-horizontal-rule hr {
   margin: 0;
 }
+.live-markdown-editor .live-markdown-code-block {
+  display: block;
+  max-width: 100%;
+  padding: 0.9rem 0;
+}
+.live-markdown-editor .live-markdown-code-block pre.shiki {
+  max-width: 100%;
+  margin: 0;
+  overflow: auto;
+  border-radius: 0.5rem;
+  padding: 0.9rem 1rem;
+  line-height: 1.625;
+}
 .live-markdown-editor .live-markdown-math-block {
   display: block;
   overflow-x: auto;

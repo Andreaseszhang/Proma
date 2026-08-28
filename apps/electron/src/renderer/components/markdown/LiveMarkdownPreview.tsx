@@ -7,7 +7,7 @@ import type { HighlightTokensResult } from '@proma/core'
 import { MermaidBlock } from '@proma/ui'
 import { shouldRenderMermaidCodeBlock } from '@/lib/mermaid-detection'
 
-type PreviewKind = 'table' | 'mermaid' | 'thematic-break' | 'math'
+type PreviewKind = 'code' | 'table' | 'mermaid' | 'thematic-break' | 'math'
 
 interface PreviewBlock {
   kind: PreviewKind
@@ -169,6 +169,43 @@ abstract class LiveMarkdownBlockWidget extends WidgetType {
   override ignoreEvent(): boolean { return false }
 }
 
+class CodeBlockWidget extends LiveMarkdownBlockWidget {
+  constructor(
+    private readonly code: string,
+    private readonly language: string,
+    private readonly from: number,
+  ) { super() }
+  override eq(other: CodeBlockWidget): boolean {
+    return this.from === other.from && this.code === other.code && this.language === other.language
+  }
+  override toDOM(view: EditorView): HTMLElement {
+    const wrapper = document.createElement('div')
+    wrapper.className = 'code-block-wrapper live-markdown-code-block'
+    wrapper.dataset.liveMarkdownBlockFrom = String(this.from)
+    const pre = document.createElement('pre')
+    pre.className = 'shiki'
+    const code = document.createElement('code')
+    const tokens = shikiTokens(this.code, this.language || 'text', currentShikiTheme())
+    if (!tokens) {
+      code.textContent = this.code
+    } else {
+      tokens.lines.forEach((line, lineIndex) => {
+        line.forEach((token) => {
+          const span = document.createElement('span')
+          span.textContent = token.content
+          if (token.color) span.style.color = token.color
+          code.appendChild(span)
+        })
+        if (lineIndex < tokens.lines.length - 1) code.appendChild(document.createTextNode('\n'))
+      })
+    }
+    pre.appendChild(code)
+    wrapper.appendChild(pre)
+    this.observeSize(wrapper, view)
+    return wrapper
+  }
+}
+
 class TableWidget extends LiveMarkdownBlockWidget {
   constructor(private readonly rows: string[][], private readonly from: number) { super() }
   override eq(other: TableWidget): boolean { return this.from === other.from && JSON.stringify(this.rows) === JSON.stringify(other.rows) }
@@ -298,6 +335,8 @@ function buildBlocks(state: EditorState): PreviewBlock[] {
         const code = lines.slice(number, closing - 1).join('\n')
         if (shouldRenderMermaidCodeBlock(info ? `language-${info}` : undefined, code)) {
           blocks.push({ kind: 'mermaid', from, to, decoration: Decoration.replace({ widget: new MermaidWidget(code, from), block: true }) })
+        } else {
+          blocks.push({ kind: 'code', from, to, decoration: Decoration.replace({ widget: new CodeBlockWidget(code, info, from), block: true }) })
         }
         number = closing
       }

@@ -1064,12 +1064,20 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>在 Proma 中使用 {VAULT_NAME}</DialogTitle>
-            <DialogDescription>Proma 直接读写你已授权给 {VAULT_NAME} 的 Markdown 文件，笔记仍可在 {VAULT_NAME} 中继续使用。</DialogDescription>
+            <DialogDescription>Proma 直接读写本机已授权的 Markdown Vault；这些笔记也会继续保留在 {VAULT_NAME} 中。</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 text-sm leading-6 text-muted-foreground">
             <section>
-              <p className="font-medium text-foreground">编辑与保存</p>
-              <p>点击笔记开始编辑，修改会自动保存；按 Cmd/Ctrl + S 可立即保存。左下角可以切换 {VAULT_NAME}。</p>
+              <p className="font-medium text-foreground">切换与管理 Vault</p>
+              <p>点击左下角的 Vault 名称可切换已发现的本地 Vault，也可以创建 Proma Vault 或打开本地仓库。云端 Vault 需先同步或挂载到本机。</p>
+            </section>
+            <section>
+              <p className="font-medium text-foreground">浏览与新建笔记</p>
+              <p>点击文件夹可展开或收起；左侧顶部按钮可一键展开或折叠全部文件夹，拖动中间分隔线可调整文件树宽度。右键点击文件夹可在该目录中新建笔记或文件夹。</p>
+            </section>
+            <section>
+              <p className="font-medium text-foreground">编辑与自动保存</p>
+              <p>输入停止 700ms 后会自动保存；按 Cmd/Ctrl + S 可立即保存。直接编辑标题并按 Enter 或移开焦点即可重命名笔记。</p>
             </section>
             <section>
               <p className="font-medium text-foreground">双向链接</p>

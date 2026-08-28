@@ -6,11 +6,12 @@ import type { VaultCandidate, VaultFileEntry, VaultReadResult, VaultSummary, Ski
 import { Button } from '@/components/ui/button'
 import { ConfirmDialog } from '@/components/ui/confirm-dialog'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { VaultLiveMarkdownEditor, type VaultLiveMarkdownEditorHandle } from './VaultLiveMarkdownEditor'
 import { VaultReferencePicker } from './VaultReferencePicker'
-import { SkillDetailSheet } from '@/components/agent-skills/SkillDetailSheet'
+import { SkillDetailView } from '@/components/agent-skills/SkillDetailView'
 import {
   selectedVaultFileAtom,
   vaultReadResultAtom,
@@ -989,7 +990,7 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <SkillDetailSheet
+      <VaultSkillDetailSheet
         skill={skillDetail?.skill ?? null}
         workspaceSlug={workspaceSlug ?? ''}
         isBuiltin={skillDetail?.isBuiltin ?? false}
@@ -1030,5 +1031,42 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
         onChanged={() => bumpCapabilities((version) => version + 1)}
       />
     </>
+  )
+}
+
+interface VaultSkillDetailSheetProps {
+  skill: SkillMeta | null
+  workspaceSlug: string
+  isBuiltin: boolean
+  updating: boolean
+  onOpenChange: (open: boolean) => void
+  onToggle: (enabled: boolean) => void
+  onUpdate: () => void
+  onRequestDelete: () => void
+  onOpenFolder: () => void
+  onChanged: () => void
+}
+
+/** Adapts the canonical full-page Skill view for Vault's contextual sheet. */
+function VaultSkillDetailSheet({ skill, onOpenChange, ...props }: VaultSkillDetailSheetProps): React.ReactElement {
+  return (
+    <Sheet open={skill !== null} onOpenChange={onOpenChange}>
+      <SheetContent
+        hideClose
+        side="right"
+        className="w-[62vw] min-w-[680px] max-w-[1100px] gap-0 p-0 sm:max-w-[1100px]"
+        aria-describedby={undefined}
+      >
+        <SheetTitle className="sr-only">Skill 详情</SheetTitle>
+        {skill && (
+          <SkillDetailView
+            key={skill.slug}
+            skill={skill}
+            {...props}
+            onBack={() => onOpenChange(false)}
+          />
+        )}
+      </SheetContent>
+    </Sheet>
   )
 }

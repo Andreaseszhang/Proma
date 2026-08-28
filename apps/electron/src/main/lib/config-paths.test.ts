@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { getScratchPadPath } from './config-paths'
+import { getScratchPadPath, isRetiredDefaultSkill } from './config-paths'
 
 const tempRoots: string[] = []
 
@@ -22,6 +22,13 @@ afterEach(() => {
   while (tempRoots.length > 0) {
     rmSync(tempRoots.pop()!, { recursive: true, force: true })
   }
+})
+
+describe('Default Skill retirement', () => {
+  test('Given the removed bundled Vault Skill When startup reconciles default skills Then old copied Vault skill directories are retired', () => {
+    expect(isRetiredDefaultSkill('vault')).toBe(true)
+    expect(isRetiredDefaultSkill('automation')).toBe(false)
+  })
 })
 
 describe('Scratch Pad Vault migration', () => {

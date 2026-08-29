@@ -1058,6 +1058,7 @@ export class AgentOrchestrator {
         permissionMode: permissionModeOverride ?? sessionMeta?.permissionMode ?? PROMA_DEFAULT_PERMISSION_MODE,
         triggeredBy: input.triggeredBy,
         windowsShellAvailable: process.platform !== 'win32' || runtimeEnv.shellKind != null,
+        lastWindowsTerminalProfile: appSettings.lastWindowsTerminalProfile,
         productivityTools,
       })
       piBuiltinTools = builtinMcpResult.tools

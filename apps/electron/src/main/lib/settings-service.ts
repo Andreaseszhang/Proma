@@ -9,11 +9,18 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { getSettingsPath } from './config-paths'
 import { DEFAULT_THEME_MODE, normalizeProductivityToolsSettings } from '../../types'
 import type { AgentIslandSettings, AppSettings } from '../../types'
+import { getTerminalProfilesForPlatform, isTerminalProfile } from '@proma/shared'
 
 function sanitizeAgentIslandSettings(input: unknown): AgentIslandSettings | undefined {
   if (!input || typeof input !== 'object') return undefined
   const raw = input as { enabled?: unknown }
   return typeof raw.enabled === 'boolean' ? { enabled: raw.enabled } : undefined
+}
+
+export function sanitizeWindowsTerminalProfile(input: unknown): AppSettings['lastWindowsTerminalProfile'] {
+  return isTerminalProfile(input) && getTerminalProfilesForPlatform('win32').includes(input)
+    ? input
+    : undefined
 }
 
 /**
@@ -49,6 +56,8 @@ export function getSettings(): AppSettings {
       agentChannelIds?: unknown
       builtinMcpDisabledIds?: unknown
       interfaceVariant?: unknown
+      /** PR #1895 早期构建写入的无平台 profile 字段；仅在 Windows 上迁移。 */
+      lastTerminalProfile?: unknown
     }
     // Pi-only：读取时丢弃旧 runtime selector、界面风格与 Claude 白名单，避免下次写回复活。
     const {
@@ -57,6 +66,7 @@ export function getSettings(): AppSettings {
       agentChannelIds: _legacyAgentChannelIds,
       builtinMcpDisabledIds: _legacyBuiltinMcpDisabledIds,
       interfaceVariant: _legacyInterfaceVariant,
+      lastTerminalProfile: legacyLastTerminalProfile,
       ...settings
     } = data
     return {
@@ -70,6 +80,9 @@ export function getSettings(): AppSettings {
       feishuSessionMirror: data.feishuSessionMirror ?? { mode: 'off' },
       visionRelay: data.visionRelay ?? { enabled: false },
       windowsShellPreference: settings.windowsShellPreference ?? 'auto',
+      lastWindowsTerminalProfile: process.platform === 'win32'
+        ? sanitizeWindowsTerminalProfile(settings.lastWindowsTerminalProfile ?? legacyLastTerminalProfile)
+        : undefined,
       agentThinking: settings.agentThinking ?? { type: 'adaptive' },
       // 缺省 true：老配置文件未写该字段时保持推广默认开启
       gitAttributionEnabled: settings.gitAttributionEnabled ?? true,

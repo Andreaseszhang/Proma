@@ -10,10 +10,11 @@
 import { Type } from 'typebox'
 import type { ToolDefinition } from '@earendil-works/pi-coding-agent'
 import type { AgentToolResult } from '@earendil-works/pi-agent-core'
-import { AGENT_IPC_CHANNELS, normalizePathForCompare } from '@proma/shared'
+import { AGENT_IPC_CHANNELS, getTerminalProfilesForPlatform, normalizePathForCompare, parseTerminalProfile } from '@proma/shared'
 import type {
   CreateAutomationInput,
   PromaPermissionMode,
+  TerminalProfile,
   UpdateAutomationInput,
 } from '@proma/shared'
 import { realpathSync } from 'node:fs'
@@ -92,6 +93,7 @@ import {
   automationCreateToolParameters,
   discardInapplicableAutomationScheduleFields,
 } from './automation-tool-schema'
+import { updateSettings } from '../settings-service'
 import { getConfiguredVaultFileSystem, getVaultConfig } from '../vault-service'
 import type { ProductivityToolsSettings } from '../../../types'
 
@@ -113,6 +115,8 @@ export interface PiBuiltinToolsContext {
   triggeredBy?: 'user' | 'automation' | 'delegation' | 'external'
   /** Windows 设备是否已有可供 Pi Bash 使用的 Git Bash 或 WSL。 */
   windowsShellAvailable?: boolean
+  /** Windows 上省略 shell 时使用用户最近一次明确选择的 profile。 */
+  lastWindowsTerminalProfile?: TerminalProfile
   /** 用户关闭的生产力能力不能注入给 Agent。 */
   productivityTools?: ProductivityToolsSettings
 }
@@ -1360,24 +1364,75 @@ function buildAgentTerminalTools(sdk: PiSdk, ctx: PiBuiltinToolsContext): ToolDe
   // 无用户在场的来源不能启动或驱动本地交互终端；这既没有可见性，也会扩大自动任务与外部 Bridge 的权限。
   if (ctx.triggeredBy === 'automation' || ctx.triggeredBy === 'delegation' || ctx.triggeredBy === 'external') return []
 
-  const terminalInput = (args: Record<string, unknown>): { cwd?: string; title?: string } => ({
+  const supportedTerminalProfiles = getTerminalProfilesForPlatform(process.platform)
+  const shellProfileDescription = process.platform === 'win32'
+    ? `Shell profile for the new terminal: ${supportedTerminalProfiles.join(' | ')}. default uses Windows PowerShell when available; pwsh, git-bash, and wsl select their respective Windows shell. Invalid values fail explicitly instead of falling back.`
+    : process.platform === 'darwin'
+      ? `Shell profile for the new terminal: ${supportedTerminalProfiles.join(' | ')}. default preserves the user's configured login shell; zsh and bash apply only to this terminal. Windows-only profiles fail explicitly.`
+      : `Shell profile for the new terminal: ${supportedTerminalProfiles.join(' | ')}. default uses the configured login shell when available; zsh and bash apply only to this terminal. Unsupported profiles fail explicitly.`
+  const defaultShellBehavior = process.platform === 'win32'
+    ? 'If shell is omitted, Proma reuses the user’s last selected Windows shell when available; otherwise it uses the platform default.'
+    : 'If shell is omitted, Proma uses the platform default shell without persisting an explicit per-terminal selection.'
+
+  let lastWindowsTerminalProfile = ctx.lastWindowsTerminalProfile
+  const terminalInput = (args: Record<string, unknown>): { cwd?: string; title?: string; profile?: TerminalProfile } => ({
     ...(typeof args.cwd === 'string' && args.cwd.trim() ? { cwd: args.cwd.trim() } : {}),
     ...(typeof args.title === 'string' && args.title.trim() ? { title: args.title.trim() } : {}),
+    ...('shell' in args ? { profile: parseTerminalProfile(args.shell) } : {}),
   })
+  const resolveTerminalInput = (
+    args: Record<string, unknown>,
+    options: { reuse: boolean } = { reuse: false },
+  ): { input: ReturnType<typeof terminalInput>; explicit: boolean; usingRememberedProfile: boolean } => {
+    const explicit = Object.prototype.hasOwnProperty.call(args, 'shell')
+    const input = terminalInput(args)
+    const rememberedProfile = !options.reuse && !explicit && process.platform === 'win32'
+      ? lastWindowsTerminalProfile
+      : undefined
+    const profile = options.reuse && !explicit ? undefined : input.profile ?? rememberedProfile
+    return {
+      input: { ...input, ...(profile ? { profile } : {}) },
+      explicit,
+      usingRememberedProfile: rememberedProfile !== undefined && rememberedProfile !== 'default',
+    }
+  }
+  const recordExplicitProfile = (profile: TerminalProfile, explicit: boolean): void => {
+    if (!explicit || process.platform !== 'win32') return
+    try {
+      updateSettings({ lastWindowsTerminalProfile: profile })
+      lastWindowsTerminalProfile = profile
+    } catch (error) {
+      console.warn('[终端] 保存最近 Shell 失败:', error)
+    }
+  }
+  const clearUnavailableRememberedProfile = (profile: TerminalProfile, usingRememberedProfile: boolean): void => {
+    if (!usingRememberedProfile || profile !== 'default' || process.platform !== 'win32') return
+    lastWindowsTerminalProfile = undefined
+    try {
+      updateSettings({ lastWindowsTerminalProfile: undefined })
+    } catch (error) {
+      console.warn('[终端] 清理不可用的最近 Shell 失败:', error)
+    }
+  }
   const agentContext = { sessionId: ctx.sessionId, agentCwd: ctx.agentCwd, allowedRoots: ctx.allowedRoots }
 
   return [
     sdk.defineTool({
       name: 'TerminalOpen',
       label: '打开 Agent 终端',
-      description: 'Open a visible terminal Tab in the Agent right workspace. cwd controls the initial directory and must resolve within the current session’s authorized directories; it is not an OS sandbox. This tool opens an interactive terminal but does not run a command.',
+      description: `Open a visible terminal Tab in the Agent right workspace. cwd controls the initial directory and must resolve within the current session’s authorized directories; it is not an OS sandbox. ${defaultShellBehavior} This tool opens an interactive terminal but does not run a command.`,
       promptSnippet: 'Open a visible Agent terminal at an authorized cwd. Do not use it to silently run commands.',
       parameters: Type.Object({
         cwd: Type.Optional(Type.String({ description: 'Absolute or Agent-CWD-relative initial directory. It must resolve within the current session’s authorized roots.' })),
         title: Type.Optional(Type.String({ description: 'Short visible terminal title.' })),
+        shell: Type.Optional(Type.String({ description: shellProfileDescription })),
       }),
       async execute(_toolCallId, params) {
-        const record = await openAgentTerminal({ ...agentContext, ...terminalInput(params as Record<string, unknown>) })
+        const args = params as Record<string, unknown>
+        const { input, explicit, usingRememberedProfile } = resolveTerminalInput(args)
+        const record = await openAgentTerminal({ ...agentContext, ...input, fallbackToDefaultProfile: usingRememberedProfile })
+        recordExplicitProfile(record.profile, explicit)
+        clearUnavailableRememberedProfile(record.profile, usingRememberedProfile)
         return jsonToolResult({ terminal: record, visible: true, outputSharedWithAgent: false })
       },
     }),
@@ -1391,6 +1446,7 @@ function buildAgentTerminalTools(sdk: PiSdk, ctx: PiBuiltinToolsContext): ToolDe
         terminalId: Type.Optional(Type.String({ description: 'Current-session running Agent terminal to reuse. First inspect candidates with TerminalList; do not reuse an interactive, long-running, or unverified-busy terminal.' })),
         cwd: Type.Optional(Type.String({ description: 'Absolute or Agent-CWD-relative directory within the current authorized roots. Used only when opening a new terminal.' })),
         title: Type.Optional(Type.String({ description: 'Short visible terminal title. Used only when opening a new terminal.' })),
+        shell: Type.Optional(Type.String({ description: `${shellProfileDescription} Used only when opening a new terminal. When reusing terminalId, an explicitly mismatching shell fails; omit it to keep the existing shell.` })),
       }),
       async execute(_toolCallId, params) {
         const args = params as Record<string, unknown>
@@ -1399,7 +1455,12 @@ function buildAgentTerminalTools(sdk: PiSdk, ctx: PiBuiltinToolsContext): ToolDe
         const terminalId = typeof args.terminalId === 'string' && args.terminalId.trim()
           ? args.terminalId.trim()
           : undefined
-        const record = await executeAgentTerminal({ ...agentContext, ...terminalInput(args), command, terminalId })
+        const { input, explicit, usingRememberedProfile } = resolveTerminalInput(args, { reuse: Boolean(terminalId) })
+        const record = await executeAgentTerminal({ ...agentContext, ...input, command, terminalId, fallbackToDefaultProfile: usingRememberedProfile })
+        if (!terminalId) {
+          recordExplicitProfile(record.profile, explicit)
+          clearUnavailableRememberedProfile(record.profile, usingRememberedProfile)
+        }
         return jsonToolResult({ terminal: record, commandStarted: true, reused: Boolean(terminalId), outputSharedWithAgent: false })
       },
     }),

@@ -11,7 +11,9 @@ import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } 
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { VaultLiveMarkdownEditor } from './VaultLiveMarkdownEditor'
-import type { LiveMarkdownTextSelection } from '@/components/markdown/LiveMarkdownEditor'
+import { useVaultScrollMemory } from './useVaultScrollMemory'
+import { getVaultScrollKey } from './vault-scroll-memory'
+import type { LiveMarkdownEditorHandle, LiveMarkdownTextSelection } from '@/components/markdown/LiveMarkdownEditor'
 import { SelectionActionPopover } from '@/components/selection/SelectionActionPopover'
 import { focusChatInput } from '@/components/chat/focus-chat-input'
 import { getOrCreateSideChat } from '@/lib/side-chat'
@@ -272,6 +274,14 @@ function VaultMarkdownEditor({
   const setSidePanelOpen = useSetAtom(agentSidePanelOpenAtomFamily(sessionId ?? 'standalone'))
   const setSidePanelTabMap = useSetAtom(agentDiffPanelTabAtom)
   const focusAgentSessionInput = useFocusAgentSessionInput()
+  // Keep the reading position per surface and per note, so switching the center
+  // view, a right-workspace tab, or the open note does not jump back to the top.
+  const editorHandleRef = React.useRef<LiveMarkdownEditorHandle | null>(null)
+  const getEditorView = React.useCallback(() => editorHandleRef.current?.getView() ?? null, [])
+  const handleEditorReady = useVaultScrollMemory({
+    getView: getEditorView,
+    storageKey: getVaultScrollKey(readResult.relativePath, sessionId),
+  })
 
   const clearSelection = React.useCallback(() => setSelection(null), [])
   const handleTextSelectionChange = React.useCallback((nextSelection: LiveMarkdownTextSelection | null) => {
@@ -452,10 +462,12 @@ function VaultMarkdownEditor({
         </div>
         <div className="min-h-0 flex-1">
           <VaultLiveMarkdownEditor
+            ref={editorHandleRef}
             relativePath={readResult.relativePath}
             value={draft}
             onChange={setDraft}
             onSave={() => { void save() }}
+            onReady={handleEditorReady}
             onTextSelectionChange={handleTextSelectionChange}
           />
         </div>

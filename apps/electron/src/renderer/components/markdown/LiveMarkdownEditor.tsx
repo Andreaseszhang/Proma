@@ -5,6 +5,10 @@ import { Decoration, EditorView, ViewPlugin, keymap, type DecorationSet } from '
 import ink, { type Instance } from 'ink-mde'
 import { cn } from '@/lib/utils'
 import { createLiveMarkdownBlockPreview, type ResolveLiveMarkdownImageSrc, type SaveLiveMarkdownPastedImage } from './LiveMarkdownPreview'
+import {
+  shouldRebuildMarkdownHeadingDecorations,
+  shouldRebuildMarkdownSyntaxDecorations,
+} from './live-markdown-lifecycle'
 
 export interface LiveMarkdownEditorHandle {
   focus: () => void
@@ -102,7 +106,15 @@ function markdownHeadingDecorations(state: EditorState): DecorationSet {
 
 const markdownHeadingMarkers = StateField.define<DecorationSet>({
   create: markdownHeadingDecorations,
-  update: (value, transaction) => transaction.docChanged ? markdownHeadingDecorations(transaction.state) : value,
+  update: (value, transaction) => {
+    const syntaxTreeChanged = syntaxTree(transaction.startState) !== syntaxTree(transaction.state)
+    return shouldRebuildMarkdownHeadingDecorations({
+      documentChanged: transaction.docChanged,
+      syntaxTreeChanged,
+    })
+      ? markdownHeadingDecorations(transaction.state)
+      : value
+  },
   provide: (field) => EditorView.decorations.from(field),
 })
 
@@ -149,7 +161,13 @@ const markdownSyntaxVisibilityField = StateField.define<MarkdownSyntaxVisibility
     for (const effect of transaction.effects) {
       if (effect.is(markdownSyntaxFocusEffect)) focused = effect.value
     }
-    if (!transaction.docChanged && transaction.selection === undefined && focused === value.focused) return value
+    const syntaxTreeChanged = syntaxTree(transaction.startState) !== syntaxTree(transaction.state)
+    if (!shouldRebuildMarkdownSyntaxDecorations({
+      documentChanged: transaction.docChanged,
+      selectionChanged: transaction.selection !== undefined,
+      focusChanged: focused !== value.focused,
+      syntaxTreeChanged,
+    })) return value
     return { focused, decorations: markdownSyntaxDecorations(transaction.state, focused) }
   },
   provide: (field) => EditorView.decorations.from(field, (value) => value.decorations),
@@ -353,7 +371,8 @@ export const LiveMarkdownEditor = React.forwardRef<LiveMarkdownEditorHandle, Liv
       mount.remove()
     }
   // The editor owns its document state after initialization; external reloads use the effect below.
-  // `readOnly` is an ink-mde construction option, so changing it must recreate the instance.
+  // `readOnly` 是 ink-mde construction option；文件来源切换由调用方的 editor key 显式重建，
+  // 不要因 render callback 引用变化而意外销毁 CodeMirror，避免丢失选区与滚动状态。
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [readOnly])
 

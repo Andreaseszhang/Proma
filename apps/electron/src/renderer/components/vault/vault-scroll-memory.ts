@@ -21,34 +21,50 @@ export interface VaultScrollAnchor {
 }
 
 export const VAULT_SCROLL_SETTLE_MS = 700
+export const MAX_VAULT_SCROLL_ANCHORS = 200
 
+// Insertion order is recency order. Reads refresh an entry; writes replace it.
+// This bounds renderer-lifetime memory while retaining recently visited notes.
 const anchorStore = new Map<string, VaultScrollAnchor>()
+
+function copyAnchor(anchor: VaultScrollAnchor): VaultScrollAnchor {
+  return { ...anchor }
+}
 
 export function readVaultScrollAnchor(key: string): VaultScrollAnchor | undefined {
   const stored = anchorStore.get(key)
-  return stored ? { ...stored } : undefined
+  if (!stored) return undefined
+  anchorStore.delete(key)
+  anchorStore.set(key, stored)
+  return copyAnchor(stored)
 }
 
 export function writeVaultScrollAnchor(key: string, anchor: VaultScrollAnchor): void {
-  anchorStore.set(key, { ...anchor })
+  anchorStore.delete(key)
+  anchorStore.set(key, copyAnchor(anchor))
+  while (anchorStore.size > MAX_VAULT_SCROLL_ANCHORS) {
+    const oldestKey = anchorStore.keys().next().value
+    if (oldestKey === undefined) break
+    anchorStore.delete(oldestKey)
+  }
 }
 
 export function clearVaultScrollAnchors(): void {
   anchorStore.clear()
 }
 
-/** Development-only snapshot used to verify the behaviour in a running app. */
+/** Snapshot for deterministic tests and explicit local inspection. */
 export function dumpVaultScrollAnchors(): Record<string, VaultScrollAnchor> {
-  return Object.fromEntries(anchorStore)
+  return Object.fromEntries(Array.from(anchorStore, ([key, anchor]) => [key, copyAnchor(anchor)]))
 }
 
 /**
- * Scroll memory is scoped per surface *and* per note: the center Obsidian view
- * and each session's right-workspace Obsidian tab keep independent positions for
- * the same file.
+ * Scroll memory is scoped per Vault, surface, and note: identically named files
+ * in different authorized Vaults never share state, and the center Obsidian view
+ * and each session's right-workspace tab keep independent positions.
  */
-export function getVaultScrollKey(relativePath: string, sessionId?: string): string {
-  return `${sessionId ? `side:${sessionId}` : 'center'}:${relativePath}`
+export function getVaultScrollKey(vaultId: string, relativePath: string, sessionId?: string): string {
+  return `${vaultId}:${sessionId ? `side:${sessionId}` : 'center'}:${relativePath}`
 }
 
 /** Tracks one mounted editor: restore first, then follow the reader. */

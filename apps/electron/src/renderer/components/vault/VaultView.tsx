@@ -242,12 +242,15 @@ function VaultFileList({
 
 function VaultMarkdownEditor({
   readResult,
+  vaultId,
   sessionId,
   onSave,
   onRename,
   onOpenTutorial,
 }: {
   readResult: VaultReadResult
+  /** Stable renderer-safe identity of the currently authorized Vault. */
+  vaultId: string
   /** 嵌入 Agent 右侧工作区时，用于接入 Agent 引用与右侧问答。 */
   sessionId?: string
   onSave: (nextContent: string, options?: { silent?: boolean; expectedSha256?: string }) => Promise<void>
@@ -280,7 +283,7 @@ function VaultMarkdownEditor({
   const getEditorView = React.useCallback(() => editorHandleRef.current?.getView() ?? null, [])
   const handleEditorReady = useVaultScrollMemory({
     getView: getEditorView,
-    storageKey: getVaultScrollKey(readResult.relativePath, sessionId),
+    storageKey: getVaultScrollKey(vaultId, readResult.relativePath, sessionId),
   })
 
   const clearSelection = React.useCallback(() => setSelection(null), [])
@@ -486,6 +489,7 @@ function VaultMarkdownEditor({
 
 function VaultMarkdownPane({
   readResult,
+  vaultId,
   sessionId,
   loading,
   hasVault,
@@ -495,6 +499,7 @@ function VaultMarkdownPane({
   onOpenTutorial,
 }: {
   readResult: VaultReadResult | null
+  vaultId?: string
   sessionId?: string
   loading: boolean
   hasVault: boolean
@@ -503,7 +508,7 @@ function VaultMarkdownPane({
   onRename: (name: string) => Promise<void>
   onOpenTutorial: () => void
 }): React.ReactElement {
-  if (loading || !readResult) {
+  if (loading || !readResult || !vaultId) {
     return (
       <section className="flex min-w-0 flex-1 flex-col bg-muted/25">
         <div className="mx-auto flex h-full w-full max-w-5xl flex-col px-5 py-5">
@@ -525,6 +530,7 @@ function VaultMarkdownPane({
       <VaultMarkdownEditor
         key={getVaultEditorKey(readResult.relativePath, reopenVersion)}
         readResult={readResult}
+        vaultId={vaultId}
         sessionId={sessionId}
         onSave={onSave}
         onRename={onRename}
@@ -1023,6 +1029,7 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
           </aside>
           <VaultMarkdownPane
             readResult={readResult}
+            vaultId={config?.vaultId}
             sessionId={sessionId}
             loading={fileLoading}
             hasVault={config !== null}

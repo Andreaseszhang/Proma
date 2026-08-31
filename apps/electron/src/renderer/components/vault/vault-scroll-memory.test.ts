@@ -1,11 +1,13 @@
 import { beforeEach, expect, test } from 'bun:test'
 import {
   MAX_VAULT_SCROLL_ANCHORS,
+  VAULT_SCROLL_MAX_RETRIES,
   VAULT_SCROLL_SETTLE_MS,
   VaultScrollSession,
   clearVaultScrollAnchors,
   dumpVaultScrollAnchors,
   getVaultScrollKey,
+  isVaultScrollTakeoverKey,
   readVaultScrollAnchor,
   writeVaultScrollAnchor,
 } from './vault-scroll-memory'
@@ -41,40 +43,71 @@ beforeEach(() => {
 test('a note opened for the first time has nothing to restore', () => {
   const session = new VaultScrollSession(undefined, 0)
 
-  expect(session.pendingAnchor).toBeNull()
+  expect(session.beginRestore(0)).toBeNull()
+  expect(session.canRemember(0)).toBe(true)
+})
+
+test('a remembered anchor is restored once, then verified for bounded corrections', () => {
+  const session = new VaultScrollSession({ pos: 4_120, lineOffset: 12 }, 0)
+
+  expect(session.beginRestore(0)).toEqual({ pos: 4_120, lineOffset: 12 })
+  expect(session.beginRestore(1)).toBeNull()
+  expect(session.verifyRestore({ pos: 0, lineOffset: 0 }, 2)).toEqual({ pos: 4_120, lineOffset: 12 })
+  expect(session.verifyRestore({ pos: 0, lineOffset: 0 }, 3)).toEqual({ pos: 4_120, lineOffset: 12 })
+})
+
+test('restore verification stops after a finite number of retries and deadline', () => {
+  const session = new VaultScrollSession({ pos: 4_120, lineOffset: 0 }, 0)
+  session.beginRestore(0)
+
+  for (let attempt = 0; attempt < VAULT_SCROLL_MAX_RETRIES; attempt += 1) {
+    expect(session.verifyRestore({ pos: 0, lineOffset: 0 }, attempt + 1)).toEqual({ pos: 4_120, lineOffset: 0 })
+  }
+  expect(session.verifyRestore({ pos: 0, lineOffset: 0 }, VAULT_SCROLL_SETTLE_MS - 1)).toBeNull()
+  expect(session.isRestoreSettling(VAULT_SCROLL_SETTLE_MS)).toBe(false)
   expect(session.canRemember(VAULT_SCROLL_SETTLE_MS)).toBe(true)
 })
 
-test('a remembered anchor is offered for restore exactly once', () => {
+test('a matching anchor needs no correction', () => {
   const session = new VaultScrollSession({ pos: 4_120, lineOffset: 12 }, 0)
+  session.beginRestore(0)
 
-  expect(session.pendingAnchor).toEqual({ pos: 4_120, lineOffset: 12 })
-  session.markRestoreApplied(0)
-  expect(session.pendingAnchor).toBeNull()
+  expect(session.verifyRestore({ pos: 4_120, lineOffset: 13 }, 1)).toBeNull()
+  expect(session.isRestoreSettling(1)).toBe(true)
 })
 
-test("CodeMirror's own mount-time scrolling cannot overwrite the memory", () => {
+test('an unreadable anchor does not consume a retry', () => {
   const session = new VaultScrollSession({ pos: 4_120, lineOffset: 0 }, 0)
+  session.beginRestore(0)
 
-  expect(session.canRemember(0)).toBe(false)
-  session.markRestoreApplied(10)
-  expect(session.canRemember(20)).toBe(false)
-  expect(session.canRemember(10 + VAULT_SCROLL_SETTLE_MS)).toBe(true)
+  expect(session.verifyRestore(null, 1)).toBeNull()
+  expect(session.verifyRestore({ pos: 0, lineOffset: 0 }, 2)).toEqual({ pos: 4_120, lineOffset: 0 })
 })
 
-test('the remembered anchor survives a tab switch that happens during the restore', () => {
+test('the remembered anchor survives a tab switch during restore', () => {
   const session = new VaultScrollSession({ pos: 4_120, lineOffset: 12 }, 0)
   expect(session.anchorForTeardown()).toEqual({ pos: 4_120, lineOffset: 12 })
 })
 
 test('an explicit reader scroll takes over immediately', () => {
   const session = new VaultScrollSession({ pos: 4_120, lineOffset: 0 }, 0)
-  session.takeOver(50)
+  session.beginRestore(0)
+  session.takeOver()
 
-  expect(session.pendingAnchor).toBeNull()
+  expect(session.isRestoreSettling(50)).toBe(false)
   expect(session.canRemember(50)).toBe(true)
+  expect(session.verifyRestore({ pos: 0, lineOffset: 0 }, 50)).toBeNull()
   expect(session.remember({ pos: 900, lineOffset: 4 })).toEqual({ pos: 900, lineOffset: 4 })
   expect(session.anchorForTeardown()).toEqual({ pos: 900, lineOffset: 4 })
+})
+
+test('only explicit viewport navigation keys take over restore', () => {
+  for (const key of ['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'Home', 'End', ' ', 'Spacebar']) {
+    expect(isVaultScrollTakeoverKey(key)).toBe(true)
+  }
+  for (const key of ['a', 'Enter', 'Escape', 'Tab', 'Backspace', 'Mod-s']) {
+    expect(isVaultScrollTakeoverKey(key)).toBe(false)
+  }
 })
 
 test('reading further updates what will be persisted', () => {

@@ -4,13 +4,12 @@
  * Storing raw `scrollTop` pixels does not survive a remount: CodeMirror creates
  * its DOM asynchronously, reports a short document until it has measured the
  * content, and scrolls the initial selection into view after mounting. Both
- * effects overwrite a pixel offset with 0, which is why the position looked as
- * if it had never been recorded.
+ * effects can overwrite a pixel offset with 0.
  *
- * The memory therefore stores a *document anchor* (the position of the topmost
- * visible line) and restores it through CodeMirror's own scrollIntoView effect,
- * which is measurement-independent. A short settle window after each restore
- * stops CodeMirror's own post-mount scrolling from overwriting the memory.
+ * The memory therefore stores a document anchor (the position of the topmost
+ * visible line) and restores it through CodeMirror's own scrollIntoView effect.
+ * A bounded verification window corrects later CodeMirror measurement or
+ * selection scrolls without fighting the reader indefinitely.
  */
 
 export interface VaultScrollAnchor {
@@ -21,6 +20,8 @@ export interface VaultScrollAnchor {
 }
 
 export const VAULT_SCROLL_SETTLE_MS = 700
+export const VAULT_SCROLL_MAX_RETRIES = 4
+export const VAULT_SCROLL_OFFSET_TOLERANCE_PX = 2
 export const MAX_VAULT_SCROLL_ANCHORS = 200
 
 // Insertion order is recency order. Reads refresh an entry; writes replace it.
@@ -67,53 +68,97 @@ export function getVaultScrollKey(vaultId: string, relativePath: string, session
   return `${vaultId}:${sessionId ? `side:${sessionId}` : 'center'}:${relativePath}`
 }
 
+const VAULT_SCROLL_TAKEOVER_KEYS = new Set([
+  'ArrowUp',
+  'ArrowDown',
+  'ArrowLeft',
+  'ArrowRight',
+  'PageUp',
+  'PageDown',
+  'Home',
+  'End',
+  ' ',
+  'Spacebar',
+])
+
+/** Only keys whose normal browser/editor meaning can move the viewport take over. */
+export function isVaultScrollTakeoverKey(key: string): boolean {
+  return VAULT_SCROLL_TAKEOVER_KEYS.has(key)
+}
+
+function anchorsMatch(expected: VaultScrollAnchor, actual: VaultScrollAnchor): boolean {
+  return expected.pos === actual.pos
+    && Math.abs(expected.lineOffset - actual.lineOffset) <= VAULT_SCROLL_OFFSET_TOLERANCE_PX
+}
+
 /** Tracks one mounted editor: restore first, then follow the reader. */
 export class VaultScrollSession {
   private anchor: VaultScrollAnchor | null
-  private restorePending: boolean
-  private settledAt: number | null
-  private readonly settleMs: number
+  private readonly restoreDeadline: number | null
+  private readonly maxRetries: number
+  private initialRestoreIssued = false
+  private restoreRetries = 0
+  private userTookOver = false
 
-  constructor(stored: VaultScrollAnchor | undefined, now: number, settleMs = VAULT_SCROLL_SETTLE_MS) {
-    this.anchor = stored ? { ...stored } : null
-    this.restorePending = Boolean(stored && (stored.pos > 0 || stored.lineOffset > 0))
-    this.settledAt = this.restorePending ? null : now
-    this.settleMs = settleMs
+  constructor(
+    stored: VaultScrollAnchor | undefined,
+    now: number,
+    settleMs = VAULT_SCROLL_SETTLE_MS,
+    maxRetries = VAULT_SCROLL_MAX_RETRIES,
+  ) {
+    this.anchor = stored ? copyAnchor(stored) : null
+    const needsRestore = Boolean(stored && (stored.pos > 0 || stored.lineOffset > 0))
+    this.restoreDeadline = needsRestore ? now + settleMs : null
+    this.maxRetries = maxRetries
   }
 
-  get pendingAnchor(): VaultScrollAnchor | null {
-    return this.restorePending && this.anchor ? { ...this.anchor } : null
-  }
-
-  /** Called once the anchor has been handed to CodeMirror. */
-  markRestoreApplied(now: number): void {
-    this.restorePending = false
-    this.settledAt = now
+  /** Issues the one initial restore, if this session has an anchor to restore. */
+  beginRestore(now: number): VaultScrollAnchor | null {
+    if (this.initialRestoreIssued || !this.isRestoreSettling(now) || !this.anchor) return null
+    this.initialRestoreIssued = true
+    return copyAnchor(this.anchor)
   }
 
   /**
-   * A scroll may only be remembered once the editor has settled; earlier events
-   * come from CodeMirror's own mount-time scrolling, not from the reader.
+   * Checks the live viewport and requests a bounded correction when CodeMirror
+   * has moved it after the initial restore. An unreadable viewport consumes no
+   * retry, because measurement may simply not be ready yet.
    */
+  verifyRestore(actual: VaultScrollAnchor | null, now: number): VaultScrollAnchor | null {
+    if (!this.initialRestoreIssued || !this.isRestoreSettling(now) || !this.anchor || !actual) return null
+    if (anchorsMatch(this.anchor, actual) || this.restoreRetries >= this.maxRetries) return null
+    this.restoreRetries += 1
+    return copyAnchor(this.anchor)
+  }
+
+  /** True only during the finite period in which automatic correction is allowed. */
+  isRestoreSettling(now: number): boolean {
+    return !this.userTookOver && this.restoreDeadline !== null && now < this.restoreDeadline
+  }
+
+  /** Milliseconds until correction must stop; useful for bounded scheduling. */
+  restoreTimeRemaining(now: number): number {
+    if (!this.isRestoreSettling(now) || this.restoreDeadline === null) return 0
+    return this.restoreDeadline - now
+  }
+
+  /** Synthetic mount-time scrolls must not overwrite the remembered anchor. */
   canRemember(now: number): boolean {
-    if (this.restorePending) return false
-    if (this.settledAt === null) return false
-    return now - this.settledAt >= this.settleMs
+    return !this.isRestoreSettling(now)
   }
 
   remember(anchor: VaultScrollAnchor): VaultScrollAnchor {
-    this.anchor = { ...anchor }
-    return { ...this.anchor }
+    this.anchor = copyAnchor(anchor)
+    return copyAnchor(this.anchor)
   }
 
-  /** The reader scrolled explicitly, so stop waiting for the settle window. */
-  takeOver(now: number): void {
-    this.restorePending = false
-    this.settledAt = Math.min(this.settledAt ?? now, now - this.settleMs)
+  /** The reader acted explicitly, so correction stops and persistence unlocks. */
+  takeOver(): void {
+    this.userTookOver = true
   }
 
   /** Anchor to persist when the editor is torn down by a tab switch. */
   anchorForTeardown(): VaultScrollAnchor | null {
-    return this.anchor ? { ...this.anchor } : null
+    return this.anchor ? copyAnchor(this.anchor) : null
   }
 }

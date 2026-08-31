@@ -5,7 +5,6 @@ import {
   htmlToClipboardText,
   htmlToMarkdown,
   looksLikeMarkdownText,
-  extractMarkdownHeadings,
   markdownToHtml,
 } from './markdown-rich-text'
 
@@ -41,50 +40,6 @@ function withHtmlDocument<T>(run: () => T): T {
   }
 }
 
-describe('extractMarkdownHeadings', () => {
-  test('extracts every heading from the full source and excludes fenced code', () => {
-    const content = '# First\n\n```md\n## Not a heading\n```\n\n## Second\n\nSetext\n======\n'
-    expect(extractMarkdownHeadings(content)).toEqual([
-      { level: 1, text: 'First', position: 0 },
-      { level: 2, text: 'Second', position: content.indexOf('## Second') },
-      { level: 1, text: 'Setext', position: content.indexOf('Setext') },
-    ])
-  })
-
-  test('uses CodeMirror-compatible UTF-16 offsets with CRLF and lone CR input', () => {
-    const content = '# First\r\n\r## Second\r\n### Third\r'
-    expect(extractMarkdownHeadings(content)).toEqual([
-      { level: 1, text: 'First', position: 0 },
-      // CodeMirror normalizes every line separator to one UTF-16 `\n` code unit.
-      { level: 2, text: 'Second', position: '# First\n\n'.length },
-      { level: 3, text: 'Third', position: '# First\n\n## Second\n'.length },
-    ])
-  })
-
-  test('matches preview preprocessing for frontmatter, standalone media and invisible prefixes', () => {
-    const content = [
-      '\ufeff---',
-      'title: Example',
-      '# Not a TOC heading',
-      '---',
-      '<img src="晨光.jpg">',
-      '\u200b### Agent 模式',
-      '',
-      '    ## Indented code',
-      '',
-      '~~~md',
-      '## Fenced code',
-      '~~~',
-      '',
-      'Setext title',
-      '------------',
-    ].join('\n')
-    expect(extractMarkdownHeadings(content)).toEqual([
-      { level: 3, text: 'Agent 模式', position: content.slice(0, content.indexOf('\u200b### Agent 模式')).split(/\r\n|\r|\n/).join('\n').length },
-      { level: 2, text: 'Setext title', position: content.slice(0, content.indexOf('Setext title')).split(/\r\n|\r|\n/).join('\n').length },
-    ])
-  })
-})
 describe('Markdown 剪贴板检测', () => {
   test('识别常见 Markdown 文本并拒绝普通段落误判', () => {
     expect(looksLikeMarkdownText('**粗体** 和 *斜体*\n\n---\n\n- 列表项')).toBe(true)

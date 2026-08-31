@@ -94,7 +94,7 @@ import { getPlanModeChangeFromToolName, updatePlanModeSessionSet } from '@/lib/a
 import { detectIsWindows } from '@/lib/platform'
 import { getSessionFileChangeKind, getOwnedSessionWatcherPaths, upsertSessionFileChange } from '@/lib/session-file-changes'
 import { doesWorkspaceChangeAffectPreview } from '@/components/diff/preview-open-path'
-import { removeQueuedMessage, createQueuedAgentStreamState } from '@/lib/agent-message-queue'
+import { removeQueuedMessage, createQueuedAgentStreamState, createAgentQueuedMessage } from '@/lib/agent-message-queue'
 import { createAgentStreamEventBatcher } from '@/lib/agent-stream-event-batcher'
 import { getChangedWorkspaceComponentFromSdkMessage, shouldRevealChangedWorkspaceComponentImmediately } from '@/lib/agent-component-activation'
 import { mergeActiveAgentSessionSnapshot } from '@/lib/agent-active-session-snapshot'
@@ -589,10 +589,18 @@ export function useGlobalAgentListeners(): void {
         // 隐式创建一个没有 startedAt 的状态，导致续跑的运行计时和 run 边界丢失。
         store.set(agentStreamingStatesAtom, (prev) => {
           const current = prev.get(status.sessionId)
-          // 不让迟到的队列状态覆盖已经开始的新一轮 run。
-          if (current?.startedAt != null && current.startedAt > status.startedAt) return prev
+          if (
+            current?.runGeneration != null
+            && status.runGeneration != null
+            && current.runGeneration > status.runGeneration
+          ) return prev
+          // 旧 IPC 事件降级为 startedAt 比较；不让迟到队列状态覆盖较新的 run。
+          if (status.runGeneration == null && current?.startedAt != null && current.startedAt > status.startedAt) return prev
           const map = new Map(prev)
-          map.set(status.sessionId, createQueuedAgentStreamState(current, status.startedAt))
+          map.set(status.sessionId, {
+            ...createQueuedAgentStreamState(current, status.startedAt),
+            ...(status.runGeneration != null ? { runGeneration: status.runGeneration } : {}),
+          })
           return map
         })
         store.set(agentSessionMessageQueueAtom, (prev) => {
@@ -968,6 +976,38 @@ export function useGlobalAgentListeners(): void {
       })().catch(() => { /* 文件监听不应影响会话流 */ })
     })
 
+    // ===== 0. 初始化：恢复 stoppedByUser、主进程真实运行态与 deferred queue 投影 =====
+    // 队列由主进程持有。reload 后只将还在主进程队列中的项合并到本地，
+    // 使用 queueMessageId 去重，绝不覆盖用户在 reload 窗口内刚更新的本地投影。
+    const restoreQueuedMessages = async (): Promise<void> => {
+      const sessionIds = new Set<string>([
+        ...store.get(agentSessionsAtom).map((session) => session.id),
+        ...store.get(agentSessionMessageQueueAtom).keys(),
+      ])
+      for (const sessionId of sessionIds) {
+        const snapshots = await window.electronAPI.getQueuedAgentMessages(sessionId)
+        if (snapshots.length === 0) continue
+        store.set(agentSessionMessageQueueAtom, (previous) => {
+          const current = previous.get(sessionId) ?? []
+          const knownIds = new Set(current.map((message) => message.id))
+          const recovered = snapshots
+            .filter(({ input }) => !knownIds.has(input.queueMessageId))
+            .map(({ input, queuedAt }) => createAgentQueuedMessage(
+              input.rawUserMessage ?? input.userMessage,
+              input.queueMessageId,
+              queuedAt,
+              null,
+              { additionalDirectories: input.additionalDirectories },
+            ))
+          if (recovered.length === 0) return previous
+          const next = new Map(previous)
+          next.set(sessionId, [...current, ...recovered])
+          return next
+        })
+      }
+    }
+    void restoreQueuedMessages().catch(console.error)
+
     // ===== 0. 初始化：恢复 stoppedByUser 与主进程真实运行态 =====
     // 运行态不落盘，窗口重载或 renderer 晚订阅时必须从主进程 activeSessions
     // 补一份快照；快照只提升缺失/更旧的状态，不覆盖已收到的完成态。
@@ -1017,14 +1057,21 @@ export function useGlobalAgentListeners(): void {
           // 必须在首个 SDK/tool 事件之前恢复 running、startedAt 和正常的 live UI。
           store.set(agentStreamingStatesAtom, (prev) => {
             const current = prev.get(sessionId)
-            // 迟到的旧 run_started 不能重新激活当前更新的一轮运行；同一 run
-            // 已处于 running 时保留已有模型和上下文数据，避免重复初始化。
-            if (current?.startedAt != null && (
+            if (
+              current?.runGeneration != null
+              && runStartedEvent.runGeneration != null
+              && current.runGeneration > runStartedEvent.runGeneration
+            ) return prev
+            // 旧协议事件没有代际，只能保留 startedAt 回退比较。
+            if (runStartedEvent.runGeneration == null && current?.startedAt != null && (
               current.startedAt > runStartedEvent.startedAt
               || (current.startedAt === runStartedEvent.startedAt && current.running)
             )) return prev
             const map = new Map(prev)
-            map.set(sessionId, createQueuedAgentStreamState(current, runStartedEvent.startedAt))
+            map.set(sessionId, {
+              ...createQueuedAgentStreamState(current, runStartedEvent.startedAt),
+              ...(runStartedEvent.runGeneration != null ? { runGeneration: runStartedEvent.runGeneration } : {}),
+            })
             return map
           })
           store.set(unviewedCompletedSessionIdsAtom, (prev) => {

@@ -114,6 +114,7 @@ import type {
   AgentQueuedMessageControlInput,
   AgentMoveQueuedMessageInput,
   AgentQueuedMessageStatus,
+  AgentQueuedMessageSnapshot,
   PendingRequestsSnapshot,
   VaultCandidate,
   VaultDeleteInput,
@@ -651,6 +652,8 @@ export interface ElectronAPI {
   cancelAgentQueuedMessage: (input: AgentQueuedMessageControlInput) => Promise<boolean>
   moveAgentQueuedMessage: (input: AgentMoveQueuedMessageInput) => Promise<boolean>
   onAgentQueuedMessageStatus: (callback: (status: AgentQueuedMessageStatus) => void) => () => void
+  /** 获取主进程持有的 deferred queue 快照；用于 renderer 重载恢复队列 UI。 */
+  getQueuedAgentMessages: (sessionId: string) => Promise<AgentQueuedMessageSnapshot[]>
 
   // ===== Agent 工作区管理相关 =====
 
@@ -1953,6 +1956,9 @@ const electronAPI: ElectronAPI = {
   },
   moveAgentQueuedMessage: (input: AgentMoveQueuedMessageInput) => {
     return ipcRenderer.invoke(AGENT_IPC_CHANNELS.MOVE_QUEUED_MESSAGE, input)
+  },
+  getQueuedAgentMessages: (sessionId: string) => {
+    return ipcRenderer.invoke(AGENT_IPC_CHANNELS.GET_QUEUED_MESSAGES, sessionId)
   },
   onAgentQueuedMessageStatus: (callback: (status: AgentQueuedMessageStatus) => void) => {
     const listener = (_: unknown, status: AgentQueuedMessageStatus): void => callback(status)

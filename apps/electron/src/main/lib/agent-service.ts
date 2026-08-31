@@ -33,6 +33,7 @@ import type {
   PromaPermissionMode,
   AgentExternalRunSource,
   AgentActiveSessionSnapshot,
+  AgentQueuedMessageSnapshot,
   AgentMessage,
 } from '@proma/shared'
 import { PiAgentAdapter } from './adapters/pi-agent-adapter'
@@ -120,6 +121,7 @@ function rebindWebContents(sessionId: string, wc: WebContents) {
   if (previousWebContents && previousWebContents !== wc) streamForwarder.clear(sessionId)
   const route = streamRoutes.rebind(sessionId, wc)
   attachWebContentsCleanup(wc)
+  agentQueueCoordinator.onTargetAvailable(sessionId)
   return route
 }
 
@@ -320,7 +322,7 @@ export async function runAgent(
       onRunStarted: ({ startedAt }) => {
         eventBus.emit(input.sessionId, {
           kind: 'proma_event',
-          event: { type: 'run_started', startedAt },
+          event: { type: 'run_started', startedAt, runGeneration: input.runGeneration },
         })
       },
       onTitleUpdated: (title) => {
@@ -542,6 +544,10 @@ export function listActiveAgentSessionSnapshots(): AgentActiveSessionSnapshot[] 
   return orchestrator.listActiveSessionSnapshots()
 }
 
+export function listQueuedAgentMessages(sessionId: string): AgentQueuedMessageSnapshot[] {
+  return agentQueueCoordinator.snapshot(sessionId)
+}
+
 /** 中止所有活跃的 Agent 会话（应用退出时调用） */
 export function stopAllAgents(): void {
   orchestrator.stopAll()
@@ -616,8 +622,8 @@ export async function submitOrEnqueueAgentMessage(
     }
   }
 
-  agentQueueCoordinator.enqueue(input)
-  return { disposition: 'queued' }
+  const disposition = agentQueueCoordinator.enqueue(input)
+  return { disposition: disposition === 'started' ? 'started' : 'queued' }
 }
 
 /** 兼容旧调用：仅将消息追加到主进程 deferred queue。 */

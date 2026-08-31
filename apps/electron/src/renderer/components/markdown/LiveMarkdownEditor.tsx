@@ -9,6 +9,8 @@ import { createLiveMarkdownBlockPreview, type ResolveLiveMarkdownImageSrc, type 
 export interface LiveMarkdownEditorHandle {
   focus: () => void
   insert: (text: string) => void
+  scrollToPosition: (position: number) => void
+  getPositionAtViewportY: (viewportY: number) => number | null
   getHost: () => HTMLDivElement | null
   getView: () => EditorView | null
 }
@@ -94,6 +96,7 @@ function markdownHeadingDecorations(state: EditorState): DecorationSet {
         'data-markdown-heading': 'true',
         'data-toc-level': String(heading.level),
         'data-toc-text': heading.text,
+        'data-toc-position': String(heading.from),
       },
     }))
   }
@@ -228,6 +231,18 @@ export const LiveMarkdownEditor = React.forwardRef<LiveMarkdownEditorHandle, Liv
   React.useImperativeHandle(ref, () => ({
     focus: () => instanceRef.current?.focus(),
     insert: (text) => instanceRef.current?.insert(text),
+    scrollToPosition: (position) => {
+      const view = viewRef.current
+      if (!view) return
+      const safePosition = Math.max(0, Math.min(position, view.state.doc.length))
+      view.dispatch({ effects: EditorView.scrollIntoView(safePosition, { y: 'start', yMargin: 8 }) })
+    },
+    getPositionAtViewportY: (viewportY) => {
+      const view = viewRef.current
+      if (!view) return null
+      const documentHeight = Math.max(0, (viewportY - view.documentTop) / view.scaleY)
+      return view.lineBlockAtHeight(documentHeight).from
+    },
     getHost: () => hostRef.current,
     getView: () => viewRef.current,
   }), [])

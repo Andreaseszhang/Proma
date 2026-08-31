@@ -1062,14 +1062,57 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
   const prevRefreshVersionRef = React.useRef(refreshVersion)
   const restoreScrollRef = React.useRef(false)
   const restoreRafRef = React.useRef(0)
+  // 滚动复位要等异步 Markdown 渲染稳定；在此期间先保留布局但隐藏正文，
+  // 避免切回标签时用户先看到文档顶部、随后才跳到缓存位置。
+  const [liveMarkdownReadyKey, setLiveMarkdownReadyKey] = React.useState<string | null>(null)
+  const [restoredScrollKey, setRestoredScrollKey] = React.useState<string | null>(null)
+  const restoreGenerationRef = React.useRef(0)
+  const cachedScrollPosition = scrollPositionCache.get(scrollKey)
+  const shouldMaskMarkdownForScrollRestore = Boolean(
+    isMarkdown
+    && !loading
+    && cachedScrollPosition
+    && (cachedScrollPosition.top > 0 || cachedScrollPosition.left > 0)
+    && restoredScrollKey !== scrollKey,
+  )
+
+  React.useLayoutEffect(() => {
+    // 同一预览组件复用来打开另一文件时，旧编辑器的 ready / restore 结果不能解开新文件遮罩。
+    if (liveMarkdownReadyKey && liveMarkdownReadyKey !== scrollKey) setLiveMarkdownReadyKey(null)
+    if (restoredScrollKey && restoredScrollKey !== scrollKey) setRestoredScrollKey(null)
+  }, [liveMarkdownReadyKey, restoredScrollKey, scrollKey])
+
+  React.useEffect(() => {
+    // `ink()` 理论上应很快 resolve，但失效的 widget、极端资源压力或第三方异常不能让
+    // 整个阅读区永久空白。到期后做一次 best-effort 恢复并显示正文；正常路径仍严格等待
+    // 当前实例 onReady，因此不会以这个兜底牺牲常规切换的无闪动体验。
+    if (!shouldMaskMarkdownForScrollRestore || liveMarkdownReadyKey === scrollKey) return
+    const timer = window.setTimeout(() => {
+      restoreScrollRef.current = false
+      restoreGenerationRef.current++
+      if (restoreRafRef.current) {
+        cancelAnimationFrame(restoreRafRef.current)
+        restoreRafRef.current = 0
+      }
+      const position = scrollPositionCache.get(scrollKey)
+      const container = scrollContainerRef.current
+      if (position && container) {
+        container.scrollTop = position.top
+        container.scrollLeft = position.left
+      }
+      setRestoredScrollKey(scrollKey)
+    }, 500)
+    return () => window.clearTimeout(timer)
+  }, [liveMarkdownReadyKey, scrollKey, shouldMaskMarkdownForScrollRestore])
 
   const handleLiveMarkdownReady = React.useCallback(() => {
-    // Live Markdown 异步挂载前外层没有可恢复的内容高度，首轮恢复会被浏览器钳制到 0。
-    // 只有编辑器就绪后重新设置标记，才会在真实内容高度上恢复原阅读位置。
-    if (!scrollPositionCache.has(scrollKey)) return
+    // ink-mde 异步完成后才允许本 Markdown 的恢复事务结束；不能以空容器的高度稳定
+    // 来提前解除遮罩，否则会重新出现“顶部可见后再跳回”的闪动。
+    setLiveMarkdownReadyKey(scrollKey)
+    if (!scrollPositionCache.has(scrollKey) || restoredScrollKey === scrollKey) return
     restoreScrollRef.current = true
     setPreviewScrollRestoreVersion((version) => version + 1)
-  }, [scrollKey])
+  }, [restoredScrollKey, scrollKey])
 
   // WHEN content version changes (refreshVersion bump): delete stored scroll position
   // 只在内容变化时清除，切换文件时保留位置以支持返回导航。正在编辑的 Markdown
@@ -1097,22 +1140,45 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
   }, [previewScrollRestoreVersion, scrollKey])
 
   // RESTORE scroll position after cached content renders.
-  // 等待滚动容器内容高度连续 3 帧稳定后再恢复，避免异步渲染
-  // （Shiki tokenize、ProseMirror mount）导致高度变化引起滚动偏移。
+  // Markdown 必须等对应实例的 ink-mde onReady 才能开始；高度连续稳定 3 帧后恢复，
+  // 但设置 500ms 上限，避免异步 widget / resize 抖动令正文一直不可见。
   React.useEffect(() => {
     if (loading || !restoreScrollRef.current) return
+    if (isMarkdown && liveMarkdownReadyKey !== scrollKey) return
 
     const pos = scrollPositionCache.get(scrollKey)
     if (!pos || !scrollContainerRef.current) {
       restoreScrollRef.current = false
+      setRestoredScrollKey(scrollKey)
       return
     }
 
+    const generation = ++restoreGenerationRef.current
     const el = scrollContainerRef.current
+    const maxFrames = 30
+    let frameCount = 0
     let prevHeight = el.scrollHeight
     let stableFrames = 0
 
+    const completeRestore = (): void => {
+      if (restoreGenerationRef.current !== generation) return
+      // 先写入一次，再在下一帧重写并解除遮罩，覆盖 CodeMirror / widget 在首帧
+      // 对滚动容器的延迟测量或钳制；用户的首个可见正文帧即为最终位置。
+      el.scrollTop = pos.top
+      el.scrollLeft = pos.left
+      restoreRafRef.current = requestAnimationFrame(() => {
+        if (restoreGenerationRef.current !== generation) return
+        el.scrollTop = pos.top
+        el.scrollLeft = pos.left
+        restoreScrollRef.current = false
+        setRestoredScrollKey(scrollKey)
+        restoreRafRef.current = 0
+      })
+    }
+
     const check = () => {
+      if (restoreGenerationRef.current !== generation) return
+      frameCount++
       const curHeight = el.scrollHeight
       if (curHeight === prevHeight) {
         stableFrames++
@@ -1120,11 +1186,8 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
         stableFrames = 0
         prevHeight = curHeight
       }
-      if (stableFrames >= 3) {
-        restoreScrollRef.current = false
-        el.scrollTop = pos.top
-        el.scrollLeft = pos.left
-        restoreRafRef.current = 0
+      if (stableFrames >= 3 || frameCount >= maxFrames) {
+        completeRestore()
         return
       }
       restoreRafRef.current = requestAnimationFrame(check)
@@ -1133,12 +1196,13 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
     restoreRafRef.current = requestAnimationFrame(check)
 
     return () => {
+      if (restoreGenerationRef.current === generation) restoreGenerationRef.current++
       if (restoreRafRef.current) {
         cancelAnimationFrame(restoreRafRef.current)
         restoreRafRef.current = 0
       }
     }
-  }, [loading, previewScrollRestoreVersion, scrollKey])
+  }, [isMarkdown, liveMarkdownReadyKey, loading, previewScrollRestoreVersion, scrollKey])
 
   // SAVE scroll position on scroll (throttled via rAF)
   const scrollRafRef = React.useRef(0)
@@ -1886,7 +1950,10 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
                 onReady={handleLiveMarkdownReady}
                 onTextSelectionChange={handleLiveMarkdownSelectionChange}
                 readOnly={Boolean(readOnly)}
-                className="live-markdown-external-scroll"
+                className={cn(
+                  'live-markdown-external-scroll',
+                  shouldMaskMarkdownForScrollRestore && 'invisible',
+                )}
               />
             ) : isPlainTextEditable && activeMarkdownEditing ? (
               <textarea

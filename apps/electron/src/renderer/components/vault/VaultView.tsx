@@ -281,7 +281,7 @@ function VaultMarkdownEditor({
   // view, a right-workspace tab, or the open note does not jump back to the top.
   const editorHandleRef = React.useRef<LiveMarkdownEditorHandle | null>(null)
   const getEditorView = React.useCallback(() => editorHandleRef.current?.getView() ?? null, [])
-  const handleEditorReady = useVaultScrollMemory({
+  const { onEditorReady: handleEditorReady, takeOver: takeOverScrollRestore } = useVaultScrollMemory({
     getView: getEditorView,
     storageKey: getVaultScrollKey(vaultId, readResult.relativePath, sessionId),
   })
@@ -397,6 +397,10 @@ function VaultMarkdownEditor({
     if ((event.target as HTMLElement).closest('.vault-ink-mde')) return
     const scroller = editorPageRef.current?.querySelector<HTMLElement>('.vault-ink-mde .cm-scroller')
     if (!scroller) return
+    // The wheel originated outside CodeMirror, so its scroller listener cannot
+    // observe it. Treat this forwarded scroll as explicit reader intent before
+    // moving the viewport, otherwise the bounded mount-time correction can undo it.
+    takeOverScrollRestore()
     scroller.scrollTop += event.deltaY
     scroller.scrollLeft += event.deltaX
   }

@@ -64,6 +64,7 @@ export function attachVaultScrollMemory(
   view: VaultScrollMemoryView,
   storageKey: string,
   runtime: VaultScrollMemoryRuntime = browserRuntime,
+  onTakeOverReady?: (takeOver: () => void) => void,
 ): () => void {
   let disposed = false
   let persistTimer: ReturnType<typeof setTimeout> | null = null
@@ -109,6 +110,8 @@ export function attachVaultScrollMemory(
   const handleKeydown = (event: Event): void => {
     if (event instanceof KeyboardEvent && isVaultScrollTakeoverKey(event.key)) handleUserIntent()
   }
+
+  onTakeOverReady?.(handleUserIntent)
 
   const scheduleRestoreCheck = (delay = RESTORE_CHECK_INTERVAL_MS): void => {
     const now = runtime.now()
@@ -183,17 +186,33 @@ export function attachVaultScrollMemory(
  * Restores after ink-mde reports that its CodeMirror view is ready. Waiting for
  * onReady avoids racing its promise and avoids polling/duplicate attachment.
  */
-export function useVaultScrollMemory({ getView, storageKey }: UseVaultScrollMemoryOptions): () => void {
+export function useVaultScrollMemory({ getView, storageKey }: UseVaultScrollMemoryOptions): {
+  onEditorReady: () => void
+  takeOver: () => void
+} {
   const [readyToken, setReadyToken] = React.useState(0)
+  const takeOverRef = React.useRef<() => void>(() => undefined)
 
   React.useEffect(() => {
+    takeOverRef.current = () => undefined
     if (readyToken === 0) return
     const view = getView()
     if (!view) return
-    return attachVaultScrollMemory(view, storageKey)
+    const detach = attachVaultScrollMemory(view, storageKey, browserRuntime, (takeOver) => {
+      takeOverRef.current = takeOver
+    })
+    return () => {
+      detach()
+      takeOverRef.current = () => undefined
+    }
   }, [getView, storageKey, readyToken])
 
-  return React.useCallback(() => {
-    setReadyToken((token) => token + 1)
-  }, [])
+  return {
+    onEditorReady: React.useCallback(() => {
+      setReadyToken((token) => token + 1)
+    }, []),
+    takeOver: React.useCallback(() => {
+      takeOverRef.current()
+    }, []),
+  }
 }

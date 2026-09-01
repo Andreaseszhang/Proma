@@ -40,6 +40,7 @@ import { useShortcut } from '@/hooks/useShortcut'
 import { initShortcutRegistry } from '@/lib/shortcut-registry'
 import { DiffView } from './DiffView'
 import { LiveMarkdownEditor, type LiveMarkdownEditorHandle, type LiveMarkdownTextSelection } from '@/components/markdown/LiveMarkdownEditor'
+import { createLiveMarkdownImageResolver } from '@/components/markdown/live-markdown-media'
 import { getPreviewCandidateBasePaths, isAbsoluteFilePath } from './preview-open-path'
 import { DefaultAppOpenButton } from './DefaultAppOpenButton'
 import { UnsupportedFilePreview } from './UnsupportedFilePreview'
@@ -588,6 +589,12 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
     // 绝对路径不追加该回退，避免失效路径按同名文件误命中会话目录。
     candidateBasePaths: getPreviewCandidateBasePaths(basePaths, isAbsoluteFilePath(filePath) ? undefined : dirPath),
   }), [sessionId, basePaths, dirPath, filePath, workspaceSkillSlug, legacySkillFilePath])
+
+  const resolveProjectMarkdownImageSrc = React.useMemo(() => (
+    createLiveMarkdownImageResolver(filePath, async (candidate) => (
+      (await window.electronAPI.resolveMarkdownMedia(filePath, candidate, fileAccess))?.url ?? null
+    ))
+  ), [fileAccess, filePath])
 
   const contentCacheScope = React.useMemo(() => JSON.stringify({
     dirPath,
@@ -1860,7 +1867,7 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
               )
             ) : isMarkdown ? (
               <LiveMarkdownEditor
-                key={readOnly ? 'readonly' : 'editable'}
+                key={`${readOnly ? 'readonly' : 'editable'}:${filePath}`}
                 ref={markdownEditorRef}
                 value={readOnly ? newContent : markdownDraft}
                 onChange={updateMarkdownDraft}
@@ -1868,6 +1875,7 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
                 onReady={handleLiveMarkdownReady}
                 onTextSelectionChange={handleLiveMarkdownSelectionChange}
                 readOnly={Boolean(readOnly)}
+                resolveImageSrc={resolveProjectMarkdownImageSrc}
                 className="live-markdown-external-scroll"
               />
             ) : isPlainTextEditable && activeMarkdownEditing ? (

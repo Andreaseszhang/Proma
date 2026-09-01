@@ -4150,6 +4150,24 @@ export function registerIpcHandlers(): void {
     }
   )
 
+  // 解析当前 Markdown 同目录内的相对图片。该接口不接受 unrestricted，避免
+  // Markdown 文本中的任意路径借通用预览接口换取本地文件 token。
+  ipcMain.handle(
+    'file:resolve-markdown-media',
+    async (_, markdownFilePath: string, src: string, access?: FileAccessOptions | string[]): Promise<ResolvedFileUrl | null> => {
+      const { resolveMarkdownRelativeMediaPath } = await import('./lib/markdown-media-service')
+      const options = normalizeFileAccessOptions(access)
+      const result = resolveMarkdownRelativeMediaPath(markdownFilePath, src, options)
+      if (!result) return null
+      try {
+        return { url: registerPromaFilePath(result) }
+      } catch (err) {
+        console.warn('[IPC] file:resolve-markdown-media 无法注册图片，跳过:', result, err instanceof Error ? err.message : err)
+        return null
+      }
+    },
+  )
+
   // 仅解析文件路径（供 PDF/图片等用 proma-file:// 加载）
   ipcMain.handle(
     'file:resolve-path',

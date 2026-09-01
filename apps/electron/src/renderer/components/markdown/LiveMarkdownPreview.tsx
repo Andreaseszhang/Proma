@@ -249,13 +249,18 @@ class TableWidget extends LiveMarkdownBlockWidget {
         table={this.table}
         readOnly={view.state.readOnly}
         onMeasure={onMeasure}
-          onCommit={(nextTable) => {
-            if (view.state.readOnly) return
-            const nextSource = serializeLiveMarkdownTable(nextTable)
-            const currentBlock = buildBlocks(view.state).find((block) => block.kind === 'table' && block.from === this.from)
-            if (!currentBlock) return
-            view.dispatch({ changes: { from: currentBlock.from, to: currentBlock.to, insert: nextSource } })
-          }}
+        onCommit={(nextTable, focusCell) => {
+          if (view.state.readOnly) return
+          const nextSource = serializeLiveMarkdownTable(nextTable)
+          const currentBlock = buildBlocks(view.state).find((block) => block.kind === 'table' && block.from === this.from)
+          if (!currentBlock) return
+          view.dispatch({ changes: { from: currentBlock.from, to: currentBlock.to, insert: nextSource } })
+          if (focusCell) requestAnimationFrame(() => {
+            const target = view.dom.querySelector<HTMLButtonElement>(`[data-live-markdown-table-cell="${focusCell.row}:${focusCell.column}"]`)
+            target?.focus()
+            target?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }))
+          })
+        }}
       />,
     )
     this.observeSize(wrapper, view)

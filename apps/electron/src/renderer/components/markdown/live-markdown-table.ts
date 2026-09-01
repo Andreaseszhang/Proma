@@ -80,6 +80,27 @@ export function serializeLiveMarkdownTable(table: LiveMarkdownTable): string {
   return [formatRow(header), formatRow(separator), ...rows.map(formatRow)].join('\n')
 }
 
+export function isLikelyLiveMarkdownLatex(value: string): boolean {
+  const trimmed = value.trim()
+  if (!trimmed) return false
+  if (/\\(?:begin|end)\s*\{[^}]+\}/.test(trimmed)) return true
+  if (/\\(?:frac|dfrac|tfrac|sqrt|sum|prod|int|oint|lim|sin|cos|tan|log|ln|cdot|times|div|pm|mp|leq|geq|neq|approx|equiv|infty|partial|nabla|alpha|beta|gamma|delta|theta|lambda|mu|pi|sigma|omega|to|Rightarrow|Leftarrow|Leftrightarrow|cup|cap|setminus|emptyset|subset|subseteq|supset|supseteq|in|notin|forall|exists|land|lor|not|bar|hat|vec|dot|ddot|left|right|quad|qquad)\b/.test(trimmed)) return true
+  return /[A-Za-z0-9)](?:\^|_)(?:\{[^}\n]+\}|[A-Za-z0-9+\-=()])/.test(trimmed)
+}
+
+export function nextLiveMarkdownTableCell(
+  table: LiveMarkdownTable,
+  from: { row: number; column: number },
+  backwards: boolean,
+): { row: number; column: number } {
+  const width = table.header.length
+  const height = table.rows.length + 1
+  if (width === 0 || height === 0) return from
+  const index = from.row * width + from.column
+  const offset = backwards ? -1 : 1
+  const next = (index + offset + width * height) % (width * height)
+  return { row: Math.floor(next / width), column: next % width }
+}
 export function updateLiveMarkdownTableCell(
   table: LiveMarkdownTable,
   rowIndex: number,

@@ -2,6 +2,8 @@ import * as React from 'react'
 import { renderMarkdownMath } from '@/lib/markdown-math'
 import {
   type LiveMarkdownTable,
+  isLikelyLiveMarkdownLatex,
+  nextLiveMarkdownTableCell,
   updateLiveMarkdownTableCell,
 } from './live-markdown-table'
 
@@ -16,7 +18,7 @@ interface LiveMarkdownTableEditorProps {
   table: LiveMarkdownTable
   readOnly: boolean
   autoFocusCell?: LiveMarkdownTableCell | null
-  onCommit: (table: LiveMarkdownTable) => void
+  onCommit: (table: LiveMarkdownTable, focusCell?: LiveMarkdownTableCell) => void
   onMeasure: () => void
 }
 
@@ -26,7 +28,7 @@ function cellValue(table: LiveMarkdownTable, { row, column }: LiveMarkdownTableC
 
 function renderInlineMath(value: string): React.ReactNode[] {
   const parts: React.ReactNode[] = []
-  const pattern = /(^|[^\\])(?:\$([^$\n]+)\$|\\\\\((.+?)\\\\\)|\\\\\[([\s\S]+?)\\\\\])/g
+  const pattern = /(^|[^\\])(?:\$([^$\n]+)\$|\\\((.+?)\\\)|\\\[([\s\S]+?)\\\]|`([^`\n]+)`)/g
   let cursor = 0
   let match: RegExpExecArray | null
 
@@ -35,15 +37,20 @@ function renderInlineMath(value: string): React.ReactNode[] {
     const start = match.index
     if (start > cursor) parts.push(value.slice(cursor, start))
     if (prefix) parts.push(prefix)
-    const latex = match[2] ?? match[3] ?? match[4] ?? ''
+    const code = match[5]
+    const latex = match[2] ?? match[3] ?? match[4] ?? (code && isLikelyLiveMarkdownLatex(code) ? code : null)
     const displayMode = Boolean(match[4])
-    parts.push(
-      <span
-        key={`${start}:${latex}`}
-        className={displayMode ? 'live-markdown-table-math is-display' : 'live-markdown-table-math'}
-        dangerouslySetInnerHTML={{ __html: renderMarkdownMath(latex, displayMode) }}
-      />,
-    )
+    if (latex !== null) {
+      parts.push(
+        <span
+          key={`${start}:${latex}`}
+          className={displayMode ? 'live-markdown-table-math is-display' : 'live-markdown-table-math'}
+          dangerouslySetInnerHTML={{ __html: renderMarkdownMath(latex, displayMode) }}
+        />,
+      )
+    } else if (code !== undefined) {
+      parts.push(<code key={`${start}:code:${code}`}>{code}</code>)
+    }
     cursor = start + match[0].length
   }
   if (cursor < value.length) parts.push(value.slice(cursor))
@@ -85,7 +92,7 @@ export function LiveMarkdownTableEditor({
     if (activeCell) {
       const original = cellValue(table, activeCell)
       if (draft !== original) {
-        onCommit(updateLiveMarkdownTableCell(table, activeCell.row, activeCell.column, draft))
+        onCommit(updateLiveMarkdownTableCell(table, activeCell.row, activeCell.column, draft), cell)
         return
       }
       setActiveCell(cell)
@@ -96,15 +103,19 @@ export function LiveMarkdownTableEditor({
     setDraft(cellValue(table, cell))
   }
 
-  const commit = () => {
+  const commit = (focusCell?: LiveMarkdownTableCell) => {
     if (!activeCell) return
     const original = cellValue(table, activeCell)
-    if (draft === original) {
+    if (draft === original && !focusCell) {
       setActiveCell(null)
       setDraft('')
       return
     }
-    onCommit(updateLiveMarkdownTableCell(table, activeCell.row, activeCell.column, draft))
+    onCommit(updateLiveMarkdownTableCell(table, activeCell.row, activeCell.column, draft), focusCell)
+    if (!focusCell) {
+      setActiveCell(null)
+      setDraft('')
+    }
   }
 
   const cancel = () => {
@@ -112,14 +123,7 @@ export function LiveMarkdownTableEditor({
     setDraft('')
   }
 
-  const nextCell = (from: LiveMarkdownTableCell, backwards: boolean): LiveMarkdownTableCell => {
-    const width = table.header.length
-    const height = table.rows.length + 1
-    const index = from.row * width + from.column
-    const offset = backwards ? -1 : 1
-    const next = (index + offset + width * height) % (width * height)
-    return { row: Math.floor(next / width), column: next % width }
-  }
+  const nextCell = (from: LiveMarkdownTableCell, backwards: boolean): LiveMarkdownTableCell => nextLiveMarkdownTableCell(table, from, backwards)
 
   const renderCell = (row: number, column: number, header: boolean) => {
     const cell = { row, column }
@@ -150,7 +154,7 @@ export function LiveMarkdownTableEditor({
                 cancel()
               } else if (event.key === 'Tab') {
                 event.preventDefault()
-                commit()
+                commit(nextCell(cell, event.shiftKey))
               }
             }}
           />

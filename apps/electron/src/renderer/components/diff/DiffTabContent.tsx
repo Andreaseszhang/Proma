@@ -39,13 +39,13 @@ import { useFocusAgentSessionInput } from '@/hooks/useFocusAgentSessionInput'
 import { useShortcut } from '@/hooks/useShortcut'
 import { initShortcutRegistry } from '@/lib/shortcut-registry'
 import { DiffView } from './DiffView'
-import { LiveMarkdownEditor, type LiveMarkdownTextSelection } from '@/components/markdown/LiveMarkdownEditor'
+import { LiveMarkdownEditor, type LiveMarkdownEditorHandle, type LiveMarkdownTextSelection } from '@/components/markdown/LiveMarkdownEditor'
 import { createLiveMarkdownImageResolver } from '@/components/markdown/live-markdown-media'
 import { getPreviewCandidateBasePaths, isAbsoluteFilePath } from './preview-open-path'
 import { DefaultAppOpenButton } from './DefaultAppOpenButton'
 import { UnsupportedFilePreview } from './UnsupportedFilePreview'
 import { PreviewFindBar } from './PreviewFindBar'
-import { MarkdownToc } from './MarkdownToc'
+import { MarkdownToc, MarkdownTocScrollTail } from './MarkdownToc'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { PIERRE_FILE_CSS } from '@/components/agent/tool-result-renderers/pierre-styles'
 import { SelectionActionPopover } from '@/components/selection/SelectionActionPopover'
@@ -54,6 +54,12 @@ import { getOrCreateSideChat } from '@/lib/side-chat'
 import { insertAgentInputQuote } from '@/lib/agent-input-quote'
 import { SELECTION_ACTION_POPOVER_SELECTOR } from '@/lib/quoted-selection'
 import { copyTextToClipboard } from '@/lib/clipboard'
+import {
+  clearPreviewContentCacheForFile,
+  clearPreviewContentCacheForSession,
+  getPreviewContentCache,
+  setPreviewContentCache,
+} from '@/lib/preview-content-cache'
 import {
   clearMarkdownEditorStateForSession,
   createMarkdownEditorCacheKey,
@@ -92,31 +98,10 @@ function getParentFolderPath(filePath: string): string {
 const FILE_FIND_SHORTCUT_OPTIONS = { exclusive: true }
 
 /**
- * 简易 LRU 缓存：保留最近访问的 N 个 entries。
- * key 设计：
- * - diff 模式：`${sessionId}:diff:${filePath}@v${refreshVersion}:${scope}`
- * - preview 模式：`${sessionId}:preview:${filePath}@v${previewContentVersion}:${scope}`
- * Diff 使用会话级版本；纯预览使用文件级版本，只在当前文件实际变化时失效。
- * 老 entry 不会被命中，最终被 LRU 淘汰；无需主动失效。
+ * 预览内容按 session、路径、version 与解析范围做 LRU 缓存。
+ * - diff：`${sessionId}:diff:${filePath}@v${refreshVersion}:${scope}`
+ * - 纯预览：`${sessionId}:preview:${filePath}@v${previewContentVersion}:${scope}`
  */
-type CacheEntry = {
-  oldContent: string
-  newContent: string
-  /** 非文本文件预览数据 */
-  pdfSrc?: string
-  imageDataUrl?: string
-  imagePath?: string
-  officeHtml?: string
-  officeHtmlUrl?: string
-  officeText?: string
-  /** HTML 预览的目录级 token URL，允许加载同目录相对资源 */
-  htmlPreviewUrl?: string
-  /** 二进制或其他不可安全内联渲染的文件提示 */
-  unsupportedPreviewReason?: string
-  /** 无法内联预览时由主进程返回的安全基础元数据。 */
-  previewMetadata?: FilePreviewMetadata
-}
-
 interface DeepSelection {
   text: string
   rect: DOMRect | null
@@ -128,9 +113,6 @@ interface PreviewTextSelection {
   y: number
   filePath: string
 }
-
-const CACHE_MAX = 50
-const contentCache = new Map<string, CacheEntry>()
 
 /** 超过此字符数的文本文件将跳过 PierreFile 高亮，直接以纯文本展示，避免大文件卡顿 */
 const MAX_PREVIEW_CHARS = 500_000
@@ -158,26 +140,8 @@ export function clearPreviewCacheForSession(sessionId: string): void {
   for (const key of scrollPositionCache.keys()) {
     if (key.startsWith(prefix)) scrollPositionCache.delete(key)
   }
-  for (const key of contentCache.keys()) {
-    if (key.startsWith(prefix)) contentCache.delete(key)
-  }
+  clearPreviewContentCacheForSession(sessionId)
   clearMarkdownEditorStateForSession(sessionId)
-}
-function cacheGet(key: string): CacheEntry | undefined {
-  const v = contentCache.get(key)
-  if (!v) return undefined
-  // 重新插入到末尾，更新 LRU 位置
-  contentCache.delete(key)
-  contentCache.set(key, v)
-  return v
-}
-function cacheSet(key: string, value: CacheEntry): void {
-  if (contentCache.has(key)) contentCache.delete(key)
-  contentCache.set(key, value)
-  if (contentCache.size > CACHE_MAX) {
-    const oldestKey = contentCache.keys().next().value
-    if (oldestKey !== undefined) contentCache.delete(oldestKey)
-  }
 }
 
 function getExtension(filePath: string): string {
@@ -373,6 +337,7 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
   const imageDragging = React.useRef(false)
   const imageDragStart = React.useRef({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 })
   const scrollContainerRef = React.useRef<HTMLDivElement>(null)
+  const markdownEditorRef = React.useRef<LiveMarkdownEditorHandle>(null)
   const [findOpen, setFindOpen] = React.useState(false)
   const [loading, setLoading] = React.useState(true)
   const [copied, setCopied] = React.useState(false)
@@ -395,6 +360,7 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
   const theme = useAtomValue(resolvedThemeAtom)
   const [codeWrap, setCodeWrap] = useAtom(previewCodeWrapAtom)
   const [tocOpen, setTocOpen] = useAtom(markdownTocOpenAtom)
+  const tocContent = React.useDeferredValue(activeMarkdownEditing ? markdownDraft : newContent)
 
   const canTogglePreviewWrap =
     previewOnly &&
@@ -436,13 +402,6 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
     markdownEditing: activeMarkdownEditing,
     markdownSourceMode: activeMarkdownEditing && markdownSourceMode,
   }), [filePath, loading, activeMarkdownEditing, markdownSourceMode, newContent.length, officeHtml.length, officeHtmlUrl, htmlPreviewUrl, htmlSourceMode, oldContent.length, previewOnly, viewMode])
-
-  // 目录必须随完整 Markdown 内容更新：仅使用长度会漏掉等长标题修改，留下
-  // 旧标题、旧锚点或错误层级。loading/编辑态切换仍不参与该 key，避免无关抖动。
-  const tocContentKey = React.useMemo(
-    () => JSON.stringify({ filePath, previewContentVersion, content: newContent }),
-    [filePath, previewContentVersion, newContent],
-  )
 
   // ===== 选中文本引用（Quoted Selection）=====
 
@@ -811,7 +770,7 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
     const cacheKey = previewOnly
       ? getContentCacheKey('preview', previewContentVersion)
       : getContentCacheKey('diff', refreshVersion)
-    const cached = cacheGet(cacheKey)
+    const cached = getPreviewContentCache(cacheKey)
     // 保存或窗口恢复触发 refreshVersion 时，仍在编辑的 Markdown 必须继续留在
     // 当前 ProseMirror 实例中；后台读取可以更新预览缓存，但不能先挂载 loading
     // 占位，从而卸载编辑器并丢失内层滚动和选区。
@@ -904,7 +863,7 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
             setOfficeHtml(html)
             setOfficeHtmlUrl(htmlUrl)
             setOfficeText(text)
-            cacheSet(cacheKey, { oldContent: '', newContent: '', officeHtml: html, officeHtmlUrl: htmlUrl, officeText: text })
+            setPreviewContentCache(cacheKey, { oldContent: '', newContent: '', officeHtml: html, officeHtmlUrl: htmlUrl, officeText: text })
             return
           }
           if (previewOnly) {
@@ -919,7 +878,7 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
               if (cancelled) return
               const src = result?.tmpHtmlUrl ?? ''
               setPdfSrc(src)
-              cacheSet(cacheKey, { oldContent: '', newContent: '', pdfSrc: src })
+              setPreviewContentCache(cacheKey, { oldContent: '', newContent: '', pdfSrc: src })
               return
             }
             if (isImage) {
@@ -928,11 +887,11 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
               if (resolved) {
                 setImagePath(filePath)
                 setImageDataUrl(resolved.url)
-                cacheSet(cacheKey, { oldContent: '', newContent: '', imagePath: filePath, imageDataUrl: resolved.url })
+                setPreviewContentCache(cacheKey, { oldContent: '', newContent: '', imagePath: filePath, imageDataUrl: resolved.url })
               } else {
                 setImagePath('')
                 setImageDataUrl('')
-                cacheSet(cacheKey, { oldContent: '', newContent: '', imagePath: '', imageDataUrl: '' })
+                setPreviewContentCache(cacheKey, { oldContent: '', newContent: '', imagePath: '', imageDataUrl: '' })
               }
               return
             }
@@ -946,7 +905,7 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
                 : '此二进制或编码异常文件暂不支持内联预览，请使用默认应用打开。'
               setUnsupportedPreviewReason(reason)
               setPreviewMetadata(result.metadata)
-              cacheSet(cacheKey, {
+              setPreviewContentCache(cacheKey, {
                 oldContent: '',
                 newContent: '',
                 unsupportedPreviewReason: reason,
@@ -976,7 +935,7 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
           setOldContent(old)
           setNewContent(content)
 
-          if (cacheKey) cacheSet(cacheKey, { oldContent: old, newContent: content, htmlPreviewUrl: htmlUrl || undefined })
+          if (cacheKey) setPreviewContentCache(cacheKey, { oldContent: old, newContent: content, htmlPreviewUrl: htmlUrl || undefined })
         }
 
         if (previewOnly && !MD_EXTS.has(ext) && content) {
@@ -1014,7 +973,7 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
         const newC = result.newContent ?? ''
         const oldC = result.oldContent ?? ''
         // 用新 refreshVersion 写入缓存，让后续切走再切回来能命中
-        cacheSet(getContentCacheKey('diff', refreshVersion), { oldContent: oldC, newContent: newC })
+        setPreviewContentCache(getContentCacheKey('diff', refreshVersion), { oldContent: oldC, newContent: newC })
         if (newC === lastNewContentRef.current && oldC === lastOldContentRef.current) return
         lastNewContentRef.current = newC
         lastOldContentRef.current = oldC
@@ -1069,6 +1028,19 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
   const prevRefreshVersionRef = React.useRef(refreshVersion)
   const restoreScrollRef = React.useRef(false)
   const restoreRafRef = React.useRef(0)
+  const scrollNavigationEpochRef = React.useRef(0)
+
+  const cancelPendingPreviewScrollRestore = React.useCallback(() => {
+    // A user-initiated TOC jump supersedes a restore captured before this click.
+    // Otherwise the restore rAF may write the old (often zero) position after
+    // CodeMirror has already moved the document to the requested heading.
+    scrollNavigationEpochRef.current += 1
+    restoreScrollRef.current = false
+    if (restoreRafRef.current) {
+      cancelAnimationFrame(restoreRafRef.current)
+      restoreRafRef.current = 0
+    }
+  }, [])
 
   const handleLiveMarkdownReady = React.useCallback(() => {
     // Live Markdown 异步挂载前外层没有可恢复的内容高度，首轮恢复会被浏览器钳制到 0。
@@ -1116,10 +1088,15 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
     }
 
     const el = scrollContainerRef.current
+    const restoreEpoch = scrollNavigationEpochRef.current
     let prevHeight = el.scrollHeight
     let stableFrames = 0
 
     const check = () => {
+      if (restoreEpoch !== scrollNavigationEpochRef.current || !restoreScrollRef.current) {
+        restoreRafRef.current = 0
+        return
+      }
       const curHeight = el.scrollHeight
       if (curHeight === prevHeight) {
         stableFrames++
@@ -1310,7 +1287,7 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
         setOldContent('')
         setNewContent(draft)
         const nextPreviewContentVersion = previewContentVersion + 1
-        cacheSet(getContentCacheKey('preview', nextPreviewContentVersion), { oldContent: '', newContent: draft })
+        setPreviewContentCache(getContentCacheKey('preview', nextPreviewContentVersion), { oldContent: '', newContent: draft })
         setPreviewContentRefreshVersionMap((prev) => {
           const m = new Map(prev)
           m.set(previewContentRefreshKey, nextPreviewContentVersion)
@@ -1348,6 +1325,8 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
 
   const handleManualRefresh = React.useCallback(() => {
     if (previewOnly) {
+      // 刷新是用户要求以磁盘内容为准，不能因恰好命中某个历史 version 缓存而无效。
+      clearPreviewContentCacheForFile(sessionId, filePath)
       setPreviewContentRefreshVersionMap((prev) => {
         const m = new Map(prev)
         m.set(previewContentRefreshKey, (prev.get(previewContentRefreshKey) ?? 0) + 1)
@@ -1361,7 +1340,7 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
       m.set(sessionId, (prev.get(sessionId) ?? 0) + 1)
       return m
     })
-  }, [previewContentRefreshKey, previewOnly, sessionId, setPreviewContentRefreshVersionMap, setRefreshVersionMap])
+  }, [filePath, previewContentRefreshKey, previewOnly, sessionId, setPreviewContentRefreshVersionMap, setRefreshVersionMap])
 
   const handleAddSelectionToAgent = React.useCallback(() => {
     if (!previewSelection) return
@@ -1738,8 +1717,10 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
         />
         <MarkdownToc
           containerRef={scrollContainerRef}
-          contentKey={tocContentKey}
+          content={tocContent}
+          editorRef={markdownEditorRef}
           enabled={Boolean(isMarkdown && tocOpen)}
+          onBeforeNavigate={cancelPendingPreviewScrollRestore}
           onOpenChange={setTocOpen}
         />
         {isMarkdown && !tocOpen && (
@@ -1887,6 +1868,7 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
             ) : isMarkdown ? (
               <LiveMarkdownEditor
                 key={`${readOnly ? 'readonly' : 'editable'}:${filePath}`}
+                ref={markdownEditorRef}
                 value={readOnly ? newContent : markdownDraft}
                 onChange={updateMarkdownDraft}
                 onSave={() => void saveMarkdownEdit()}
@@ -1938,6 +1920,7 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
           ) : (
             <DiffView oldContent={oldContent} newContent={newContent} filePath={filePath} viewMode={viewMode} />
           )}
+          {isMarkdown && !loading && <MarkdownTocScrollTail containerRef={scrollContainerRef} enabled />}
         </div>
         {previewSelection && (
           <SelectionActionPopover

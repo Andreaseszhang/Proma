@@ -85,7 +85,14 @@ export function isLikelyLiveMarkdownLatex(value: string): boolean {
   if (!trimmed) return false
   if (/\\(?:begin|end)\s*\{[^}]+\}/.test(trimmed)) return true
   if (/\\(?:frac|dfrac|tfrac|sqrt|sum|prod|int|oint|lim|sin|cos|tan|log|ln|cdot|times|div|pm|mp|leq|geq|neq|approx|equiv|infty|partial|nabla|alpha|beta|gamma|delta|theta|lambda|mu|pi|sigma|omega|to|Rightarrow|Leftarrow|Leftrightarrow|cup|cap|setminus|emptyset|subset|subseteq|supset|supseteq|in|notin|forall|exists|land|lor|not|bar|hat|vec|dot|ddot|left|right|quad|qquad)\b/.test(trimmed)) return true
-  return /[A-Za-z0-9)](?:\^|_)(?:\{[^}\n]+\}|[A-Za-z0-9+\-=()])/.test(trimmed)
+  // A single-letter variable plus an exponent/subscript is a common compact LaTeX
+  // form. Requiring braces for subscripts avoids rendering ordinary code such as
+  // `file_name` and `v1_2` as math.
+  return /^[A-Za-z](?:\^(?:\{[^}\n]+\}|[A-Za-z0-9+\-=()])|_\{[^}\n]+\})$/.test(trimmed)
+}
+
+export function shouldCommitLiveMarkdownTableCell(currentValue: string, draft: string): boolean {
+  return currentValue !== draft
 }
 
 export function nextLiveMarkdownTableCell(

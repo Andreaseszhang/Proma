@@ -4,6 +4,7 @@ import {
   type LiveMarkdownTable,
   isLikelyLiveMarkdownLatex,
   nextLiveMarkdownTableCell,
+  shouldCommitLiveMarkdownTableCell,
   updateLiveMarkdownTableCell,
 } from './live-markdown-table'
 
@@ -91,7 +92,7 @@ export function LiveMarkdownTableEditor({
     if (activeCell?.row === cell.row && activeCell.column === cell.column) return
     if (activeCell) {
       const original = cellValue(table, activeCell)
-      if (draft !== original) {
+      if (shouldCommitLiveMarkdownTableCell(original, draft)) {
         onCommit(updateLiveMarkdownTableCell(table, activeCell.row, activeCell.column, draft), cell)
         return
       }
@@ -106,9 +107,14 @@ export function LiveMarkdownTableEditor({
   const commit = (focusCell?: LiveMarkdownTableCell) => {
     if (!activeCell) return
     const original = cellValue(table, activeCell)
-    if (draft === original && !focusCell) {
-      setActiveCell(null)
-      setDraft('')
+    if (!shouldCommitLiveMarkdownTableCell(original, draft)) {
+      if (focusCell) {
+        setActiveCell(focusCell)
+        setDraft(cellValue(table, focusCell))
+      } else {
+        setActiveCell(null)
+        setDraft('')
+      }
       return
     }
     onCommit(updateLiveMarkdownTableCell(table, activeCell.row, activeCell.column, draft), focusCell)

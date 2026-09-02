@@ -132,6 +132,7 @@ import {
   selectDelegatedSession,
   sortAgentSessionsByUpdatedAtDesc,
 } from '@/lib/agent-session-list'
+import { clearSessionReferenceDragState, setSessionReferenceDragData } from '@/lib/session-reference-drag'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -4408,6 +4409,21 @@ const AgentSessionItem = React.memo(function AgentSessionItem({
           data-session-switch-id={session.id}
           data-session-switch-title={session.title}
           data-session-switch-type="agent"
+          draggable={!editing}
+          onDragStart={(event) => {
+            const target = event.target as HTMLElement
+            if (target.closest('button, input')) {
+              event.preventDefault()
+              clearSessionReferenceDragState()
+              return
+            }
+            preview.closeNow()
+            setSessionReferenceDragData(event.dataTransfer, {
+              sessionId: session.id,
+              title: session.title,
+            })
+          }}
+          onDragEnd={clearSessionReferenceDragState}
           onClick={() => onSelect(session.id, session.title)}
           onMouseEnter={() => { setRowHovered(true); preview.handleMouseEnter() }}
           onMouseLeave={() => { setRowHovered(false); preview.handleMouseLeave() }}
@@ -4417,6 +4433,7 @@ const AgentSessionItem = React.memo(function AgentSessionItem({
           }}
           className={cn(
             'session-quick-switch-row group relative w-full flex items-center gap-1.5 rounded-md py-1.5 pl-2.5 pr-1.5 transition-colors duration-100 titlebar-no-drag text-left',
+            !editing && 'cursor-grab active:cursor-grabbing',
             active && 'agent-session-item-active',
             leftAccent
               ? SESSION_ACCENT_ROW_CLASS[leftAccent]

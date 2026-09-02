@@ -128,6 +128,13 @@ import type { AgentDeferredQueueMessageInput, AgentSendInput, AgentPendingFile, 
 import { inferContextWindow, inferReasoningTransport, isCodexFastModeSupportedModel, MAX_ATTACHMENT_SIZE, normalizeReasoningCapabilityLevel, normalizeReasoningLevel, resolveReasoningCapability, resolveReasoningProfile } from '@proma/shared'
 import { fileToBase64, formatFileNames, getFileParentPath } from '@/lib/file-utils'
 import { getFilePanelDragData, INSERT_FILE_MENTION_EVENT, type FilePanelDragItem } from '@/lib/file-panel-drag'
+import {
+  canReferenceDraggedSession,
+  clearSessionReferenceDragState,
+  getActiveSessionReferenceDragId,
+  getSessionReferenceDragData,
+  isSessionReferenceDrag,
+} from '@/lib/session-reference-drag'
 import { buildQuotedSelectionBlock, expandAgentHistoryQuoteMentions } from '@/lib/quoted-selection'
 import { INSERT_AGENT_INPUT_QUOTE_EVENT, type InsertAgentInputQuoteDetail } from '@/lib/agent-input-quote'
 import { createClipboardPendingFile, createClipboardTextDraft, makeUniqueAttachmentName } from '@/lib/clipboard-text-attachment'
@@ -820,6 +827,7 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
     () => globalChannels.some((channel) => channel.enabled && channel.models.some((model) => model.enabled)),
     [globalChannels],
   )
+  const isComposerDisabled = isLegacyTranscript || !agentChannelId || !hasAvailableModel
   React.useEffect(() => {
     if (!agentChannelId || agentModelId) return
 
@@ -1707,8 +1715,19 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
   const handleDragOver = React.useCallback((e: React.DragEvent): void => {
     e.preventDefault()
     e.stopPropagation()
+    const sessionReferenceDrag = isSessionReferenceDrag(e.dataTransfer)
+    const draggedSessionId = getActiveSessionReferenceDragId(e.dataTransfer)
+    if (
+      sessionReferenceDrag
+      && (draggedSessionId === sessionId || isComposerDisabled)
+    ) {
+      e.dataTransfer.dropEffect = 'none'
+      setIsDragOver(false)
+      return
+    }
+    e.dataTransfer.dropEffect = 'copy'
     setIsDragOver(true)
-  }, [])
+  }, [isComposerDisabled, sessionId])
 
   const handleDragLeave = React.useCallback((e: React.DragEvent): void => {
     e.preventDefault()
@@ -1720,6 +1739,19 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
     e.preventDefault()
     e.stopPropagation()
     setIsDragOver(false)
+    clearSessionReferenceDragState()
+
+    // 左侧 Agent 会话行拖入：复用键盘 & 菜单生成的 session mention chip。
+    const draggedSession = getSessionReferenceDragData(e.dataTransfer)
+    if (draggedSession) {
+      if (isComposerDisabled) return
+      if (!canReferenceDraggedSession(draggedSession, sessionId)) {
+        toast.warning('不能引用当前会话')
+        return
+      }
+      richTextInputRef.current?.insertSessionMention(draggedSession)
+      return
+    }
 
     // 优先识别右侧文件面板的自定义拖拽载荷（会话文件 / 项目文件引用）
     // 文件直接插入引用；文件夹先附加到会话（Agent 可访问），附加成功后才插入引用，
@@ -1852,7 +1884,7 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
       // 无路径信息：回退，所有项按普通文件处理
       addFilesAsAttachments(droppedFiles)
     }
-  }, [sessionId, addFilesAsAttachments, addPanelDirectory, setAttachedDirsMap, workspaces, currentWorkspaceId])
+  }, [sessionId, addFilesAsAttachments, addPanelDirectory, setAttachedDirsMap, workspaces, currentWorkspaceId, isComposerDisabled])
 
   /** ModelSelector 选择回调 */
   const handleModelSelect = React.useCallback((option: ModelOption): void => {
@@ -2977,7 +3009,7 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
             className={cn(
               'rounded-[17px] border-[0.5px] border-border bg-background/70 backdrop-blur-sm transition-all duration-200',
               (isPlanMode || isPermissionPlanMode) && !isDragOver && 'plan-mode-border',
-              isDragOver && 'border-[2px] border-dashed border-[#2ecc71] bg-[#2ecc71]/[0.03]'
+              isDragOver && 'border-[2px] border-dashed border-primary bg-primary/[0.03]'
             )}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
@@ -3090,7 +3122,7 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
                     ? '请先选择模型'
                     : '暂无可用模型，请先在设置中启用渠道'
               }
-              disabled={isLegacyTranscript || !agentChannelId || !hasAvailableModel}
+              disabled={isComposerDisabled}
               autoFocusTrigger={sessionId}
               collapsible
               enableMentions

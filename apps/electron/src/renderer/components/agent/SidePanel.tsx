@@ -350,10 +350,19 @@ function SideAgentSessionContent({
   onView?: () => void
 }): React.ReactElement {
   const previousContentKeyRef = React.useRef<string | null>(null)
+  const onViewRef = React.useRef(onView)
+  onViewRef.current = onView
   const shouldAnimate = previousContentKeyRef.current !== null && previousContentKeyRef.current !== contentKey
 
   React.useEffect(() => {
     previousContentKeyRef.current = contentKey
+  }, [contentKey])
+
+  // A delegated child may finish while hidden, then become visible simply because its parent
+  // session is reopened. Rendering the visible content itself is a view acknowledgement; do not
+  // require a second pointer or focus event inside the child pane to clear its completion state.
+  React.useEffect(() => {
+    onViewRef.current?.()
   }, [contentKey])
 
   return (

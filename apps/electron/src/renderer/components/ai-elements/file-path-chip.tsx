@@ -60,6 +60,7 @@ export function FilePathChip({ filePath, basePath, basePaths, className }: FileP
 
   const chipRef = React.useRef<HTMLButtonElement>(null)
   const requestGenerationRef = React.useRef(0)
+  const resolutionRequestRef = React.useRef<{ key: string; promise: Promise<void> } | null>(null)
   const mountedRef = React.useRef(true)
   const [fileStatus, setFileStatus] = React.useState<'idle' | 'resolved' | 'broken'>('idle')
   const [resolvedPath, setResolvedPath] = React.useState<string | undefined>()
@@ -78,12 +79,45 @@ export function FilePathChip({ filePath, basePath, basePaths, className }: FileP
     lineColSuffix: resolvedPath ? lineColSuffix : '',
   }), [trimmedPath, resolvedPath, lineColSuffix])
 
-  // IntersectionObserver 懒检查文件是否存在，并把主进程实际命中的路径带回 tooltip。
+  const resolveCurrentPath = React.useCallback((): Promise<void> => {
+    const key = existsCacheKey(cleanPath, candidateBases)
+    const inFlight = resolutionRequestRef.current
+    if (inFlight?.key === key) return inFlight.promise
+
+    const generation = ++requestGenerationRef.current
+    const bases = candidateBases.length > 0 ? candidateBases : undefined
+    const sessionId = store.get(currentAgentSessionIdAtom)
+    let promise: Promise<void>
+    promise = window.electronAPI.resolveFilePath(cleanPath, {
+      sessionId: sessionId ?? undefined,
+      candidateBasePaths: bases,
+    })
+      .then((resolved) => {
+        if (!isAsyncResultCurrent(generation, requestGenerationRef.current, mountedRef.current)) return
+        const entry: FileResolutionCacheEntry = {
+          exists: resolved !== null,
+          ...(resolved?.resolvedPath ? { resolvedPath: resolved.resolvedPath } : {}),
+        }
+        fileExistsCache.set(key, entry)
+        setFileStatus(entry.exists ? 'resolved' : 'broken')
+        setResolvedPath(entry.resolvedPath)
+      })
+      .catch(() => { /* IPC 失败时保留当前状态 */ })
+      .finally(() => {
+        if (resolutionRequestRef.current?.promise === promise) {
+          resolutionRequestRef.current = null
+        }
+      })
+    resolutionRequestRef.current = { key, promise }
+    return promise
+  }, [cleanPath, candidateBases, store])
+
+  // IntersectionObserver 首次懒检查可使用缓存；Tooltip 打开时会绕过缓存重新解析。
   React.useEffect(() => {
     const el = chipRef.current
     if (!el || typeof IntersectionObserver === 'undefined') return
 
-    const generation = ++requestGenerationRef.current
+    requestGenerationRef.current += 1
     mountedRef.current = true
     setFileStatus('idle')
     setResolvedPath(undefined)
@@ -102,20 +136,7 @@ export function FilePathChip({ filePath, basePath, basePaths, className }: FileP
       (entries) => {
         if (!entries[0]?.isIntersecting) return
         observer.disconnect()
-        const bases = candidateBases.length > 0 ? candidateBases : undefined
-        const sessionId = store.get(currentAgentSessionIdAtom)
-        window.electronAPI.resolveFilePath(cleanPath, { sessionId: sessionId ?? undefined, candidateBasePaths: bases })
-          .then((resolved) => {
-            if (!isAsyncResultCurrent(generation, requestGenerationRef.current, mountedRef.current)) return
-            const entry: FileResolutionCacheEntry = {
-              exists: resolved !== null,
-              ...(resolved?.resolvedPath ? { resolvedPath: resolved.resolvedPath } : {}),
-            }
-            fileExistsCache.set(key, entry)
-            setFileStatus(entry.exists ? 'resolved' : 'broken')
-            setResolvedPath(entry.resolvedPath)
-          })
-          .catch(() => { /* IPC 失败不标记 */ })
+        void resolveCurrentPath()
       },
       { threshold: 0 },
     )
@@ -125,7 +146,11 @@ export function FilePathChip({ filePath, basePath, basePaths, className }: FileP
       requestGenerationRef.current += 1
       observer.disconnect()
     }
-  }, [cleanPath, candidateBases, store])
+  }, [cleanPath, candidateBases, resolveCurrentPath])
+
+  const handleTooltipOpenChange = React.useCallback((open: boolean) => {
+    if (open) void resolveCurrentPath()
+  }, [resolveCurrentPath])
 
   const handleClick = React.useCallback(() => {
     const sessionId = store.get(currentAgentSessionIdAtom)
@@ -147,7 +172,7 @@ export function FilePathChip({ filePath, basePath, basePaths, className }: FileP
 
   return (
     <ContextMenu>
-      <Tooltip>
+      <Tooltip onOpenChange={handleTooltipOpenChange}>
         <ContextMenuTrigger asChild>
           <TooltipTrigger asChild>
             <button

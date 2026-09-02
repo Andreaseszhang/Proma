@@ -133,7 +133,9 @@ import {
   clearSessionReferenceDragState,
   getActiveSessionReferenceDragId,
   getSessionReferenceDragData,
+  INSERT_SESSION_REFERENCE_MENTION_EVENT,
   isSessionReferenceDrag,
+  type InsertSessionReferenceMentionDetail,
 } from '@/lib/session-reference-drag'
 import { buildQuotedSelectionBlock, expandAgentHistoryQuoteMentions } from '@/lib/quoted-selection'
 import { INSERT_AGENT_INPUT_QUOTE_EVENT, type InsertAgentInputQuoteDetail } from '@/lib/agent-input-quote'
@@ -732,6 +734,16 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
     }
     window.addEventListener(INSERT_AGENT_INPUT_QUOTE_EVENT, handleInsertQuote)
     return () => window.removeEventListener(INSERT_AGENT_INPUT_QUOTE_EVENT, handleInsertQuote)
+  }, [sessionId])
+  React.useEffect(() => {
+    const handleInsertSessionReference = (event: Event): void => {
+      const detail = (event as CustomEvent<InsertSessionReferenceMentionDetail>).detail
+      if (!detail || detail.targetSessionId !== sessionId) return
+      if (!canReferenceDraggedSession(detail.item, sessionId)) return
+      detail.inserted = richTextInputRef.current?.insertSessionMention(detail.item) ?? false
+    }
+    window.addEventListener(INSERT_SESSION_REFERENCE_MENTION_EVENT, handleInsertSessionReference)
+    return () => window.removeEventListener(INSERT_SESSION_REFERENCE_MENTION_EVENT, handleInsertSessionReference)
   }, [sessionId])
   const handleAgentHistoryQuoteClick = React.useCallback((quote: QuotedSelection): void => {
     if (

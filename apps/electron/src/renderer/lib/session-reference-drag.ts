@@ -65,6 +65,30 @@ export function getSessionReferenceDragData(
   }
 }
 
+/**
+ * 侧栏三点菜单「引用此会话」触发的事件名，与拖拽走不同入口但复用同一份 mention 插入逻辑。
+ * detail 携带目标会话 id（当前主视图打开的 Agent 会话）与被引用的会话信息；
+ * 由持有 RichTextInput ref 的 AgentView 监听后回写 inserted，调用方据此决定是否提示用户。
+ */
+export const INSERT_SESSION_REFERENCE_MENTION_EVENT = 'proma:insert-session-reference-mention'
+
+export interface InsertSessionReferenceMentionDetail {
+  targetSessionId: string
+  item: SessionReferenceDragItem
+  inserted: boolean
+}
+
+export function insertSessionReferenceMention(
+  targetSessionId: string,
+  item: SessionReferenceDragItem,
+): boolean {
+  const detail: InsertSessionReferenceMentionDetail = { targetSessionId, item, inserted: false }
+  window.dispatchEvent(
+    new CustomEvent<InsertSessionReferenceMentionDetail>(INSERT_SESSION_REFERENCE_MENTION_EVENT, { detail }),
+  )
+  return detail.inserted
+}
+
 function isSessionReferenceDragItem(item: unknown): item is SessionReferenceDragItem {
   if (!item || typeof item !== 'object') return false
   const candidate = item as Partial<SessionReferenceDragItem>

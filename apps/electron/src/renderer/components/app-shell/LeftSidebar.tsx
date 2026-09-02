@@ -1843,6 +1843,11 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     if (selectedSession?.sourceDelegationId && selectedSession.parentSessionId) {
       const parentSession = agentSessions.find((session) => session.id === selectedSession.parentSessionId)
       if (parentSession) {
+        if (store.get(agentSidePanelSplitMapAtom).has(parentSession.id)) {
+          toast.info('请先退出并排模式，再切换子会话', {
+            id: 'split-delegation-sidebar-navigation',
+          })
+        }
         openSession('agent', parentSession.id, parentSession.title)
         store.set(agentSideDelegationMapAtom, (previous) => (
           selectDelegatedSession(previous, parentSession.id, selectedSession.id)

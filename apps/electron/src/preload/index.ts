@@ -986,7 +986,7 @@ export interface ElectronAPI {
   writeTextFile: (filePath: string, content: string, access?: import('@proma/shared').FileAccessOptions) => Promise<boolean>
 
   // 仅解析文件路径（供 PDF/图片等用 proma-file:// 加载）
-  resolveFilePath: (filePath: string, access?: import('@proma/shared').FileAccessOptions) => Promise<import('@proma/shared').ResolvedFileUrl | null>
+  resolveFilePath: (filePath: string, access?: import('@proma/shared').FileAccessOptions) => Promise<(import('@proma/shared').ResolvedFileUrl & { resolvedPath?: string }) | null>
 
   /** 解析当前 Markdown 同目录内的相对媒体文件（仅供 LiveMarkdown 图片使用） */
   resolveMarkdownMedia: (markdownFilePath: string, src: string, access?: import('@proma/shared').FileAccessOptions) => Promise<import('@proma/shared').ResolvedFileUrl | null>
@@ -2484,7 +2484,7 @@ const electronAPI: ElectronAPI = {
   },
 
   resolveFilePath: (filePath: string, access?: import('@proma/shared').FileAccessOptions) => {
-    return ipcRenderer.invoke('file:resolve-path', filePath, access) as Promise<import('@proma/shared').ResolvedFileUrl | null>
+    return ipcRenderer.invoke('file:resolve-path', filePath, access) as Promise<(import('@proma/shared').ResolvedFileUrl & { resolvedPath?: string }) | null>
   },
 
   resolveMarkdownMedia: (markdownFilePath: string, src: string, access?: import('@proma/shared').FileAccessOptions) => {

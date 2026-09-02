@@ -4229,7 +4229,7 @@ export function registerIpcHandlers(): void {
   // 仅解析文件路径（供 PDF/图片等用 proma-file:// 加载）
   ipcMain.handle(
     'file:resolve-path',
-    async (_, filePath: string, access?: FileAccessOptions | string[]): Promise<ResolvedFileUrl | null> => {
+    async (_, filePath: string, access?: FileAccessOptions | string[]): Promise<(ResolvedFileUrl & { resolvedPath: string }) | null> => {
       const { resolveFilePath } = await import('./lib/file-preview-service')
       const options = normalizeFileAccessOptions(access)
       const result = resolveFilePath(filePath, getPreviewCandidateBasePaths(options))
@@ -4237,7 +4237,7 @@ export function registerIpcHandlers(): void {
       // registerPromaFilePath 对目录路径会抛「不是文件」。渲染端（如悬浮预览解析 markdown
       // 链接）可能传入目录路径，此处优雅降级为 null，而不是让异常冒泡成未捕获的 handler 错误。
       try {
-        return { url: registerPromaFilePath(result) }
+        return { url: registerPromaFilePath(result), resolvedPath: result }
       } catch (err) {
         console.warn('[IPC] file:resolve-path 无法注册为文件，跳过:', result, err instanceof Error ? err.message : err)
         return null

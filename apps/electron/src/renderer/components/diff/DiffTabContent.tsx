@@ -46,7 +46,10 @@ import { DefaultAppOpenButton } from './DefaultAppOpenButton'
 import { UnsupportedFilePreview } from './UnsupportedFilePreview'
 import { PreviewFindBar } from './PreviewFindBar'
 import { MarkdownToc, MarkdownTocScrollTail } from './MarkdownToc'
-import { shouldMaskMarkdownForScrollRestore as getShouldMaskMarkdownForScrollRestore } from './markdown-scroll-restore'
+import {
+  isCurrentMarkdownScrollRestore,
+  shouldMaskMarkdownForScrollRestore as getShouldMaskMarkdownForScrollRestore,
+} from './markdown-scroll-restore'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { PIERRE_FILE_CSS } from '@/components/agent/tool-result-renderers/pierre-styles'
 import { SelectionActionPopover } from '@/components/selection/SelectionActionPopover'
@@ -1025,6 +1028,7 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
   const prevRefreshVersionRef = React.useRef(refreshVersion)
   const restoreScrollRef = React.useRef(false)
   const restoreRafRef = React.useRef(0)
+  const restoreTimeoutRef = React.useRef<number | null>(null)
   const scrollNavigationEpochRef = React.useRef(0)
 
   // 等待异步 Markdown 渲染稳定期间保留布局但隐藏正文，避免切回标签时
@@ -1051,6 +1055,10 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
       cancelAnimationFrame(restoreRafRef.current)
       restoreRafRef.current = 0
     }
+    if (restoreTimeoutRef.current !== null) {
+      clearTimeout(restoreTimeoutRef.current)
+      restoreTimeoutRef.current = null
+    }
     // 目录跳转成为当前阅读意图：结束旧恢复并同时释放它临时添加的遮罩。
     // 否则 LiveMarkdown 就绪后取消其 rAF，会使正文一直处于隐藏状态。
     setRestoredScrollKey(scrollKey)
@@ -1065,7 +1073,10 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
   React.useEffect(() => {
     // 异常 widget 或极端资源压力不能让阅读区永久空白；超时后 best-effort 恢复。
     if (!shouldMaskMarkdownForScrollRestore || liveMarkdownReadyKey === scrollKey) return
+    const restoreEpoch = scrollNavigationEpochRef.current
     const timer = window.setTimeout(() => {
+      restoreTimeoutRef.current = null
+      if (!isCurrentMarkdownScrollRestore(restoreEpoch, scrollNavigationEpochRef.current)) return
       restoreScrollRef.current = false
       restoreGenerationRef.current++
       if (restoreRafRef.current) {
@@ -1080,7 +1091,11 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
       }
       setRestoredScrollKey(scrollKey)
     }, 500)
-    return () => window.clearTimeout(timer)
+    restoreTimeoutRef.current = timer
+    return () => {
+      clearTimeout(timer)
+      if (restoreTimeoutRef.current === timer) restoreTimeoutRef.current = null
+    }
   }, [liveMarkdownReadyKey, scrollKey, shouldMaskMarkdownForScrollRestore])
 
   const handleLiveMarkdownReady = React.useCallback(() => {
@@ -1218,6 +1233,7 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
     return () => {
       if (scrollRafRef.current) cancelAnimationFrame(scrollRafRef.current)
       if (restoreRafRef.current) cancelAnimationFrame(restoreRafRef.current)
+      if (restoreTimeoutRef.current !== null) clearTimeout(restoreTimeoutRef.current)
     }
   }, [])
 

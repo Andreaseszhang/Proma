@@ -5584,6 +5584,14 @@ export function registerIpcHandlers(): void {
     }
   )
 
+  ipcMain.handle(
+    IPC_CHANNELS.WINDOW_IS_FOCUSED,
+    async (event) => {
+      const win = BrowserWindow.fromWebContents(event.sender)
+      return win && !win.isDestroyed() ? win.isFocused() : false
+    }
+  )
+
   // ===== 任务 / 日程（Planning）=====
 
   const isPlanningTitle = (value: unknown): value is string =>

@@ -294,6 +294,8 @@ export interface ElectronAPI {
   windowClose: () => Promise<void>
   /** 窗口是否处于最大化状态 */
   windowIsMaximized: () => Promise<boolean>
+  /** 宿主 BrowserWindow 是否处于前台（焦点可位于原生 WebContentsView） */
+  windowIsFocused: () => Promise<boolean>
   /** 订阅窗口最大化/还原事件 */
   onWindowResize: (callback: () => void) => () => void
 
@@ -1502,6 +1504,10 @@ const electronAPI: ElectronAPI = {
 
   windowIsMaximized: () => {
     return ipcRenderer.invoke(IPC_CHANNELS.WINDOW_IS_MAXIMIZED)
+  },
+
+  windowIsFocused: () => {
+    return ipcRenderer.invoke(IPC_CHANNELS.WINDOW_IS_FOCUSED)
   },
 
   onWindowResize: (callback: () => void) => {

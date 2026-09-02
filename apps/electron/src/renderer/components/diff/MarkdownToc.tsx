@@ -15,6 +15,8 @@ interface MarkdownTocProps {
     scrollToPosition: (position: number) => void
     getPositionAtViewportY: (viewportY: number) => number | null
   } | null>
+  /** LiveMarkdown 已完成异步初始化，可可靠执行 scrollToPosition */
+  editorReady?: boolean
   /** 仅 Markdown 预览时为 true */
   enabled: boolean
   /** 在目录跳转前取消可能覆盖目标位置的延迟滚动恢复 */
@@ -56,12 +58,12 @@ export function MarkdownTocScrollTail({ containerRef, enabled }: { containerRef:
   return <div ref={tailRef} aria-hidden="true" className="pointer-events-none w-px shrink-0" />
 }
 
-export function MarkdownToc({ containerRef, content, editorRef, enabled, onBeforeNavigate, onOpenChange }: MarkdownTocProps): React.ReactElement | null {
+export function MarkdownToc({ containerRef, content, editorRef, editorReady, enabled, onBeforeNavigate, onOpenChange }: MarkdownTocProps): React.ReactElement | null {
   const headings = useTocHeadings(containerRef, content, enabled, !editorRef)
   const activeId = useScrollSpy(containerRef, headings, editorRef)
   const listRef = React.useRef<HTMLDivElement>(null)
-  // LiveMarkdown 传入 ref 时，标题来自源文本；编辑器实例尚未建立前无法完成跳转。
-  const navigationReady = !editorRef || Boolean(editorRef.current)
+  // LiveMarkdown 的 imperative handle 会早于异步 ink() 初始化创建；仅 ref 存在还不能跳转。
+  const navigationReady = !editorRef || editorReady === true
 
   React.useEffect(() => {
     if (!activeId || !listRef.current) return
@@ -77,7 +79,7 @@ export function MarkdownToc({ containerRef, content, editorRef, enabled, onBefor
 
   const jumpTo = (heading: (typeof headings)[number]): void => {
     const editor = editorRef?.current
-    if (editor) {
+    if (editor && navigationReady) {
       onBeforeNavigate?.()
       editor.scrollToPosition(heading.position)
       return

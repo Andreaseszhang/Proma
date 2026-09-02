@@ -1828,6 +1828,7 @@ export function DiffTabContent({ filePath, dirPath, sessionId, gitRoot, previewO
           containerRef={scrollContainerRef}
           content={tocContent}
           editorRef={markdownEditorRef}
+          editorReady={liveMarkdownReadyKey === scrollKey}
           enabled={Boolean(isMarkdown && tocOpen)}
           onBeforeNavigate={cancelPendingPreviewScrollRestore}
           onOpenChange={setTocOpen}

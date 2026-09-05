@@ -10,12 +10,33 @@ export interface AgentSessionTreeItem {
   childSessions: AgentSessionMeta[]
 }
 
+export interface CollapsedRailPopoverState {
+  openPopoverId: string | null
+  snapshotIds: string[] | null
+}
+
 /** 目标条目已不在可见集合或已没有子会话时，残留的展开状态一律失效。 */
 export function getEffectiveCollapsedRailPopoverId(
   openPopoverId: string | null,
   validPopoverItemIds: readonly string[],
 ): string | null {
   return openPopoverId && validPopoverItemIds.includes(openPopoverId) ? openPopoverId : null
+}
+
+/**
+ * 处理 Rail Popover 状态。关闭事件必须携带来源 ID，过期的延迟关闭不能影响新面板。
+ */
+export function reduceCollapsedRailPopoverState(
+  state: CollapsedRailPopoverState,
+  event:
+    | { type: 'open'; id: string; snapshotIds: readonly string[] }
+    | { type: 'close'; id: string },
+): CollapsedRailPopoverState {
+  if (event.type === 'open') {
+    return { openPopoverId: event.id, snapshotIds: [...event.snapshotIds] }
+  }
+  if (state.openPopoverId !== event.id) return state
+  return { openPopoverId: null, snapshotIds: null }
 }
 
 /**

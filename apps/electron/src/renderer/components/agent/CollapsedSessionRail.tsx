@@ -24,6 +24,8 @@ import { CollapsedDelegatedSessionsPopover } from '@/components/agent/CollapsedD
 import {
   getCollapsedAgentRailVisibleItems,
   getEffectiveCollapsedRailPopoverId,
+  reduceCollapsedRailPopoverState,
+  type CollapsedRailPopoverState,
 } from '@/lib/collapsed-agent-rail'
 import type { AgentSessionMeta } from '@proma/shared'
 import type { SessionIndicatorStatus } from '@/atoms/agent-atoms'
@@ -161,8 +163,12 @@ export function CollapsedSessionRail({
   onSelect: (item: RailRecentItem) => void
   onSelectChild: (session: AgentSessionMeta) => void
 }): React.ReactElement {
-  const [openPopoverId, setOpenPopoverId] = React.useState<string | null>(null)
-  const [openSnapshotIds, setOpenSnapshotIds] = React.useState<string[] | null>(null)
+  // ID 与快照必须一起提交；旧面板的延迟关闭不能清理新面板的快照。
+  const [popoverState, setPopoverState] = React.useState<CollapsedRailPopoverState>({
+    openPopoverId: null,
+    snapshotIds: null,
+  })
+  const { openPopoverId, snapshotIds: openSnapshotIds } = popoverState
 
   const popoverItemIds = React.useMemo(
     () => items.filter((item) => getRailItemChildCount(item) > 0).map((item) => item.id),
@@ -177,8 +183,9 @@ export function CollapsedSessionRail({
 
   React.useLayoutEffect(() => {
     if (openPopoverId !== null && effectiveOpenPopoverId === null) {
-      setOpenPopoverId(null)
-      setOpenSnapshotIds(null)
+      setPopoverState((current) => reduceCollapsedRailPopoverState(current, {
+        type: 'close', id: openPopoverId,
+      }))
     }
   }, [effectiveOpenPopoverId, openPopoverId])
 
@@ -194,13 +201,10 @@ export function CollapsedSessionRail({
             activeDelegationSessionId={activeDelegationSessionId}
             open={effectiveOpenPopoverId === item.id}
             onOpenChange={(nextOpen) => {
-              if (nextOpen) {
-                setOpenSnapshotIds(visibleItems.map((candidate) => candidate.id))
-                setOpenPopoverId(item.id)
-                return
-              }
-              setOpenPopoverId((current) => (current === item.id ? null : current))
-              setOpenSnapshotIds(null)
+              setPopoverState((current) => reduceCollapsedRailPopoverState(current, nextOpen
+                ? { type: 'open', id: item.id, snapshotIds: visibleItems.map((candidate) => candidate.id) }
+                : { type: 'close', id: item.id },
+              ))
             }}
             miniMapDisabled={miniMapDisabled}
             onSelect={onSelect}

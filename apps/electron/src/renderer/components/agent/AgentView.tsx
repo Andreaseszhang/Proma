@@ -21,6 +21,7 @@ import { CornerDownLeft, Square, Settings, X, Copy, Check, Brain, Sparkles, List
 import { AgentMessages, type AgentHistoryQuoteNavigationRequest } from './AgentMessages'
 import { AgentHeader } from './AgentHeader'
 import { AgentMessageQueue } from './AgentMessageQueue'
+import { SkillMentionNamesProvider } from './SkillMentionNamesProvider'
 import { ContextUsageBadge } from './ContextUsageBadge'
 import { PermissionBanner } from './PermissionBanner'
 import { PermissionModeSelector } from './PermissionModeSelector'
@@ -2971,7 +2972,7 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
   )
 
   return (
-    <>
+    <SkillMentionNamesProvider workspaceSlug={workspaceSlug}>
       <div
         className="flex h-full min-h-0 flex-1 min-w-0 flex-col overflow-hidden"
         onFocusCapture={markStopShortcutTarget}
@@ -3212,6 +3213,6 @@ export function AgentView({ sessionId, embedded = false }: AgentViewProps): Reac
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
-    </>
+    </SkillMentionNamesProvider>
   )
 }

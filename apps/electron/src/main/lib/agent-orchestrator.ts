@@ -2292,8 +2292,9 @@ export class AgentOrchestrator {
   /**
    * 回退 Pi 会话到指定消息点。
    *
-   * Pi 可安全回退其对话树；文件快照不属于 Pi runtime，因此明确告知用户
-   * 当前不会修改工作区文件。退役 Claude 会话仅可查看，不允许回退或继续。
+   * Pi 可安全回退其对话树；文件快照不属于 Pi runtime，当前不会修改工作区文件。
+   * 未提供文件回退能力是正常状态，不作为回退错误返回。
+   * 退役 Claude 会话仅可查看，不允许回退或继续。
    */
   async rewindSession(
     sessionId: string,
@@ -2317,7 +2318,6 @@ export class AgentOrchestrator {
       remainingMessages,
       fileRewind: {
         canRewind: false,
-        error: '已回退 Pi 对话；Pi 文件回退尚未启用，当前未修改任何文件。',
       },
     }
   }

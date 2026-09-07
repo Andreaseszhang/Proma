@@ -65,6 +65,10 @@ function displayDocumentTitle(filename: string): string {
   return filename.replace(/\.md$/i, '')
 }
 
+function isVaultFileNotFoundError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('Vault 文件不存在:')
+}
+
 function VaultFileList({
   entries,
   selectedPath,
@@ -816,13 +820,16 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
       }
     } catch (error) {
       if (requestId === readRequestRef.current) {
+        // The tree can be stale when a note is deleted or renamed outside this
+        // renderer. Refresh it once so the unavailable note is removed.
+        if (isVaultFileNotFoundError(error)) void refresh()
         toast.error(error instanceof Error ? error.message : '无法打开笔记')
         setReadResult(null)
       }
     } finally {
       if (requestId === readRequestRef.current) setFileLoading(false)
     }
-  }, [flushCurrentEditor, selectFile, setReadResult])
+  }, [flushCurrentEditor, refresh, selectFile, setReadResult])
 
   const openWikiLink = React.useCallback((target: string): void => {
     if (!readResult) return

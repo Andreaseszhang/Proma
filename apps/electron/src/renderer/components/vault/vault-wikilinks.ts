@@ -105,8 +105,18 @@ export function createVaultWikiLinks(onOpen: (target: string) => void): Extensio
       }
     }, { decorations: (plugin) => plugin.decorations }),
     EditorView.baseTheme({
-      '.vault-wikilink': { color: 'hsl(var(--primary))', cursor: 'pointer', font: 'inherit', padding: '0', border: '0', background: 'none' },
-      '.vault-wikilink:hover': { textDecoration: 'underline' },
+      '.vault-wikilink': {
+        color: 'hsl(262 83% 58%)',
+        cursor: 'pointer',
+        font: 'inherit',
+        padding: '0',
+        border: '0',
+        background: 'none',
+        textDecoration: 'underline',
+        textDecorationThickness: '1px',
+        textUnderlineOffset: '2px',
+      },
+      '.vault-wikilink:hover': { color: 'hsl(262 83% 50%)' },
       '.vault-wikilink:focus-visible': { outline: '2px solid hsl(var(--ring))', outlineOffset: '2px' },
     }),
   ]

@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from '@/components/ui/context-menu'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { resolveVaultWikiLink } from './vault-wikilinks'
 import { VaultLiveMarkdownEditor } from './VaultLiveMarkdownEditor'
 import { useVaultScrollMemory } from './useVaultScrollMemory'
 import { getVaultScrollKey } from './vault-scroll-memory'
@@ -267,6 +268,7 @@ function VaultMarkdownEditor({
   onReload,
   onRegisterFlush,
   onOpenTutorial,
+  onOpenWikiLink,
 }: {
   readResult: VaultReadResult
   /** Stable renderer-safe identity of the currently authorized Vault. */
@@ -278,6 +280,7 @@ function VaultMarkdownEditor({
   onReload: () => void
   onRegisterFlush?: (flush: VaultEditorFlush | null) => void
   onOpenTutorial: () => void
+  onOpenWikiLink: (target: string) => void
 }): React.ReactElement {
   const documentController = React.useMemo(() => getVaultDocumentController(readResult, vaultId), [readResult.relativePath, vaultId])
   const documentSnapshot = React.useSyncExternalStore(
@@ -511,6 +514,7 @@ function VaultMarkdownEditor({
         <div className="min-h-0 flex-1">
           <VaultLiveMarkdownEditor
             ref={editorHandleRef}
+            onOpenWikiLink={onOpenWikiLink}
             relativePath={readResult.relativePath}
             value={draft}
             onChange={updateDraft}
@@ -544,6 +548,7 @@ function VaultMarkdownPane({
   onReload,
   onRegisterFlush,
   onOpenTutorial,
+  onOpenWikiLink,
 }: {
   readResult: VaultReadResult | null
   vaultId?: string
@@ -556,6 +561,7 @@ function VaultMarkdownPane({
   onReload: () => void
   onRegisterFlush: (flush: VaultEditorFlush | null) => void
   onOpenTutorial: () => void
+  onOpenWikiLink: (target: string) => void
 }): React.ReactElement {
   if (loading || !readResult || !vaultId) {
     return (
@@ -587,6 +593,7 @@ function VaultMarkdownPane({
           onReload={onReload}
           onRegisterFlush={onRegisterFlush}
           onOpenTutorial={onOpenTutorial}
+          onOpenWikiLink={onOpenWikiLink}
         />
       </VaultContentErrorBoundary>
     </section>
@@ -816,6 +823,16 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
       if (requestId === readRequestRef.current) setFileLoading(false)
     }
   }, [flushCurrentEditor, selectFile, setReadResult])
+
+  const openWikiLink = React.useCallback((target: string): void => {
+    if (!readResult) return
+    const path = resolveVaultWikiLink(target, readResult.relativePath, entries.filter((entry) => entry.kind === 'file').map((entry) => entry.relativePath))
+    if (!path) {
+      toast.error(`无法定位笔记“${target}”，请检查名称或使用完整的 Vault 内路径`)
+      return
+    }
+    void openFile(path)
+  }, [entries, readResult, openFile])
 
   const selectVaultManually = async (): Promise<void> => {
     if (!await flushCurrentEditor()) return
@@ -1176,6 +1193,7 @@ export function VaultView({ embedded = false, sessionId }: { embedded?: boolean;
             onReload={() => { if (readResult) void openFile(readResult.relativePath, { discardLocalDraft: true, forceReopen: true }) }}
             onRegisterFlush={registerEditorFlush}
             onOpenTutorial={() => setVaultHelpOpen(true)}
+            onOpenWikiLink={openWikiLink}
           />
         </div>
       </main>

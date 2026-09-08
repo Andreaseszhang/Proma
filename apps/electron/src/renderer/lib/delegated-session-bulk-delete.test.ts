@@ -4,6 +4,7 @@ import {
   getSelectableDelegatedSessionIds,
   reconcileDelegatedSessionBulkSelection,
   selectAllDelegatedSessions,
+  shouldShowDelegatedSessionBulkDeleteAction,
   toggleDelegatedSessionBulkSelection,
   type DelegatedChildCandidate,
 } from './delegated-session-bulk-delete'
@@ -13,6 +14,13 @@ function child(id: string, parentSessionId = 'parent-a'): DelegatedChildCandidat
 }
 
 describe('委派子会话批量选择', () => {
+  test('Given 父会话的当前视图子会话数量 When 判断批量删除入口 Then 仅两个及以上时显示', () => {
+    expect(shouldShowDelegatedSessionBulkDeleteAction(0)).toBe(false)
+    expect(shouldShowDelegatedSessionBulkDeleteAction(1)).toBe(false)
+    expect(shouldShowDelegatedSessionBulkDeleteAction(2)).toBe(true)
+    expect(shouldShowDelegatedSessionBulkDeleteAction(3)).toBe(true)
+  })
+
   test('Given 混合父级和普通会话 When 进入模式 Then 只快照当前父级的直接委派子会话', () => {
     const selection = createDelegatedSessionBulkSelection('parent-a', [
       child('child-a'),

@@ -12,6 +12,10 @@ export interface DelegatedSessionBulkSelection {
   selectedIds: string[]
 }
 
+export function shouldShowDelegatedSessionBulkDeleteAction(childCount: number): boolean {
+  return childCount >= 2
+}
+
 function directChildIds(
   parentSessionId: string,
   sessions: readonly DelegatedChildCandidate[],

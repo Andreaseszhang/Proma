@@ -169,6 +169,7 @@ import {
   getSelectableDelegatedSessionIds,
   reconcileDelegatedSessionBulkSelection,
   selectAllDelegatedSessions,
+  shouldShowDelegatedSessionBulkDeleteAction,
   toggleDelegatedSessionBulkSelection,
   type DelegatedSessionBulkSelection,
 } from '@/lib/delegated-session-bulk-delete'
@@ -182,6 +183,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { Button } from '@/components/ui/button'
 import {
   ContextMenu,
   ContextMenuTrigger,
@@ -1065,6 +1067,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
   ): void => {
     const visibleChildren = getDirectDelegatedChildren(agentSessions, parentSessionId)
       .filter((session) => viewMode === 'archived' ? !!session.archived : !session.archived)
+    if (!shouldShowDelegatedSessionBulkDeleteAction(visibleChildren.length)) return
     const safePreselection = preselectedSessionId && !delegatedBulkBusyIds.has(preselectedSessionId)
       ? preselectedSessionId
       : undefined
@@ -2760,16 +2763,9 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     >
       <AlertDialogContent onCloseAutoFocus={(event) => event.preventDefault()}>
         <AlertDialogHeader>
-          <AlertDialogTitle>删除选中的 {delegatedBulkSelectedSessions.length} 个子会话？</AlertDialogTitle>
-          <AlertDialogDescription className="space-y-2">
-            <span className="block">
-              将永久删除「{delegatedBulkParent?.title ?? '父会话'}」下选中的子会话，包括消息记录和各自的会话工作目录。此操作无法撤销。
-            </span>
-            {delegatedBulkSelectedSessions.some((session) => session.starred) && (
-              <span className="block text-amber-600 dark:text-amber-400">
-                其中 {delegatedBulkSelectedSessions.filter((session) => session.starred).length} 个子会话已星标。
-              </span>
-            )}
+          <AlertDialogTitle>确认删除子会话</AlertDialogTitle>
+          <AlertDialogDescription>
+            删除后将无法恢复，确定要删除选中的 {delegatedBulkSelectedSessions.length} 个子会话吗？
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -2779,7 +2775,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
             onClick={() => { void handleConfirmDelegatedBulkDelete() }}
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
           >
-            {bulkDeleting ? '删除中…' : `删除 ${delegatedBulkSelectedSessions.length} 个子会话`}
+            {bulkDeleting ? '删除中…' : '删除'}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
@@ -3997,7 +3993,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
             </span>
             <button
               type="button"
-              aria-label="退出子会话多选"
+              aria-label="退出批量删除子会话"
               onClick={cancelDelegatedBulkSelection}
               className="flex size-6 items-center justify-center rounded-md text-foreground/40 hover:bg-foreground/[0.06] hover:text-foreground/70"
             >
@@ -4005,22 +4001,26 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
             </button>
           </div>
           <div className="flex items-center gap-1.5">
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               disabled={delegatedBulkSelectableIds.length === 0 || delegatedBulkAllSelectableSelected}
               onClick={handleSelectAllDelegatedSessions}
-              className="h-8 min-w-0 flex-1 rounded-lg px-2 text-[11px] font-medium text-foreground/60 hover:bg-foreground/[0.055] disabled:opacity-40"
+              className="h-8 min-w-0 flex-1 rounded-lg px-2 text-[11px] text-foreground/75"
             >
               {delegatedBulkAllSelectableSelected ? '已全选' : `全选可删除（${delegatedBulkSelectableIds.length}）`}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="destructive"
+              size="sm"
               disabled={delegatedBulkSelection.selectedIds.length === 0}
               onClick={() => setBulkDeleteConfirmOpen(true)}
-              className="h-8 rounded-lg bg-destructive px-3 text-[11px] font-medium text-destructive-foreground hover:bg-destructive/90 disabled:pointer-events-none disabled:opacity-40"
+              className="h-8 rounded-lg px-3 text-[11px]"
             >
               删除 {delegatedBulkSelection.selectedIds.length} 个
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -4698,16 +4698,13 @@ const AgentSessionItem = React.memo(function AgentSessionItem({
           </TooltipContent>
         </Tooltip>
       </MenuItem>
-      {onStartDelegatedBulkSelection && (hasChildren || (session.sourceDelegationId && session.parentSessionId)) && (
+      {onStartDelegatedBulkSelection && shouldShowDelegatedSessionBulkDeleteAction(childCount) && (
         <MenuItem
           className="text-xs py-1 [&>svg]:size-3.5"
-          onSelect={() => {
-            if (hasChildren) onStartDelegatedBulkSelection(session.id)
-            else if (session.parentSessionId) onStartDelegatedBulkSelection(session.parentSessionId, session.id)
-          }}
+          onSelect={() => onStartDelegatedBulkSelection(session.id)}
         >
           <ListChecks size={14} />
-          选择子会话
+          批量删除子会话
         </MenuItem>
       )}
       <MenuSeparator className="my-0.5" />

@@ -169,6 +169,7 @@ import {
   getSelectableDelegatedSessionIds,
   reconcileDelegatedSessionBulkSelection,
   selectAllDelegatedSessions,
+  shouldRenderDelegatedSessionBulkActions,
   shouldShowDelegatedSessionBulkDeleteAction,
   toggleDelegatedSessionBulkSelection,
   type DelegatedSessionBulkSelection,
@@ -647,6 +648,66 @@ function deleteSetEntry<T>(prev: Set<T>, value: T): Set<T> {
   const next = new Set(prev)
   next.delete(value)
   return next
+}
+
+interface DelegatedSessionBulkActionsProps {
+  selectedCount: number
+  selectableCount: number
+  allSelectableSelected: boolean
+  onCancel: () => void
+  onSelectAll: () => void
+  onDelete: () => void
+}
+
+function DelegatedSessionBulkActions({
+  selectedCount,
+  selectableCount,
+  allSelectableSelected,
+  onCancel,
+  onSelectAll,
+  onDelete,
+}: DelegatedSessionBulkActionsProps): React.ReactElement {
+  return (
+    <div className="rounded-xl bg-card p-2.5 shadow-[0_6px_22px_-12px_rgba(0,0,0,0.45)] titlebar-no-drag">
+      <div className="mb-2 flex items-center gap-2 px-1">
+        <ListChecks size={14} className="shrink-0 text-primary" />
+        <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-foreground/75">
+          已选 {selectedCount} 个子会话
+        </span>
+        <button
+          type="button"
+          aria-label="退出批量删除子会话"
+          onClick={onCancel}
+          className="flex size-6 items-center justify-center rounded-md text-foreground/40 hover:bg-foreground/[0.06] hover:text-foreground/70"
+        >
+          <X size={13} />
+        </button>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          aria-label={`全选 ${selectableCount} 个可删除子会话`}
+          disabled={selectableCount === 0 || allSelectableSelected}
+          onClick={onSelectAll}
+          className="h-8 min-w-0 flex-1 rounded-lg px-2 text-[11px] text-foreground/75"
+        >
+          全选
+        </Button>
+        <Button
+          type="button"
+          variant="destructive"
+          size="sm"
+          disabled={selectedCount === 0}
+          onClick={onDelete}
+          className="h-8 rounded-lg px-3 text-[11px]"
+        >
+          删除 {selectedCount} 个
+        </Button>
+      </div>
+    </div>
+  )
 }
 
 export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.ReactElement {
@@ -3137,11 +3198,29 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
               ),
             })
           }
+          if (shouldRenderDelegatedSessionBulkActions(delegatedBulkSelection, item.session.id)) {
+            rows.push({
+              id: `agent-archived-bulk-actions-${item.session.id}`,
+              estimateSize: 88,
+              content: (
+                <div className="ml-6 border-l border-foreground/10 pb-2 pl-2 pr-3 pt-1">
+                  <DelegatedSessionBulkActions
+                    selectedCount={delegatedBulkSelection.selectedIds.length}
+                    selectableCount={delegatedBulkSelectableIds.length}
+                    allSelectableSelected={delegatedBulkAllSelectableSelected}
+                    onCancel={cancelDelegatedBulkSelection}
+                    onSelectAll={handleSelectAllDelegatedSessions}
+                    onDelete={() => setBulkDeleteConfirmOpen(true)}
+                  />
+                </div>
+              ),
+            })
+          }
         }
       }
     }
     return rows
-  }, [activeDelegationSessionId, activeSessionId, agentIndicatorMap, archivedAgentSessionProjectGroups, collapsedDelegationParentIds, currentWorkspaceId, delegatedBulkBusyIds, delegatedBulkSelectedSet, delegatedBulkSelection, expandedArchivedProjectIds, expandedDelegationParentIds, handleAgentRename, handleRequestDelete, handleRequestMove, handleSelectAgentSession, handleStartDelegatedBulkSelection, handleToggleArchiveAgent, handleToggleArchivedProject, handleToggleDelegatedBulkSelection, handleToggleDelegationParent, handleTogglePinAgent, handleToggleStarAgent, relativeTimeNow, sessionHoverPreviewEnabled, workspaceNameMap])
+  }, [activeDelegationSessionId, activeSessionId, agentIndicatorMap, archivedAgentSessionProjectGroups, cancelDelegatedBulkSelection, collapsedDelegationParentIds, currentWorkspaceId, delegatedBulkAllSelectableSelected, delegatedBulkBusyIds, delegatedBulkSelectableIds, delegatedBulkSelectedSet, delegatedBulkSelection, expandedArchivedProjectIds, expandedDelegationParentIds, handleAgentRename, handleRequestDelete, handleRequestMove, handleSelectAgentSession, handleSelectAllDelegatedSessions, handleStartDelegatedBulkSelection, handleToggleArchiveAgent, handleToggleArchivedProject, handleToggleDelegatedBulkSelection, handleToggleDelegationParent, handleTogglePinAgent, handleToggleStarAgent, relativeTimeNow, sessionHoverPreviewEnabled, workspaceNameMap])
 
   const agentActiveVirtualRows = React.useMemo<VirtualSidebarRow[]>(() => {
     if (viewMode !== 'active') return []
@@ -3244,6 +3323,24 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                   onToggleStar={handleToggleStarAgent}
                   onToggleArchive={handleToggleArchiveAgent}
                   onStartDelegatedBulkSelection={handleStartDelegatedBulkSelection}
+                />
+              </div>
+            ),
+          })
+        }
+        if (shouldRenderDelegatedSessionBulkActions(delegatedBulkSelection, item.session.id)) {
+          rows.push({
+            id: `agent-bulk-actions-${item.session.id}`,
+            estimateSize: 88,
+            content: (
+              <div className="ml-7 border-l border-foreground/10 pb-2 pl-2 pr-3 pt-1">
+                <DelegatedSessionBulkActions
+                  selectedCount={delegatedBulkSelection.selectedIds.length}
+                  selectableCount={delegatedBulkSelectableIds.length}
+                  allSelectableSelected={delegatedBulkAllSelectableSelected}
+                  onCancel={cancelDelegatedBulkSelection}
+                  onSelectAll={handleSelectAllDelegatedSessions}
+                  onDelete={() => setBulkDeleteConfirmOpen(true)}
                 />
               </div>
             ),
@@ -3468,13 +3565,16 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     activeDelegationSessionId,
     activeSessionId,
     agentIndicatorMap,
+    cancelDelegatedBulkSelection,
     collapsedDelegationParentIds,
     collapsedWorkspaceIds,
     creatingProject,
     createAgentSessionInWorkspace,
     displayProjectGroups,
     dragProjectId,
+    delegatedBulkAllSelectableSelected,
     delegatedBulkBusyIds,
+    delegatedBulkSelectableIds,
     delegatedBulkSelectedSet,
     delegatedBulkSelection,
     expandedDelegationParentIds,
@@ -3493,6 +3593,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     handleRequestDeleteWorkspace,
     handleRequestMove,
     handleSelectAgentSession,
+    handleSelectAllDelegatedSessions,
     handleSelectProject,
     handleShowMoreSessions,
     handleStartDelegatedBulkSelection,
@@ -3982,47 +4083,6 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
             />
           )}
         </>
-      )}
-
-      {mode === 'agent' && delegatedBulkSelection && (
-        <div className="mx-3 mb-2 rounded-xl bg-card p-2.5 shadow-[0_6px_22px_-12px_rgba(0,0,0,0.45)] titlebar-no-drag">
-          <div className="mb-2 flex items-center gap-2 px-1">
-            <ListChecks size={14} className="shrink-0 text-primary" />
-            <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-foreground/75">
-              已选 {delegatedBulkSelection.selectedIds.length} 个
-            </span>
-            <button
-              type="button"
-              aria-label="退出批量删除子会话"
-              onClick={cancelDelegatedBulkSelection}
-              className="flex size-6 items-center justify-center rounded-md text-foreground/40 hover:bg-foreground/[0.06] hover:text-foreground/70"
-            >
-              <X size={13} />
-            </button>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={delegatedBulkSelectableIds.length === 0 || delegatedBulkAllSelectableSelected}
-              onClick={handleSelectAllDelegatedSessions}
-              className="h-8 min-w-0 flex-1 rounded-lg px-2 text-[11px] text-foreground/75"
-            >
-              {delegatedBulkAllSelectableSelected ? '已全选' : `全选可删除（${delegatedBulkSelectableIds.length}）`}
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              size="sm"
-              disabled={delegatedBulkSelection.selectedIds.length === 0}
-              onClick={() => setBulkDeleteConfirmOpen(true)}
-              className="h-8 rounded-lg px-3 text-[11px]"
-            >
-              删除 {delegatedBulkSelection.selectedIds.length} 个
-            </Button>
-          </div>
-        </div>
       )}
 
       {/* 已归档入口 / 返回活跃对话 */}

@@ -16,6 +16,13 @@ export function shouldShowDelegatedSessionBulkDeleteAction(childCount: number): 
   return childCount >= 2
 }
 
+export function shouldRenderDelegatedSessionBulkActions(
+  selection: DelegatedSessionBulkSelection | null,
+  parentSessionId: string,
+): selection is DelegatedSessionBulkSelection {
+  return selection?.parentSessionId === parentSessionId
+}
+
 function directChildIds(
   parentSessionId: string,
   sessions: readonly DelegatedChildCandidate[],

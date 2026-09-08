@@ -4,6 +4,7 @@ import {
   getSelectableDelegatedSessionIds,
   reconcileDelegatedSessionBulkSelection,
   selectAllDelegatedSessions,
+  shouldRenderDelegatedSessionBulkActions,
   shouldShowDelegatedSessionBulkDeleteAction,
   toggleDelegatedSessionBulkSelection,
   type DelegatedChildCandidate,
@@ -19,6 +20,14 @@ describe('委派子会话批量选择', () => {
     expect(shouldShowDelegatedSessionBulkDeleteAction(1)).toBe(false)
     expect(shouldShowDelegatedSessionBulkDeleteAction(2)).toBe(true)
     expect(shouldShowDelegatedSessionBulkDeleteAction(3)).toBe(true)
+  })
+
+  test('Given 已进入某个父会话的批量删除模式 When 渲染会话树 Then 操作条只跟随该父会话', () => {
+    const selection = createDelegatedSessionBulkSelection('parent-a', [child('one'), child('two')])
+
+    expect(shouldRenderDelegatedSessionBulkActions(selection, 'parent-a')).toBe(true)
+    expect(shouldRenderDelegatedSessionBulkActions(selection, 'parent-b')).toBe(false)
+    expect(shouldRenderDelegatedSessionBulkActions(null, 'parent-a')).toBe(false)
   })
 
   test('Given 混合父级和普通会话 When 进入模式 Then 只快照当前父级的直接委派子会话', () => {

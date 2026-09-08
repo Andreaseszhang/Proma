@@ -291,6 +291,47 @@ describe('Agent 会话 runtime 元数据', () => {
   })
 })
 
+describe('Agent 会话批量删除', () => {
+  test('Given 多个会话和重复 ID When 批量删除 Then 一次移除存在项并清理消息与工作目录', () => {
+    writeAgentWorkspacesIndex([
+      { id: 'workspace-a', name: '工作区 A', slug: 'workspace-a', createdAt: 1, updatedAt: 1 },
+    ])
+    writeAgentSessionsIndex([
+      { id: 'delete-one', title: '删除一', workspaceId: 'workspace-a', createdAt: 1, updatedAt: 1 },
+      { id: 'keep', title: '保留', workspaceId: 'workspace-a', createdAt: 2, updatedAt: 2 },
+      { id: 'delete-two', title: '删除二', workspaceId: 'workspace-a', createdAt: 3, updatedAt: 3 },
+    ])
+    writeAgentSessionJsonl('delete-one', [JSON.stringify({ type: 'user', message: { content: [] } })])
+    writeAgentSessionJsonl('delete-two', [JSON.stringify({ type: 'user', message: { content: [] } })])
+    const firstWorkspace = join(tempHome, '.proma', 'agent-workspaces', 'workspace-a', 'delete-one')
+    const secondWorkspace = join(tempHome, '.proma', 'agent-workspaces', 'workspace-a', 'delete-two')
+    mkdirSync(firstWorkspace, { recursive: true })
+    mkdirSync(secondWorkspace, { recursive: true })
+
+    const result = manager.deleteAgentSessions(['delete-one', 'missing', 'delete-two', 'delete-one'])
+
+    expect(result.deleted.map((item) => item.session.id)).toEqual(['delete-one', 'delete-two'])
+    expect(result.notFoundIds).toEqual(['missing'])
+    expect(result.deleted.every((item) => item.warnings.length === 0)).toBe(true)
+    expect(manager.listAgentSessions().map((session) => session.id)).toEqual(['keep'])
+    expect(existsSync(join(tempHome, '.proma', 'agent-sessions', 'delete-one.jsonl'))).toBe(false)
+    expect(existsSync(join(tempHome, '.proma', 'agent-sessions', 'delete-two.jsonl'))).toBe(false)
+    expect(existsSync(firstWorkspace)).toBe(false)
+    expect(existsSync(secondWorkspace)).toBe(false)
+  })
+
+  test('Given 全部 ID 不存在 When 批量删除 Then 不改变索引并返回去重后的不存在项', () => {
+    writeAgentSessionsIndex([
+      { id: 'keep-only', title: '保留', workspaceId: 'workspace-a', createdAt: 1, updatedAt: 1 },
+    ])
+
+    const result = manager.deleteAgentSessions(['missing', 'missing'])
+
+    expect(result).toEqual({ deleted: [], notFoundIds: ['missing'] })
+    expect(manager.listAgentSessions().map((session) => session.id)).toEqual(['keep-only'])
+  })
+})
+
 describe('Agent 会话正文搜索', () => {
   test('Given 用户/助手正文和内部块 When 搜索 Then 只返回最多两个不同正文消息命中', async () => {
     writeAgentSessionsIndex([{

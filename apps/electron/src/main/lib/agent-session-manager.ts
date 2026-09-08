@@ -622,49 +622,88 @@ export function updateAgentSessionMeta(
   return updated
 }
 
+export interface DeletedAgentSessionRecord {
+  session: AgentSessionMeta
+  warnings: string[]
+}
+
+export interface DeleteAgentSessionsResult {
+  deleted: DeletedAgentSessionRecord[]
+  notFoundIds: string[]
+}
+
 /**
- * 删除会话
+ * 一次提交多个会话的索引删除，再逐项 best-effort 清理消息与工作目录。
+ * 索引写入失败时不会提前删除任何会话文件。
  */
-export function deleteAgentSession(id: string): void {
+export function deleteAgentSessions(ids: readonly string[]): DeleteAgentSessionsResult {
+  const requestedIds = [...new Set(ids)]
+  if (requestedIds.length === 0) return { deleted: [], notFoundIds: [] }
+
   const index = readIndex()
-  const idx = index.sessions.findIndex((s) => s.id === id)
+  const requestedSet = new Set(requestedIds)
+  const removedById = new Map(
+    index.sessions
+      .filter((session) => requestedSet.has(session.id))
+      .map((session) => [session.id, session] as const),
+  )
+  const notFoundIds = requestedIds.filter((id) => !removedById.has(id))
 
-  if (idx === -1) {
-    console.warn(`[Agent 会话] 会话不存在，跳过删除: ${id}`)
-    return
+  if (removedById.size === 0) {
+    for (const id of notFoundIds) console.warn(`[Agent 会话] 会话不存在，跳过删除: ${id}`)
+    return { deleted: [], notFoundIds }
   }
 
-  const removed = index.sessions.splice(idx, 1)[0]!
-  writeIndex(index)
-
-  // 删除消息文件
-  const filePath = getAgentSessionMessagesPath(id)
-  if (existsSync(filePath)) {
-    try {
-      unlinkSync(filePath)
-    } catch (error) {
-      console.warn(`[Agent 会话] 删除消息文件失败 (${id}):`, error)
-    }
+  const nextIndex: AgentSessionsIndex = {
+    ...index,
+    sessions: index.sessions.filter((session) => !removedById.has(session.id)),
   }
+  writeIndex(nextIndex)
 
-  // 清理 session 工作目录
-  if (removed.workspaceId) {
-    const ws = getAgentWorkspace(removed.workspaceId)
-    if (ws) {
+  const deleted = requestedIds.flatMap((id): DeletedAgentSessionRecord[] => {
+    const removed = removedById.get(id)
+    if (!removed) return []
+    const warnings: string[] = []
+
+    const filePath = getAgentSessionMessagesPath(id)
+    if (existsSync(filePath)) {
       try {
-        const sessionDir = getAgentSessionWorkspacePath(ws.slug, id)
-        if (existsSync(sessionDir)) {
-          rmSyncWithRetry(sessionDir, { recursive: true, force: true })
-          console.log(`[Agent 会话] 已清理 session 工作目录: ${sessionDir}`)
-        }
+        unlinkSync(filePath)
       } catch (error) {
-        console.warn(`[Agent 会话] 清理 session 工作目录失败 (${id}):`, error)
+        const message = `删除消息文件失败: ${error instanceof Error ? error.message : String(error)}`
+        warnings.push(message)
+        console.warn(`[Agent 会话] ${message} (${id})`)
       }
     }
-  }
 
-  console.log(`[Agent 会话] 已删除会话: ${removed.title} (${removed.id})`)
+    if (removed.workspaceId) {
+      const workspace = getAgentWorkspace(removed.workspaceId)
+      if (workspace) {
+        try {
+          const sessionDir = getAgentSessionWorkspacePath(workspace.slug, id)
+          if (existsSync(sessionDir)) {
+            rmSyncWithRetry(sessionDir, { recursive: true, force: true })
+            console.log(`[Agent 会话] 已清理 session 工作目录: ${sessionDir}`)
+          }
+        } catch (error) {
+          const message = `清理 session 工作目录失败: ${error instanceof Error ? error.message : String(error)}`
+          warnings.push(message)
+          console.warn(`[Agent 会话] ${message} (${id})`)
+        }
+      }
+    }
 
+    console.log(`[Agent 会话] 已删除会话: ${removed.title} (${removed.id})`)
+    return [{ session: removed, warnings }]
+  })
+
+  for (const id of notFoundIds) console.warn(`[Agent 会话] 会话不存在，跳过删除: ${id}`)
+  return { deleted, notFoundIds }
+}
+
+/** 删除单个会话。 */
+export function deleteAgentSession(id: string): void {
+  deleteAgentSessions([id])
 }
 
 /**

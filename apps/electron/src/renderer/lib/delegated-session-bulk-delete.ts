@@ -16,6 +16,32 @@ export function shouldShowDelegatedSessionBulkDeleteAction(childCount: number): 
   return childCount >= 2
 }
 
+export interface DelegatedSessionBulkDeleteActionTarget {
+  parentSessionId: string
+  preselectedSessionId?: string
+}
+
+export function getDelegatedSessionBulkDeleteActionTarget(
+  session: DelegatedChildCandidate,
+  directChildCount: number,
+  siblingCount = 0,
+): DelegatedSessionBulkDeleteActionTarget | null {
+  if (shouldShowDelegatedSessionBulkDeleteAction(directChildCount)) {
+    return { parentSessionId: session.id }
+  }
+  if (
+    session.parentSessionId
+    && session.sourceDelegationId
+    && shouldShowDelegatedSessionBulkDeleteAction(siblingCount)
+  ) {
+    return {
+      parentSessionId: session.parentSessionId,
+      preselectedSessionId: session.id,
+    }
+  }
+  return null
+}
+
 export function shouldRenderDelegatedSessionBulkActions(
   selection: DelegatedSessionBulkSelection | null,
   parentSessionId: string,

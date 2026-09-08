@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import {
   createDelegatedSessionBulkSelection,
+  getDelegatedSessionBulkDeleteActionTarget,
   getSelectableDelegatedSessionIds,
   reconcileDelegatedSessionBulkSelection,
   selectAllDelegatedSessions,
@@ -20,6 +21,24 @@ describe('委派子会话批量选择', () => {
     expect(shouldShowDelegatedSessionBulkDeleteAction(1)).toBe(false)
     expect(shouldShowDelegatedSessionBulkDeleteAction(2)).toBe(true)
     expect(shouldShowDelegatedSessionBulkDeleteAction(3)).toBe(true)
+  })
+
+  test('Given 父会话或其直接子会话的三点菜单 When 判断批量删除入口 Then 都指向同一父级且子行预选自身', () => {
+    expect(getDelegatedSessionBulkDeleteActionTarget(
+      { id: 'parent-a' },
+      2,
+    )).toEqual({ parentSessionId: 'parent-a' })
+    expect(getDelegatedSessionBulkDeleteActionTarget(
+      child('child-a'),
+      0,
+      2,
+    )).toEqual({ parentSessionId: 'parent-a', preselectedSessionId: 'child-a' })
+    expect(getDelegatedSessionBulkDeleteActionTarget(child('child-a'), 0, 1)).toBeNull()
+    expect(getDelegatedSessionBulkDeleteActionTarget(
+      { id: 'plain-child', parentSessionId: 'parent-a' },
+      0,
+      2,
+    )).toBeNull()
   })
 
   test('Given 已进入某个父会话的批量删除模式 When 渲染会话树 Then 操作条只跟随该父会话', () => {

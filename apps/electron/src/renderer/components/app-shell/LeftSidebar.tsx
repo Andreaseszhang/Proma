@@ -166,6 +166,7 @@ import {
 import { clearSessionReferenceDragState, insertSessionReferenceMention, setSessionReferenceDragData } from '@/lib/session-reference-drag'
 import {
   createDelegatedSessionBulkSelection,
+  getDelegatedSessionBulkDeleteActionTarget,
   getSelectableDelegatedSessionIds,
   reconcileDelegatedSessionBulkSelection,
   selectAllDelegatedSessions,
@@ -3178,6 +3179,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                     agentIndicatorMap={agentIndicatorMap}
                     relativeTimeNow={relativeTimeNow}
                     workspaceName={childSession.workspaceId ? workspaceNameMap.get(childSession.workspaceId) : undefined}
+                    delegatedSiblingCount={childCount}
                     bulkSelection={delegatedBulkSelection?.parentSessionId === item.session.id
                       ? {
                         selected: delegatedBulkSelectedSet.has(childSession.id),
@@ -3308,6 +3310,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                   agentIndicatorMap={agentIndicatorMap}
                   relativeTimeNow={relativeTimeNow}
                   workspaceName={isAutomationGroup && childSession.workspaceId ? workspaceNameMapForRow?.get(childSession.workspaceId) : undefined}
+                  delegatedSiblingCount={childCount}
                   bulkSelection={delegatedBulkSelection?.parentSessionId === item.session.id
                     ? {
                       selected: delegatedBulkSelectedSet.has(childSession.id),
@@ -4611,6 +4614,8 @@ interface AgentSessionItemProps {
     expanded: boolean
     onToggle: () => void
   }
+  /** 子会话所属父级在当前视图中的直接子会话数量，用于控制子行批量删除入口。 */
+  delegatedSiblingCount?: number
   bulkSelection?: {
     selected: boolean
     disabled: boolean
@@ -4640,6 +4645,7 @@ const AgentSessionItem = React.memo(function AgentSessionItem({
   indicatorStatus,
   showPinIcon,
   delegationSummary,
+  delegatedSiblingCount,
   bulkSelection,
   leftAccent,
   disableMiniMap,
@@ -4722,6 +4728,11 @@ const AgentSessionItem = React.memo(function AgentSessionItem({
 
   const childCount = delegationSummary?.total ?? 0
   const hasChildren = childCount > 0
+  const delegatedBulkDeleteTarget = getDelegatedSessionBulkDeleteActionTarget(
+    session,
+    childCount,
+    delegatedSiblingCount,
+  )
   const pinLabel = session.pinned ? '取消置顶' : '置顶会话'
   const cascadePinLabel = session.pinned
     ? `取消置顶(含 ${childCount} 个子会话)`
@@ -4758,10 +4769,13 @@ const AgentSessionItem = React.memo(function AgentSessionItem({
           </TooltipContent>
         </Tooltip>
       </MenuItem>
-      {onStartDelegatedBulkSelection && shouldShowDelegatedSessionBulkDeleteAction(childCount) && (
+      {onStartDelegatedBulkSelection && delegatedBulkDeleteTarget && (
         <MenuItem
           className="text-xs py-1 [&>svg]:size-3.5"
-          onSelect={() => onStartDelegatedBulkSelection(session.id)}
+          onSelect={() => onStartDelegatedBulkSelection(
+            delegatedBulkDeleteTarget.parentSessionId,
+            delegatedBulkDeleteTarget.preselectedSessionId,
+          )}
         >
           <ListChecks size={14} />
           批量删除子会话
@@ -5052,6 +5066,7 @@ interface DelegatedChildSessionItemProps {
   agentIndicatorMap: Map<string, SessionIndicatorStatus>
   relativeTimeNow: number
   workspaceName?: string
+  delegatedSiblingCount: number
   bulkSelection?: AgentSessionItemProps['bulkSelection']
   onSelect: (id: string, title: string) => void
   onRequestDelete: (id: string) => void
@@ -5070,6 +5085,7 @@ const DelegatedChildSessionItem = React.memo(function DelegatedChildSessionItem(
   agentIndicatorMap,
   relativeTimeNow,
   workspaceName,
+  delegatedSiblingCount,
   bulkSelection,
   onSelect,
   onRequestDelete,
@@ -5091,6 +5107,7 @@ const DelegatedChildSessionItem = React.memo(function DelegatedChildSessionItem(
       active={highlighted}
       indicatorStatus={status}
       disableMiniMap={!sessionHoverPreviewEnabled}
+      delegatedSiblingCount={delegatedSiblingCount}
       bulkSelection={bulkSelection}
       relativeTimeNow={relativeTimeNow}
       workspaceName={workspaceName}
@@ -5566,6 +5583,7 @@ const AgentProjectGroupItem = React.memo(function AgentProjectGroupItem({
                             agentIndicatorMap={agentIndicatorMap}
                             relativeTimeNow={relativeTimeNow}
                             workspaceName={isAutomationGroup && childSession.workspaceId ? workspaceNameMap?.get(childSession.workspaceId) : undefined}
+                            delegatedSiblingCount={childCount}
                             onSelect={onSelectSession}
                             onRequestDelete={onRequestDelete}
                             onRequestMove={onRequestMove}

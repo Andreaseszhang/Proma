@@ -98,6 +98,8 @@
   :root {
     --background: 0 0% 100%;
     --foreground: 0 0% 3.9%;
+    /* 侧栏主文字：中性炭黑，避免特色浅色主题将密集列表染成低对比色。 */
+    --sidebar-primary-foreground: 0 0% 17%;
     --muted: 0 0% 96.1%;
     --muted-foreground: 0 0% 45.1%;
     --border: 0 0% 89.8%;
@@ -143,6 +145,7 @@
   .dark {
     --background: 0 0% 10%;                /* 侧栏锚点，略亮于内容区 */
     --foreground: 0 0% 98%;
+    --sidebar-primary-foreground: 0 0% 96%;
     --muted: 0 0% 17%;
     --muted-foreground: 0 0% 63.9%;
     --border: 0 0% 22%;

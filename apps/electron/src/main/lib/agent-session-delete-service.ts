@@ -10,7 +10,7 @@ export interface AgentSessionDeleteDependencies {
   listSessions: () => AgentSessionMeta[]
   isBusy: (sessionId: string) => boolean
   teardown: (sessionId: string) => Promise<void>
-  deleteRecords: (sessionIds: readonly string[]) => DeleteAgentSessionsResult
+  deleteRecords: (sessionIds: readonly string[]) => Promise<DeleteAgentSessionsResult>
   afterDelete: (session: AgentSessionMeta) => void
 }
 
@@ -87,7 +87,7 @@ export async function deleteDelegatedSessions(
   }
 
   // 所有异步 teardown 完成后统一重检，避免较早准备好的会话在等待后续 teardown 时重新启动。
-  // 从这里到同步 deleteRecords() 提交之间不得插入 await。
+  // deleteRecords() 在首个 await 前同步提交 metadata；提交前不得插入 await。
   const latestSessions = dependencies.listSessions()
   const latestSessionsById = new Map(latestSessions.map((session) => [session.id, session] as const))
   const latestDelegatedParentIds = new Set(latestSessions
@@ -113,7 +113,9 @@ export async function deleteDelegatedSessions(
 
   if (commitIds.length > 0) {
     try {
-      const deletion = dependencies.deleteRecords(commitIds)
+      // deleteRecords() 会先同步提交 metadata，再异步、限并发清理外围文件；
+      // 因此这里的 await 不会在 metadata 原子提交前打开 TOCTOU 窗口。
+      const deletion = await dependencies.deleteRecords(commitIds)
       const deletedById = new Map(deletion.deleted.map((item) => [item.session.id, item] as const))
       const missingAfterPreflight = new Set(deletion.notFoundIds)
 

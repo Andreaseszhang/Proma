@@ -292,7 +292,7 @@ describe('Agent 会话 runtime 元数据', () => {
 })
 
 describe('Agent 会话批量删除', () => {
-  test('Given 多个会话和重复 ID When 批量删除 Then 一次移除存在项并清理消息与工作目录', () => {
+  test('Given 多个会话和重复 ID When 批量删除 Then 先原子移除索引并异步清理消息与工作目录', async () => {
     writeAgentWorkspacesIndex([
       { id: 'workspace-a', name: '工作区 A', slug: 'workspace-a', createdAt: 1, updatedAt: 1 },
     ])
@@ -308,8 +308,12 @@ describe('Agent 会话批量删除', () => {
     mkdirSync(firstWorkspace, { recursive: true })
     mkdirSync(secondWorkspace, { recursive: true })
 
-    const result = manager.deleteAgentSessions(['delete-one', 'missing', 'delete-two', 'delete-one'])
+    const deletion = manager.deleteAgentSessions(['delete-one', 'missing', 'delete-two', 'delete-one'])
 
+    // 索引提交发生在异步清理开始前，避免把大目录删除置于主进程同步路径上。
+    expect(manager.listAgentSessions().map((session) => session.id)).toEqual(['keep'])
+
+    const result = await deletion
     expect(result.deleted.map((item) => item.session.id)).toEqual(['delete-one', 'delete-two'])
     expect(result.notFoundIds).toEqual(['missing'])
     expect(result.deleted.every((item) => item.warnings.length === 0)).toBe(true)
@@ -320,12 +324,12 @@ describe('Agent 会话批量删除', () => {
     expect(existsSync(secondWorkspace)).toBe(false)
   })
 
-  test('Given 全部 ID 不存在 When 批量删除 Then 不改变索引并返回去重后的不存在项', () => {
+  test('Given 全部 ID 不存在 When 批量删除 Then 不改变索引并返回去重后的不存在项', async () => {
     writeAgentSessionsIndex([
       { id: 'keep-only', title: '保留', workspaceId: 'workspace-a', createdAt: 1, updatedAt: 1 },
     ])
 
-    const result = manager.deleteAgentSessions(['missing', 'missing'])
+    const result = await manager.deleteAgentSessions(['missing', 'missing'])
 
     expect(result).toEqual({ deleted: [], notFoundIds: ['missing'] })
     expect(manager.listAgentSessions().map((session) => session.id)).toEqual(['keep-only'])

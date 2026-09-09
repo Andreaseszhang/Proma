@@ -45,7 +45,7 @@ function dependencies(options: {
       tornDown.push(id)
       if (teardownFailureIds.has(id)) throw new Error('teardown failed')
     },
-    deleteRecords: (ids) => {
+    deleteRecords: async (ids) => {
       deletedBatches.push([...ids])
       return {
         deleted: ids.map((id) => ({ session: options.sessions.find((item) => item.id === id)!, warnings: [] })),

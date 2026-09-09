@@ -4816,12 +4816,17 @@ const AgentSessionItem = React.memo(function AgentSessionItem({
           <ContextMenuTrigger asChild>
             <div
               ref={preview.setAnchorRef}
-              role="button"
+              role={bulkSelection ? 'checkbox' : 'button'}
               tabIndex={0}
+              aria-checked={bulkSelection ? bulkSelection.selected : undefined}
+              aria-disabled={bulkSelection ? bulkSelection.disabled : undefined}
+              aria-label={bulkSelection
+                ? `${bulkSelection.selected ? '取消选择' : '选择'}子会话「${session.title}」`
+                : undefined}
               data-session-switch-id={session.id}
               data-session-switch-title={session.title}
               data-session-switch-type="agent"
-          title={bulkSelection?.disabled ? '运行中或等待处理的子会话需先停止才能删除' : undefined}
+              title={bulkSelection?.disabled ? '运行中或等待处理的子会话需先停止才能删除' : undefined}
           draggable={!editing && !bulkSelection}
           onDragStart={(event) => {
             const target = event.target as HTMLElement
@@ -4838,13 +4843,16 @@ const AgentSessionItem = React.memo(function AgentSessionItem({
           }}
           onDragEnd={clearSessionReferenceDragState}
           onClick={() => {
-            if (bulkSelection) bulkSelection.onToggle()
-            else onSelect(session.id, session.title)
+            if (bulkSelection) {
+              if (!bulkSelection.disabled) bulkSelection.onToggle()
+            } else {
+              onSelect(session.id, session.title)
+            }
           }}
           onKeyDown={(event) => {
             if (!bulkSelection || (event.key !== ' ' && event.key !== 'Enter')) return
             event.preventDefault()
-            bulkSelection.onToggle()
+            if (!bulkSelection.disabled) bulkSelection.onToggle()
           }}
           onContextMenu={(event) => {
             if (bulkSelection) event.preventDefault()
@@ -4877,26 +4885,17 @@ const AgentSessionItem = React.memo(function AgentSessionItem({
             />
           )}
           {bulkSelection && (
-            <button
-              type="button"
-              role="checkbox"
-              aria-checked={bulkSelection.selected}
-              aria-disabled={bulkSelection.disabled}
-              aria-label={`${bulkSelection.selected ? '取消选择' : '选择'}子会话「${session.title}」`}
-              disabled={bulkSelection.disabled}
-              onClick={(event) => {
-                event.stopPropagation()
-                bulkSelection.onToggle()
-              }}
+            <span
+              aria-hidden="true"
               className={cn(
-                'flex size-4 shrink-0 items-center justify-center rounded border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                'flex size-4 shrink-0 items-center justify-center rounded border transition-colors',
                 bulkSelection.selected
                   ? 'border-primary bg-primary text-primary-foreground'
                   : 'border-foreground/25 bg-background/60 text-transparent',
               )}
             >
               <Check size={11} strokeWidth={3} />
-            </button>
+            </span>
           )}
           <div className="flex-1 min-w-0">
             {editing ? (

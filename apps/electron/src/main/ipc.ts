@@ -2743,7 +2743,7 @@ export function registerIpcHandlers(): void {
         throw new Error('会话状态已变化，请先停止后再删除')
       }
       closeTerminalsForSession(id)
-      deleteAgentSession(id)
+      await deleteAgentSession(id)
       cleanupDeletedAgentSessionRuntime(session)
     }
   )
@@ -3029,7 +3029,7 @@ export function registerIpcHandlers(): void {
           stopAgent(sessionId)
         }
         closeTerminalsForSession(sessionId)
-        deleteAgentSession(sessionId)
+        await deleteAgentSession(sessionId)
       }
       for (const automationId of affectedAutomationIds) {
         deleteAutomation(automationId)

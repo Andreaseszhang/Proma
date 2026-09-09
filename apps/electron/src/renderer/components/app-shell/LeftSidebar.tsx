@@ -693,7 +693,7 @@ function DelegatedSessionBulkActions({
           aria-label={`全选 ${selectableCount} 个可删除子会话`}
           disabled={selectableCount === 0 || allSelectableSelected}
           onClick={onSelectAll}
-          className="h-8 min-w-0 flex-1 rounded-lg px-2 text-[11px] text-foreground/75"
+          className="h-8 flex-1 rounded-lg px-2 text-[11px] text-foreground/75"
         >
           全选
         </Button>
@@ -703,7 +703,7 @@ function DelegatedSessionBulkActions({
           size="sm"
           disabled={selectedCount === 0}
           onClick={onDelete}
-          className="h-8 rounded-lg px-3 text-[11px]"
+          className="h-8 flex-1 rounded-lg px-2 text-[11px]"
         >
           删除 {selectedCount} 个
         </Button>
@@ -5035,7 +5035,7 @@ const AgentSessionItem = React.memo(function AgentSessionItem({
             sideOffset={12}
             collisionPadding={12}
             onOpenAutoFocus={(event) => event.preventDefault()}
-            className="z-[110] w-[21rem] border-0 bg-transparent p-0 shadow-none"
+            className="z-[110] w-64 border-0 bg-transparent p-0 shadow-none"
           >
             <DelegatedSessionBulkActions {...delegatedBulkActions} />
           </PopoverContent>

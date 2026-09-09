@@ -470,6 +470,8 @@
     /* 基础色 — 现代布局会让内容区铺满屏幕，避免沿用极暗底导致整体发黑 */
     --background: 100 6% 5%;              /* #0d0e0c 侧边栏 */
     --foreground: 90 20% 65%;             /* #acb09f 暖黄绿白 */
+    /* 保持侧栏新主文字 token 与 CRT 磷光色和现有侧栏文字一致。 */
+    --sidebar-primary-foreground: 90 25% 75%;
     --content-area: 100 6% 6%;            /* #0f100e 内容区：比旧版回调再提亮 1% */
     --sidebar-surface: 100 6% 5%;
     --tabbar-surface: 100 6% 5%;
@@ -2102,6 +2104,7 @@
   .theme-terminal-dark [class*="text-foreground"],
   .theme-terminal-dark .crt-sidebar .text-foreground,
   .theme-terminal-dark .crt-sidebar [class*="text-foreground"],
+  .theme-terminal-dark .crt-sidebar [class*="sidebar-primary-foreground"],
   .theme-terminal-dark .model-selector-trigger,
   .theme-terminal-dark .text-primary,
   .theme-terminal-dark [class*="text-primary"] {
@@ -2117,7 +2120,8 @@
 
 /* 侧边栏文字提亮 + 独立辉光 */
 .theme-terminal-dark .crt-sidebar .text-foreground,
-.theme-terminal-dark .crt-sidebar [class*="text-foreground"] {
+.theme-terminal-dark .crt-sidebar [class*="text-foreground"],
+.theme-terminal-dark .crt-sidebar [class*="sidebar-primary-foreground"] {
   color: hsl(90 25% 75%);
   text-shadow: 0 0 3.3px hsl(90 25% 55% / 0.18), 0 0 1.5px hsl(90 25% 55% / 0.28);
 }

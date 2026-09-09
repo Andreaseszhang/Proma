@@ -186,6 +186,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
+import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import {
   ContextMenu,
   ContextMenuTrigger,
@@ -3149,6 +3150,16 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                   : undefined}
                 leftAccent={getSessionLeftAccent(rowStatus)}
                 workspaceName={item.session.workspaceId ? workspaceNameMap.get(item.session.workspaceId) : undefined}
+                delegatedBulkActions={shouldRenderDelegatedSessionBulkActions(delegatedBulkSelection, item.session.id)
+                  ? {
+                    selectedCount: delegatedBulkSelection.selectedIds.length,
+                    selectableCount: delegatedBulkSelectableIds.length,
+                    allSelectableSelected: delegatedBulkAllSelectableSelected,
+                    onCancel: cancelDelegatedBulkSelection,
+                    onSelectAll: handleSelectAllDelegatedSessions,
+                    onDelete: () => setBulkDeleteConfirmOpen(true),
+                  }
+                  : undefined}
                 relativeTimeNow={relativeTimeNow}
                 onSelect={handleSelectAgentSession}
                 onRequestDelete={handleRequestDelete}
@@ -3195,24 +3206,6 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                     onToggleStar={handleToggleStarAgent}
                     onToggleArchive={handleToggleArchiveAgent}
                     onStartDelegatedBulkSelection={handleStartDelegatedBulkSelection}
-                  />
-                </div>
-              ),
-            })
-          }
-          if (shouldRenderDelegatedSessionBulkActions(delegatedBulkSelection, item.session.id)) {
-            rows.push({
-              id: `agent-archived-bulk-actions-${item.session.id}`,
-              estimateSize: 88,
-              content: (
-                <div className="ml-6 border-l border-foreground/10 pb-2 pl-2 pr-3 pt-1">
-                  <DelegatedSessionBulkActions
-                    selectedCount={delegatedBulkSelection.selectedIds.length}
-                    selectableCount={delegatedBulkSelectableIds.length}
-                    allSelectableSelected={delegatedBulkAllSelectableSelected}
-                    onCancel={cancelDelegatedBulkSelection}
-                    onSelectAll={handleSelectAllDelegatedSessions}
-                    onDelete={() => setBulkDeleteConfirmOpen(true)}
                   />
                 </div>
               ),
@@ -3274,6 +3267,16 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                 : undefined}
               leftAccent={getSessionLeftAccent(rowStatus)}
               workspaceName={isAutomationGroup && item.session.workspaceId ? workspaceNameMapForRow?.get(item.session.workspaceId) : undefined}
+              delegatedBulkActions={shouldRenderDelegatedSessionBulkActions(delegatedBulkSelection, item.session.id)
+                ? {
+                  selectedCount: delegatedBulkSelection.selectedIds.length,
+                  selectableCount: delegatedBulkSelectableIds.length,
+                  allSelectableSelected: delegatedBulkAllSelectableSelected,
+                  onCancel: cancelDelegatedBulkSelection,
+                  onSelectAll: handleSelectAllDelegatedSessions,
+                  onDelete: () => setBulkDeleteConfirmOpen(true),
+                }
+                : undefined}
               relativeTimeNow={relativeTimeNow}
               onSelect={handleSelectAgentSession}
               onRequestDelete={handleRequestDelete}
@@ -3326,24 +3329,6 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                   onToggleStar={handleToggleStarAgent}
                   onToggleArchive={handleToggleArchiveAgent}
                   onStartDelegatedBulkSelection={handleStartDelegatedBulkSelection}
-                />
-              </div>
-            ),
-          })
-        }
-        if (shouldRenderDelegatedSessionBulkActions(delegatedBulkSelection, item.session.id)) {
-          rows.push({
-            id: `agent-bulk-actions-${item.session.id}`,
-            estimateSize: 88,
-            content: (
-              <div className="ml-7 border-l border-foreground/10 pb-2 pl-2 pr-3 pt-1">
-                <DelegatedSessionBulkActions
-                  selectedCount={delegatedBulkSelection.selectedIds.length}
-                  selectableCount={delegatedBulkSelectableIds.length}
-                  allSelectableSelected={delegatedBulkAllSelectableSelected}
-                  onCancel={cancelDelegatedBulkSelection}
-                  onSelectAll={handleSelectAllDelegatedSessions}
-                  onDelete={() => setBulkDeleteConfirmOpen(true)}
                 />
               </div>
             ),
@@ -4616,6 +4601,8 @@ interface AgentSessionItemProps {
   }
   /** 子会话所属父级在当前视图中的直接子会话数量，用于控制子行批量删除入口。 */
   delegatedSiblingCount?: number
+  /** 当前父会话已进入批量删除模式时，显示在父行右侧的操作浮层。 */
+  delegatedBulkActions?: DelegatedSessionBulkActionsProps
   bulkSelection?: {
     selected: boolean
     disabled: boolean
@@ -4646,6 +4633,7 @@ const AgentSessionItem = React.memo(function AgentSessionItem({
   showPinIcon,
   delegationSummary,
   delegatedSiblingCount,
+  delegatedBulkActions,
   bulkSelection,
   leftAccent,
   disableMiniMap,
@@ -4823,14 +4811,16 @@ const AgentSessionItem = React.memo(function AgentSessionItem({
 
   return (
     <ContextMenu>
-      <ContextMenuTrigger asChild>
-        <div
-          ref={preview.setAnchorRef}
-          role="button"
-          tabIndex={0}
-          data-session-switch-id={session.id}
-          data-session-switch-title={session.title}
-          data-session-switch-type="agent"
+      <Popover open={!!delegatedBulkActions}>
+        <PopoverAnchor asChild>
+          <ContextMenuTrigger asChild>
+            <div
+              ref={preview.setAnchorRef}
+              role="button"
+              tabIndex={0}
+              data-session-switch-id={session.id}
+              data-session-switch-title={session.title}
+              data-session-switch-type="agent"
           title={bulkSelection?.disabled ? '运行中或等待处理的子会话需先停止才能删除' : undefined}
           draggable={!editing && !bulkSelection}
           onDragStart={(event) => {
@@ -5035,8 +5025,22 @@ const AgentSessionItem = React.memo(function AgentSessionItem({
               <SessionQuickSwitchKeycap />
             </>
           )}
-        </div>
-      </ContextMenuTrigger>
+            </div>
+          </ContextMenuTrigger>
+        </PopoverAnchor>
+        {delegatedBulkActions && (
+          <PopoverContent
+            side="right"
+            align="start"
+            sideOffset={12}
+            collisionPadding={12}
+            onOpenAutoFocus={(event) => event.preventDefault()}
+            className="z-[110] w-[21rem] border-0 bg-transparent p-0 shadow-none"
+          >
+            <DelegatedSessionBulkActions {...delegatedBulkActions} />
+          </PopoverContent>
+        )}
+      </Popover>
       <ContextMenuContent className="w-40 z-[9999] min-w-0 p-0.5">
         {menuItems(ContextMenuItem, ContextMenuSeparator)}
       </ContextMenuContent>

@@ -40,7 +40,7 @@ export function SidebarScrollBoundary({ children }: SidebarScrollBoundaryProps):
       <div
         aria-hidden="true"
         data-sidebar-scroll-boundary={isScrolled ? 'scrolled' : 'top'}
-        className={`pointer-events-none absolute inset-x-0 top-0 z-10 h-4 border-t border-border bg-[linear-gradient(to_bottom,hsl(var(--sidebar-surface))_0%,hsl(var(--sidebar-surface))_20%,hsl(var(--sidebar-surface)/0)_100%)] transition-opacity duration-150 motion-reduce:transition-none ${isScrolled ? 'opacity-100' : 'opacity-0'}`}
+        className={`pointer-events-none absolute inset-x-0 top-0 z-10 h-4 border-t-[0.5px] border-border bg-[linear-gradient(to_bottom,hsl(var(--sidebar-surface)/0.85)_0%,hsl(var(--sidebar-surface)/0)_100%)] transition-opacity duration-150 motion-reduce:transition-none ${isScrolled ? 'opacity-100' : 'opacity-0'}`}
       />
     </div>
   )

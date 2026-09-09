@@ -170,7 +170,6 @@ import {
   getSelectableDelegatedSessionIds,
   reconcileDelegatedSessionBulkSelection,
   selectAllDelegatedSessions,
-  shouldRenderDelegatedSessionBulkActions,
   shouldShowDelegatedSessionBulkDeleteAction,
   toggleDelegatedSessionBulkSelection,
   type DelegatedSessionBulkSelection,
@@ -1156,6 +1155,27 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       ? selectAllDelegatedSessions(current, delegatedBulkBusyIds)
       : current)
   }, [delegatedBulkBusyIds])
+  const delegatedBulkActions = React.useMemo<DelegatedSessionBulkActionsProps | undefined>(() => (
+    delegatedBulkSelection
+      ? {
+        selectedCount: delegatedBulkSelection.selectedIds.length,
+        selectableCount: delegatedBulkSelectableIds.length,
+        allSelectableSelected: delegatedBulkAllSelectableSelected,
+        onCancel: cancelDelegatedBulkSelection,
+        onSelectAll: handleSelectAllDelegatedSessions,
+        onDelete: () => setBulkDeleteConfirmOpen(true),
+      }
+      : undefined
+  ), [cancelDelegatedBulkSelection, delegatedBulkAllSelectableSelected, delegatedBulkSelectableIds.length, delegatedBulkSelection, handleSelectAllDelegatedSessions])
+  const getDelegatedBulkChildSelection = React.useCallback((parentSessionId: string, sessionId: string) => (
+    delegatedBulkSelection?.parentSessionId === parentSessionId
+      ? {
+        selected: delegatedBulkSelectedSet.has(sessionId),
+        disabled: delegatedBulkBusyIds.has(sessionId),
+        onToggle: () => handleToggleDelegatedBulkSelection(sessionId),
+      }
+      : undefined
+  ), [delegatedBulkBusyIds, delegatedBulkSelectedSet, delegatedBulkSelection, handleToggleDelegatedBulkSelection])
 
   React.useEffect(() => {
     setDelegatedBulkSelection((current) => current
@@ -3150,15 +3170,8 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                   : undefined}
                 leftAccent={getSessionLeftAccent(rowStatus)}
                 workspaceName={item.session.workspaceId ? workspaceNameMap.get(item.session.workspaceId) : undefined}
-                delegatedBulkActions={shouldRenderDelegatedSessionBulkActions(delegatedBulkSelection, item.session.id)
-                  ? {
-                    selectedCount: delegatedBulkSelection.selectedIds.length,
-                    selectableCount: delegatedBulkSelectableIds.length,
-                    allSelectableSelected: delegatedBulkAllSelectableSelected,
-                    onCancel: cancelDelegatedBulkSelection,
-                    onSelectAll: handleSelectAllDelegatedSessions,
-                    onDelete: () => setBulkDeleteConfirmOpen(true),
-                  }
+                delegatedBulkActions={delegatedBulkSelection?.parentSessionId === item.session.id
+                  ? delegatedBulkActions
                   : undefined}
                 relativeTimeNow={relativeTimeNow}
                 onSelect={handleSelectAgentSession}
@@ -3191,13 +3204,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                     relativeTimeNow={relativeTimeNow}
                     workspaceName={childSession.workspaceId ? workspaceNameMap.get(childSession.workspaceId) : undefined}
                     delegatedSiblingCount={childCount}
-                    bulkSelection={delegatedBulkSelection?.parentSessionId === item.session.id
-                      ? {
-                        selected: delegatedBulkSelectedSet.has(childSession.id),
-                        disabled: delegatedBulkBusyIds.has(childSession.id),
-                        onToggle: () => handleToggleDelegatedBulkSelection(childSession.id),
-                      }
-                      : undefined}
+                    bulkSelection={getDelegatedBulkChildSelection(item.session.id, childSession.id)}
                     onSelect={handleSelectAgentSession}
                     onRequestDelete={handleRequestDelete}
                     onRequestMove={handleRequestMove}
@@ -3215,7 +3222,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       }
     }
     return rows
-  }, [activeDelegationSessionId, activeSessionId, agentIndicatorMap, archivedAgentSessionProjectGroups, cancelDelegatedBulkSelection, collapsedDelegationParentIds, currentWorkspaceId, delegatedBulkAllSelectableSelected, delegatedBulkBusyIds, delegatedBulkSelectableIds, delegatedBulkSelectedSet, delegatedBulkSelection, expandedArchivedProjectIds, expandedDelegationParentIds, handleAgentRename, handleRequestDelete, handleRequestMove, handleSelectAgentSession, handleSelectAllDelegatedSessions, handleStartDelegatedBulkSelection, handleToggleArchiveAgent, handleToggleArchivedProject, handleToggleDelegatedBulkSelection, handleToggleDelegationParent, handleTogglePinAgent, handleToggleStarAgent, relativeTimeNow, sessionHoverPreviewEnabled, workspaceNameMap])
+  }, [activeDelegationSessionId, activeSessionId, agentIndicatorMap, archivedAgentSessionProjectGroups, collapsedDelegationParentIds, currentWorkspaceId, delegatedBulkActions, delegatedBulkSelection, expandedArchivedProjectIds, expandedDelegationParentIds, getDelegatedBulkChildSelection, handleAgentRename, handleRequestDelete, handleRequestMove, handleSelectAgentSession, handleStartDelegatedBulkSelection, handleToggleArchiveAgent, handleToggleArchivedProject, handleToggleDelegationParent, handleTogglePinAgent, handleToggleStarAgent, relativeTimeNow, sessionHoverPreviewEnabled, workspaceNameMap])
 
   const agentActiveVirtualRows = React.useMemo<VirtualSidebarRow[]>(() => {
     if (viewMode !== 'active') return []
@@ -3267,15 +3274,8 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                 : undefined}
               leftAccent={getSessionLeftAccent(rowStatus)}
               workspaceName={isAutomationGroup && item.session.workspaceId ? workspaceNameMapForRow?.get(item.session.workspaceId) : undefined}
-              delegatedBulkActions={shouldRenderDelegatedSessionBulkActions(delegatedBulkSelection, item.session.id)
-                ? {
-                  selectedCount: delegatedBulkSelection.selectedIds.length,
-                  selectableCount: delegatedBulkSelectableIds.length,
-                  allSelectableSelected: delegatedBulkAllSelectableSelected,
-                  onCancel: cancelDelegatedBulkSelection,
-                  onSelectAll: handleSelectAllDelegatedSessions,
-                  onDelete: () => setBulkDeleteConfirmOpen(true),
-                }
+              delegatedBulkActions={delegatedBulkSelection?.parentSessionId === item.session.id
+                ? delegatedBulkActions
                 : undefined}
               relativeTimeNow={relativeTimeNow}
               onSelect={handleSelectAgentSession}
@@ -3314,13 +3314,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                   relativeTimeNow={relativeTimeNow}
                   workspaceName={isAutomationGroup && childSession.workspaceId ? workspaceNameMapForRow?.get(childSession.workspaceId) : undefined}
                   delegatedSiblingCount={childCount}
-                  bulkSelection={delegatedBulkSelection?.parentSessionId === item.session.id
-                    ? {
-                      selected: delegatedBulkSelectedSet.has(childSession.id),
-                      disabled: delegatedBulkBusyIds.has(childSession.id),
-                      onToggle: () => handleToggleDelegatedBulkSelection(childSession.id),
-                    }
-                    : undefined}
+                  bulkSelection={getDelegatedBulkChildSelection(item.session.id, childSession.id)}
                   onSelect={handleSelectAgentSession}
                   onRequestDelete={handleRequestDelete}
                   onRequestMove={handleRequestMove}
@@ -3553,18 +3547,15 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     activeDelegationSessionId,
     activeSessionId,
     agentIndicatorMap,
-    cancelDelegatedBulkSelection,
     collapsedDelegationParentIds,
     collapsedWorkspaceIds,
     creatingProject,
     createAgentSessionInWorkspace,
     displayProjectGroups,
     dragProjectId,
-    delegatedBulkAllSelectableSelected,
-    delegatedBulkBusyIds,
-    delegatedBulkSelectableIds,
-    delegatedBulkSelectedSet,
+    delegatedBulkActions,
     delegatedBulkSelection,
+    getDelegatedBulkChildSelection,
     expandedDelegationParentIds,
     expandedExtraCountMap,
     handleAgentRename,
@@ -3581,13 +3572,11 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
     handleRequestDeleteWorkspace,
     handleRequestMove,
     handleSelectAgentSession,
-    handleSelectAllDelegatedSessions,
     handleSelectProject,
     handleShowMoreSessions,
     handleStartDelegatedBulkSelection,
     handleStartCreateProject,
     handleToggleArchiveAgent,
-    handleToggleDelegatedBulkSelection,
     handleToggleDelegationParent,
     handleToggleGroupCollapse,
     handleTogglePinAgent,
@@ -4757,18 +4746,6 @@ const AgentSessionItem = React.memo(function AgentSessionItem({
           </TooltipContent>
         </Tooltip>
       </MenuItem>
-      {onStartDelegatedBulkSelection && delegatedBulkDeleteTarget && (
-        <MenuItem
-          className="text-xs py-1 [&>svg]:size-3.5"
-          onSelect={() => onStartDelegatedBulkSelection(
-            delegatedBulkDeleteTarget.parentSessionId,
-            delegatedBulkDeleteTarget.preselectedSessionId,
-          )}
-        >
-          <ListChecks size={14} />
-          批量删除子会话
-        </MenuItem>
-      )}
       <MenuSeparator className="my-0.5" />
       {hasChildren ? (
         <>
@@ -4785,6 +4762,18 @@ const AgentSessionItem = React.memo(function AgentSessionItem({
         <MenuItem className="text-xs py-1 [&>svg]:size-3.5" onSelect={() => onTogglePin(session.id, true)}>
           {session.pinned ? <PinOff size={14} /> : <Pin size={14} />}
           {pinLabel}
+        </MenuItem>
+      )}
+      {onStartDelegatedBulkSelection && delegatedBulkDeleteTarget && (
+        <MenuItem
+          className="text-xs py-1 [&>svg]:size-3.5"
+          onSelect={() => onStartDelegatedBulkSelection(
+            delegatedBulkDeleteTarget.parentSessionId,
+            delegatedBulkDeleteTarget.preselectedSessionId,
+          )}
+        >
+          <ListChecks size={14} />
+          批量删除子会话
         </MenuItem>
       )}
       {canMove && (

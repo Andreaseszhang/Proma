@@ -109,6 +109,7 @@ import { CollapsedToolsPopover, type CollapsedToolItem } from '@/components/agen
 import { CollapsedSessionRail, type RailRecentItem } from '@/components/agent/CollapsedSessionRail'
 import { ObsidianIcon } from '@/components/obsidian/obsidian-brand'
 import { VirtualSidebarList, type VirtualSidebarRow } from '@/components/ui/virtual-sidebar-list'
+import { SidebarScrollBoundary } from '@/components/ui/sidebar-scroll-boundary'
 import { LocalProjectBadge } from '@/components/agent/LocalProjectBadge'
 import { MoveSessionDialog } from '@/components/agent/MoveSessionDialog'
 import {
@@ -2666,7 +2667,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                   aria-expanded={!collapsed}
                   onClick={() => handleToggleArchivedProject(group.id)}
                   className={cn(
-                    'relative flex-1 min-w-0 flex h-[34px] items-center gap-2 pl-2 pr-1 py-1.5 rounded-md text-left transition-[color,background-color] titlebar-no-drag hover:bg-foreground/[0.025]',
+                    'relative flex-1 min-w-0 flex h-[34px] items-center gap-2 pl-[10px] pr-1 py-1.5 rounded-md text-left transition-[color,background-color] titlebar-no-drag hover:bg-foreground/[0.025]',
                     'text-[hsl(var(--sidebar-primary-foreground))] hover:text-[hsl(var(--sidebar-primary-foreground))]',
                   )}
                 >
@@ -3555,20 +3556,24 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
         )}
       </div>
 
-      {/* Chat 模式 active 视图：置顶 + 对话历史，结构与 Agent active 视图保持一致 */}
+      {/* 原生与虚拟列表共享顶部反馈，切换视图时不沿用上一列表的滚动状态。 */}
       {mode === 'chat' && viewMode === 'active' ? (
-        <VirtualSidebarList
-          key="chat-active-list"
-          className="flex-1"
-          rows={chatActiveVirtualRows}
-          activeRowId={activeSessionId ? `chat-${activeSessionId}` : null}
-        />
+        <SidebarScrollBoundary key="chat-active-boundary">
+          <VirtualSidebarList
+            key="chat-active-list"
+            className="flex-1"
+            rows={chatActiveVirtualRows}
+            activeRowId={activeSessionId ? `chat-${activeSessionId}` : null}
+          />
+        </SidebarScrollBoundary>
       ) : mode === 'agent' && viewMode === 'active' ? (
-        <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin titlebar-no-drag px-2 pb-3">
-          {agentActiveVirtualRows.map((row) => (
-            <React.Fragment key={row.id}>{row.content}</React.Fragment>
-          ))}
-        </div>
+        <SidebarScrollBoundary key="agent-active-boundary">
+          <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin titlebar-no-drag px-2 pb-3">
+            {agentActiveVirtualRows.map((row) => (
+              <React.Fragment key={row.id}>{row.content}</React.Fragment>
+            ))}
+          </div>
+        </SidebarScrollBoundary>
       ) : (
         <>
           {/* 归档视图标题栏 */}
@@ -3582,19 +3587,23 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
 
           {/* 归档视图：单列表布局 */}
           {mode === 'chat' ? (
-            <VirtualSidebarList
-              key="chat-archived-list"
-              className="flex-1 px-3 pt-2 pb-3"
-              rows={chatArchivedVirtualRows}
-              activeRowId={activeSessionId ? `chat-archived-${activeSessionId}` : null}
-            />
+            <SidebarScrollBoundary key="chat-archived-boundary">
+              <VirtualSidebarList
+                key="chat-archived-list"
+                className="flex-1 px-3 pt-2 pb-3"
+                rows={chatArchivedVirtualRows}
+                activeRowId={activeSessionId ? `chat-archived-${activeSessionId}` : null}
+              />
+            </SidebarScrollBoundary>
           ) : (
-            <VirtualSidebarList
-              key="agent-archived-list"
-              className="flex-1 px-3 pt-2 pb-3"
-              rows={agentArchivedVirtualRows}
-              activeRowId={activeSessionId ? `agent-archived-${activeSessionId}` : null}
-            />
+            <SidebarScrollBoundary key="agent-archived-boundary">
+              <VirtualSidebarList
+                key="agent-archived-list"
+                className="flex-1 px-3 pt-2 pb-3"
+                rows={agentArchivedVirtualRows}
+                activeRowId={activeSessionId ? `agent-archived-${activeSessionId}` : null}
+              />
+            </SidebarScrollBoundary>
           )}
         </>
       )}
@@ -4786,7 +4795,7 @@ const AgentProjectGroupItem = React.memo(function AgentProjectGroupItem({
         {renamingWorkspace ? (
           <div
             className={cn(
-              'relative flex-1 min-w-0 flex h-[34px] items-center gap-2 pl-2 pr-1 py-1.5 rounded-md text-left titlebar-no-drag',
+              'relative flex-1 min-w-0 flex h-[34px] items-center gap-2 pl-[10px] pr-1 py-1.5 rounded-md text-left titlebar-no-drag',
               'text-[hsl(var(--sidebar-primary-foreground))]',
             )}
           >
@@ -4813,7 +4822,7 @@ const AgentProjectGroupItem = React.memo(function AgentProjectGroupItem({
               onSelectProject(group.workspace.id)
             }}
             className={cn(
-              'relative flex-1 min-w-0 flex h-[34px] cursor-grab items-center gap-2 pl-2 py-1.5 rounded-md text-left transition-[color,background-color] titlebar-no-drag active:cursor-grabbing hover:bg-foreground/[0.025]',
+              'relative flex-1 min-w-0 flex h-[34px] cursor-grab items-center gap-2 pl-[10px] py-1.5 rounded-md text-left transition-[color,background-color] titlebar-no-drag active:cursor-grabbing hover:bg-foreground/[0.025]',
               isAutomationGroup ? 'pr-1' : 'pr-12',
               'text-[hsl(var(--sidebar-primary-foreground))] hover:text-[hsl(var(--sidebar-primary-foreground))]',
             )}

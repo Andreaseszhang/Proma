@@ -2530,7 +2530,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       rows.push({
         id: 'chat-pinned-heading',
         estimateSize: 32,
-        content: <div className="pl-[18px] pr-3.5 pt-2 pb-1 text-[15px] font-medium leading-5 text-foreground/45 select-none">置顶</div>,
+        content: <div className="pl-6 pr-3.5 pt-2 pb-1 text-[15px] font-medium leading-5 text-foreground/45 select-none">置顶</div>,
       })
       for (const conv of pinnedConversations) {
         rows.push({
@@ -2656,9 +2656,9 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       const isCurrentProject = group.kind === 'workspace' && group.id === currentWorkspaceId
       rows.push({
         id: `agent-archived-project-${group.id}`,
-        estimateSize: 34,
+        estimateSize: 38,
         content: (
-          <div className="px-2">
+          <div className="pl-1 pr-3">
             <section className="relative py-0.5 rounded-md">
               <div className="group/project relative flex items-center">
                 <button
@@ -2666,7 +2666,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                   aria-expanded={!collapsed}
                   onClick={() => handleToggleArchivedProject(group.id)}
                   className={cn(
-                    'relative flex-1 min-w-0 flex items-center gap-2 pl-2 pr-1 py-1 rounded-md text-left transition-[color,background-color] titlebar-no-drag hover:bg-foreground/[0.025]',
+                    'relative flex-1 min-w-0 flex h-[34px] items-center gap-2 pl-2 pr-1 py-1.5 rounded-md text-left transition-[color,background-color] titlebar-no-drag hover:bg-foreground/[0.025]',
                     'text-[hsl(var(--sidebar-primary-foreground))] hover:text-[hsl(var(--sidebar-primary-foreground))]',
                   )}
                 >
@@ -2877,7 +2877,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       rows.push({
         id: 'agent-pinned-heading',
         estimateSize: 32,
-        content: <div className="pl-[18px] pr-3.5 pt-2 pb-1 text-[15px] font-medium leading-5 text-foreground/45 select-none">置顶</div>,
+        content: <div className="pl-4 pr-3.5 pt-2 pb-1 text-[15px] font-medium leading-5 text-foreground/45 select-none">置顶</div>,
       })
       for (const item of pinnedAgentSessionTrees) {
         pushSessionTreeRows(item, false, false, workspaceNameMap)
@@ -2891,7 +2891,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       estimateSize: 40,
       content: (
         <div className="px-2 pt-2 pb-1 flex items-center justify-between">
-          <span className="px-1.5 text-[15px] font-medium leading-5 text-foreground/45 select-none">项目</span>
+          <span className="px-2 text-[15px] font-medium leading-5 text-foreground/45 select-none">项目</span>
           <div className="flex items-center gap-0.5">
             <Tooltip>
               <TooltipTrigger asChild>
@@ -2983,9 +2983,9 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
 
       rows.push({
         id: `agent-project-${group.workspace.id}`,
-        estimateSize: 34,
+        estimateSize: 38,
         content: (
-          <div className="px-2">
+          <div className="pl-2">
             <AgentProjectGroupItem
               group={group}
               isAutomationGroup={isAuto}
@@ -4786,7 +4786,7 @@ const AgentProjectGroupItem = React.memo(function AgentProjectGroupItem({
         {renamingWorkspace ? (
           <div
             className={cn(
-              'relative flex-1 min-w-0 flex items-center gap-2 pl-2 pr-1 py-1 rounded-md text-left titlebar-no-drag',
+              'relative flex-1 min-w-0 flex h-[34px] items-center gap-2 pl-2 pr-1 py-1.5 rounded-md text-left titlebar-no-drag',
               'text-[hsl(var(--sidebar-primary-foreground))]',
             )}
           >
@@ -4813,7 +4813,7 @@ const AgentProjectGroupItem = React.memo(function AgentProjectGroupItem({
               onSelectProject(group.workspace.id)
             }}
             className={cn(
-              'relative flex-1 min-w-0 flex cursor-grab items-center gap-2 pl-2 py-1 rounded-md text-left transition-[color,background-color] titlebar-no-drag active:cursor-grabbing hover:bg-foreground/[0.025]',
+              'relative flex-1 min-w-0 flex h-[34px] cursor-grab items-center gap-2 pl-2 py-1.5 rounded-md text-left transition-[color,background-color] titlebar-no-drag active:cursor-grabbing hover:bg-foreground/[0.025]',
               isAutomationGroup ? 'pr-1' : 'pr-12',
               'text-[hsl(var(--sidebar-primary-foreground))] hover:text-[hsl(var(--sidebar-primary-foreground))]',
             )}

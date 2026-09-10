@@ -5,7 +5,7 @@ export function getWorkspaceSectionTargets(
 ): Array<{ id: string; name: string }> {
   const currentId = sections.some((section) => section.id === sectionId) ? sectionId : ''
   return [
-    ...(currentId ? [{ id: '', name: '默认分区' }] : []),
+    ...(currentId ? [{ id: '', name: '项目' }] : []),
     ...sections.filter((section) => section.id !== currentId),
   ]
 }

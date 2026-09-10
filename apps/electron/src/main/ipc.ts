@@ -158,6 +158,7 @@ import type {
 import type { UserProfile, AppSettings } from '../types'
 import { getRuntimeStatus, getGitRepoStatus, reinitializeRuntime } from './lib/runtime-init'
 import { browserController } from './lib/browser-controller'
+import { cleanupSessionRuntimes } from './lib/session-runtime-cleanup'
 import { acknowledgeTerminalOutput, closeTerminalsForSession, createTerminal, getTerminalSnapshot, killTerminal, resizeTerminal, writeTerminal } from './lib/terminal-service'
 import { getMainWindow } from './lib/main-window-store'
 import { resolveBrowserProfileKey } from './lib/browser-profile-policy'
@@ -2712,21 +2713,23 @@ export function registerIpcHandlers(): void {
     }
   )
 
+  const cleanupSessions = (sessionIds: readonly string[]): Promise<void> => cleanupSessionRuntimes(sessionIds, {
+    stopAgent,
+    clearPermissionWhitelist: (id) => permissionService.clearSessionWhitelist(id),
+    clearPermissionPending: (id) => permissionService.clearSessionPending(id),
+    clearAskUserPending: (id) => askUserService.clearSessionPending(id),
+    clearExitPlanPending: (id) => exitPlanService.clearSessionPending(id),
+    clearQueuedMessages: clearAgentQueuedMessages,
+    closeBrowser: (id) => browserController.close(id),
+    closeTerminals: closeTerminalsForSession,
+  })
+
   // 删除 Agent 会话
   ipcMain.handle(
     AGENT_IPC_CHANNELS.DELETE_SESSION,
     async (_, id: string): Promise<void> => {
       const attachedFiles = getAgentSessionMeta(id)?.attachedFiles
-      // 清理权限服务中该会话的白名单
-      permissionService.clearSessionWhitelist(id)
-      permissionService.clearSessionPending(id)
-      // 清理 AskUser 服务中的待处理请求
-      askUserService.clearSessionPending(id)
-      // 清理 ExitPlanMode 服务中的待处理请求
-      exitPlanService.clearSessionPending(id)
-      clearAgentQueuedMessages(id)
-      await browserController.close(id)
-      closeTerminalsForSession(id)
+      await cleanupSessions([id])
       deleteAgentSession(id)
       releaseAttachedFileWatchers(attachedFiles)
     }
@@ -2996,6 +2999,12 @@ export function registerIpcHandlers(): void {
         .filter((automation) => automation.workspaceId === id)
         .map((automation) => automation.id)
       const deletedProjectRoot = deletingWorkspace.projectRootPath
+      // 先尝试回收所有会话的运行时资源；失败时保留项目、会话和绑定供重试。
+      await cleanupSessions(affectedSessionIds)
+      // 浏览器关闭会让出事件循环；并发删除其他项目后，这个项目可能已是最后一个。
+      if (listAgentWorkspaces().length <= 1) {
+        throw new Error('至少需要保留一个项目')
+      }
       const removedDingTalkBindings = dingtalkBridgeManager.removeBindingsForDeletedWorkspace(id, affectedSessionIds)
       const removedWeChatBindings = wechatBridge.removeBindingsForDeletedWorkspace(id, affectedSessionIds)
       const removedFeishuBindings = feishuBridgeManager.removeBindingsForDeletedWorkspace(id, affectedSessionIds)
@@ -3011,10 +3020,6 @@ export function registerIpcHandlers(): void {
       }
 
       for (const sessionId of affectedSessionIds) {
-        if (isAgentSessionActive(sessionId)) {
-          stopAgent(sessionId)
-        }
-        closeTerminalsForSession(sessionId)
         deleteAgentSession(sessionId)
       }
       for (const automationId of affectedAutomationIds) {

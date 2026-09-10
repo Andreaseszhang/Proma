@@ -1973,7 +1973,7 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
       await window.electronAPI.deleteAgentWorkspaceSection(sectionId, destinationSectionId)
       expandDestinationSection(destinationSectionId ?? null)
       setPendingDissolveSectionId(null)
-      toast.success(destinationSectionId ? '分区已解散，项目已移至目标分区末尾' : '分区已解散，项目已回到默认分区')
+      toast.success(destinationSectionId ? '分区已解散，项目已移至目标分区末尾' : '分区已解散，项目已回到项目')
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '解散分区失败')
     } finally {
@@ -3028,14 +3028,14 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="__default__">默认分区</SelectItem>
+                  <SelectItem value="__default__">项目</SelectItem>
                   {dissolveDestinationSections.map((section) => (
                     <SelectItem key={section.id} value={section.id}>{section.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             ) : (
-              <div className="flex h-9 items-center rounded-md bg-muted/60 px-3 text-sm text-foreground">默认分区</div>
+              <div className="flex h-9 items-center rounded-md bg-muted/60 px-3 text-sm text-foreground">项目</div>
             )}
           </div>
         )}
@@ -3579,8 +3579,16 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
               <div className={cn('absolute left-3 right-3 z-10 h-0.5 rounded-full bg-primary', sectionDropIndicator.position === 'before' ? '-top-0.5' : '-bottom-0.5')} />
             )}
             <span className="flex min-w-0 items-center rounded-md px-2 py-1 text-[15px] font-medium leading-5 text-foreground/45">
-              默认分区
-              <ChevronRight size={15} className={cn('ml-1 transition-all', defaultProjectsCollapsed ? 'opacity-100' : 'opacity-100 rotate-90')} />
+              项目
+              <ChevronRight
+                size={15}
+                className={cn(
+                  'ml-1 transition-all',
+                  defaultProjectsCollapsed
+                    ? 'opacity-100'
+                    : 'rotate-90 opacity-0 group-hover/project-section:opacity-100',
+                )}
+              />
             </span>
             <div className="ml-auto flex items-center gap-0.5">
               <Tooltip><TooltipTrigger asChild><button type="button" onClick={(event) => { event.stopPropagation(); setCreatingSection(true); setNewSectionName('') }} className="size-7 flex items-center justify-center rounded-md text-[hsl(var(--sidebar-primary-foreground)/0.65)] transition-colors hover:bg-foreground/[0.06] hover:text-[hsl(var(--sidebar-primary-foreground))] titlebar-no-drag" aria-label="新建分区"><SquarePlus size={15} /></button></TooltipTrigger><TooltipContent side="top">新建分区</TooltipContent></Tooltip>
@@ -3627,7 +3635,15 @@ export function LeftSidebar({ width, noTransition }: LeftSidebarProps): React.Re
               ) : (
                 <span className="flex min-w-0 items-center rounded-md px-2 py-1 text-left text-[15px] font-medium leading-5 text-foreground/45">
                   <span className="truncate">{entry.section.name}</span>
-                  <ChevronRight size={15} className={cn('ml-1 shrink-0 transition-all', collapsed ? 'opacity-100' : 'opacity-100 rotate-90')} />
+                  <ChevronRight
+                    size={15}
+                    className={cn(
+                      'ml-1 shrink-0 transition-all',
+                      collapsed
+                        ? 'opacity-100'
+                        : 'rotate-90 opacity-0 group-hover/section:opacity-100',
+                    )}
+                  />
                 </span>
               )}
               {editingSectionId !== entry.section.id && (

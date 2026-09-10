@@ -311,6 +311,12 @@ import type { CleanupOptions } from './lib/storage-service'
 import {
   listAgentWorkspaces,
   listAgentWorkspacesWithProjectRootStatus,
+  listAgentWorkspaceSections,
+  listAgentWorkspaceSectionOrder,
+  createAgentWorkspaceSection,
+  updateAgentWorkspaceSection,
+  deleteAgentWorkspaceSection,
+  reorderAgentWorkspaceSections,
   createAgentWorkspace,
   updateAgentWorkspace,
   relinkAgentWorkspaceProjectRoot,
@@ -2913,10 +2919,29 @@ export function registerIpcHandlers(): void {
   // 更新 Agent 工作区
   ipcMain.handle(
     AGENT_IPC_CHANNELS.UPDATE_WORKSPACE,
-    async (_, id: string, updates: { name: string }): Promise<AgentWorkspace> => {
+    async (_, id: string, updates: import('@proma/shared').UpdateAgentWorkspaceInput): Promise<AgentWorkspace> => {
       return updateAgentWorkspace(id, updates)
     }
   )
+
+  ipcMain.handle(AGENT_IPC_CHANNELS.LIST_WORKSPACE_SECTIONS, (): import('@proma/shared').AgentWorkspaceSection[] => {
+    return listAgentWorkspaceSections()
+  })
+  ipcMain.handle(AGENT_IPC_CHANNELS.LIST_WORKSPACE_SECTION_ORDER, (): string[] => {
+    return listAgentWorkspaceSectionOrder()
+  })
+  ipcMain.handle(AGENT_IPC_CHANNELS.CREATE_WORKSPACE_SECTION, (_, name: string): import('@proma/shared').AgentWorkspaceSection => {
+    return createAgentWorkspaceSection(name)
+  })
+  ipcMain.handle(AGENT_IPC_CHANNELS.UPDATE_WORKSPACE_SECTION, (_, id: string, name: string): import('@proma/shared').AgentWorkspaceSection => {
+    return updateAgentWorkspaceSection(id, name)
+  })
+  ipcMain.handle(AGENT_IPC_CHANNELS.DELETE_WORKSPACE_SECTION, (_, id: string, destinationSectionId?: string): import('@proma/shared').AgentWorkspace[] => {
+    return deleteAgentWorkspaceSection(id, destinationSectionId)
+  })
+  ipcMain.handle(AGENT_IPC_CHANNELS.REORDER_WORKSPACE_SECTIONS, (_, orderedIds: string[]): string[] => {
+    return reorderAgentWorkspaceSections(orderedIds)
+  })
 
   // 重新选择本地项目根目录，保留原项目、会话和配置。
   ipcMain.handle(
